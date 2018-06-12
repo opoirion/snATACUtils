@@ -10,21 +10,19 @@ import "github.com/dsnet/compress/bzip2"
 import "time"
 import "errors"
 import "os/exec"
-// import "sync"
+import "sync"
 
 var FASTQ_R1 string
 var FASTQ_R2 string
 var FASTQ_I1 string
 var FASTQ_I2 string
 var NB_THREADS int
-var NB_THREADS_CHUNK int
 var TAGLENGTH int
 var MAX_NB_READS int
 
 type ReaderStatus struct {
 	isEOF bool
 }
-
 
 func main() {
 	// counter := make(map[string]int)
@@ -33,8 +31,6 @@ func main() {
 	flag.StringVar(&FASTQ_R1, "fastq_R1", "", "fastq read file index paired read 1")
 	flag.StringVar(&FASTQ_R2, "fastq_R2", "", "fastq read file index paired read 2")
 	flag.IntVar(&NB_THREADS, "nbThreads", 1, "number of threads to use")
-	flag.IntVar(&NB_THREADS_CHUNK, "nbThreadsChunk", 100000, `Chunck to be processed by each threads
-(used only with NB_THREADS > 1)`)
 	flag.IntVar(&TAGLENGTH, "taglength", 8,
 		`<OPTIONAL> number of nucleotides to consider at the end
  and begining (default 8)`)
@@ -48,122 +44,94 @@ func main() {
 	fmt.Printf("fastq file read file 1 analyzed: %s\n", FASTQ_R1)
 	fmt.Printf("fastq file read file 2 analyzed: %s\n", FASTQ_R2)
 
-	var nb_lines int
-
-	switch {
-	case MAX_NB_READS != 0:
-		nb_lines = MAX_NB_READS
-	default:
-		nb_lines = countLine(FASTQ_I1)
-	}
-	fmt.Printf("%d\n", nb_lines)
-
-
 	t_start := time.Now().Second()
 
 	switch {
 	case NB_THREADS == 1:
-		readerStatusChan := make(chan *ReaderStatus, 1)
-		launchAnalysisOneFile(0, MAX_NB_READS, "", "",
-			&ReaderStatus{isEOF:false}, readerStatusChan)
+		var waiting sync.WaitGroup
+		waiting.Add(1)
+		launchAnalysisOneFile(0, MAX_NB_READS, "", "", &waiting)
 	case NB_THREADS < 1:
 		log.Fatal(errors.New("threads should be >= 1!"))
 
 	case NB_THREADS > 1:
-		launchAnalysisMultipleFile("", nb_lines)
+		launchAnalysisMultipleFile("")
 	}
 
 	t_end := time.Now().Second()
-	fmt.Printf("demultiplexing finished in %d s\n", t_end - t_start)
+	fmt.Printf("demultiplexing finished in %d s\n", t_end-t_start)
 }
 
+func launchAnalysisMultipleFile(path string) {
 
-func launchAnalysisMultipleFile(path string, lineNumber int) {
-	readerStatusChan := make(chan *ReaderStatus, NB_THREADS)
+	var nb_lines int
+	var chunk int
+
+	switch {
+	case MAX_NB_READS != 0:
+		chunk = (MAX_NB_READS / NB_THREADS)
+	default:
+		fmt.Printf("computing number of lines...")
+		nb_lines = countLine(FASTQ_I1)
+		fmt.Printf("estimated number of lines:%d\n", nb_lines)
+
+		chunk = ((nb_lines / NB_THREADS) - (nb_lines/NB_THREADS)%4) / 4
+	}
+
+	startingRead := 0
+	index := 0
+
+	var waiting sync.WaitGroup
+	waiting.Add(NB_THREADS)
 
 	for i := 0; i < NB_THREADS; i++ {
-		readerStatusChan <- &ReaderStatus{isEOF:false}
-	}
 
-
-	startingLine := 0
-	index := 0
-	nb_threads_chunk := NB_THREADS_CHUNK - NB_THREADS_CHUNK%4
-	nbFinished := 0
-	isOnefinished := false
-
-	loop:
-	for {
-		select {
-		case readerStatus := <-readerStatusChan:
-			switch {
-			case  MAX_NB_READS != 0 && startingLine >= MAX_NB_READS:
-				nbFinished++
-			case readerStatus.isEOF == false:
-				go launchAnalysisOneFile(
-					startingLine, nb_threads_chunk,
-					"",
-					fmt.Sprintf("index_%d", index),
-					readerStatus,
-					readerStatusChan,
-					)
-
-				index++
-				startingLine += nb_threads_chunk
-
-			case isOnefinished == true || readerStatus.isEOF == true:
-				isOnefinished = true
-				fmt.Printf("thread finished!\n")
-				nbFinished++
-				fmt.Printf("%d chunk read done\n", nb_threads_chunk)
-			}
-
-		default:
-			switch {
-			case nbFinished < NB_THREADS:
-				time.Sleep(500 * time.Millisecond)
-			default:
-				fmt.Printf("break\n")
-				break loop
-			}
-
+		if i == NB_THREADS-1 && MAX_NB_READS == 0 {
+			chunk = 0
 		}
+
+		go launchAnalysisOneFile(
+			startingRead, chunk,
+			"",
+			fmt.Sprintf("index_%d.", index),
+			&waiting)
+		startingRead += chunk
+		index += 1
 	}
 
-	// output_R1 := fmt.Sprintf("%s%s.demultiplexed.R1.bz2", path, strings.TrimSuffix(FASTQ_R1, ".bz2"))
-	// // output_R2 := fmt.Sprintf("%s%s.demultiplexed.R2.bz2", path, strings.TrimSuffix(FASTQ_R2, ".bz2"))
+	waiting.Wait()
 
-	// cmd := fmt.Sprintf("cat index_*demultiplexed*R1.bz2 > %s", output_R1)
-	// fmt.Printf("%s\n", cmd)
+	output_R1 := fmt.Sprintf("%sdemultiplexed.%s.R1.bz2", path, strings.TrimSuffix(FASTQ_R1, ".bz2"))
+	output_R2 := fmt.Sprintf("%sdemultiplexed.%s.R2.bz2", path, strings.TrimSuffix(FASTQ_R2, ".bz2"))
 
-	// exe_cmd(cmd)
+	cmd_1 := fmt.Sprintf("cat index_*demultiplexed*R1.bz2 > %s", output_R1)
+	cmd_2 := fmt.Sprintf("cat index_*demultiplexed*R2.bz2 > %s", output_R2)
+
+	fmt.Printf("concatenating read 1 files...\n")
+	fmt.Printf("%s\n", cmd_1)
+
+	exe_cmd(cmd_1)
+	fmt.Printf("concatenating read 2 files...\n")
+	exe_cmd(cmd_2)
+
+	cmd := fmt.Sprintf("rm index_*demultiplexed*R*.bz2 ")
+
+	fmt.Printf("removing read index files...\n")
+	exe_cmd(cmd)
 }
 
-
 func exe_cmd(cmd string) {
-  fmt.Println("command is ",cmd)
-  // splitting head => g++ parts => rest of the command
-  parts := strings.Fields(cmd)
-  head := parts[0]
-  parts = parts[1:len(parts)]
-
-  err := exec.Command(head, parts...).Run()
-  if err != nil {
-    fmt.Printf("%s", err)
-  }
+	_, err := exec.Command("sh", "-c", cmd).Output()
+	check(err)
 }
 
 func launchAnalysisOneFile(
-	startingLine int,
+	startingRead int,
 	max_nb_reads int,
 	path string,
 	index string,
-	readerStatus *ReaderStatus,
-	readerStatusChan chan *ReaderStatus)  {
-
-	if startingLine%4 != 0 {
-		log.Fatal(errors.New("startingLine is not a multiple of 4!"))
-	}
+	waiting *sync.WaitGroup) {
+	defer waiting.Done()
 
 	//opening index 1
 	scanner_I1 := return_reader_for_bzipfile(FASTQ_I1)
@@ -177,8 +145,8 @@ func launchAnalysisOneFile(
 	//opening fastq read file 2
 	scanner_R2 := return_reader_for_bzipfile(FASTQ_R2)
 
-	output_R1 := fmt.Sprintf("%s%s.demultiplexed%s.R1.bz2", path, index, strings.TrimSuffix(FASTQ_R1, ".bz2"))
-	output_R2 := fmt.Sprintf("%s%s.demultiplexed%s.R2.bz2", path, index, strings.TrimSuffix(FASTQ_R2, ".bz2"))
+	output_R1 := fmt.Sprintf("%s%sdemultiplexed.%s.R1.bz2", path, index, strings.TrimSuffix(FASTQ_R1, ".bz2"))
+	output_R2 := fmt.Sprintf("%s%sdemultiplexed.%s.R2.bz2", path, index, strings.TrimSuffix(FASTQ_R2, ".bz2"))
 
 	bzip_R1 := return_writer_for_bzipfile(output_R1)
 	bzip_R2 := return_writer_for_bzipfile(output_R2)
@@ -186,21 +154,21 @@ func launchAnalysisOneFile(
 	defer bzip_R1.Close()
 	defer bzip_R2.Close()
 
-	count := 0
-	for lineCount := 0; lineCount < startingLine; lineCount++ {
+	readCount2 := 0
+
+	for readCount := 0; readCount < startingRead*4; readCount++ {
 		statusI1 := scanner_I1.Scan()
 		statusI2 := scanner_I2.Scan()
 		statusR1 := scanner_R1.Scan()
 		statusR2 := scanner_R2.Scan()
 
 		if statusI1 == false || statusI2 == false || statusR1 == false || statusR2 == false {
-			readerStatus.isEOF = true
-			readerStatusChan <- readerStatus
 			return
 		}
+		readCount2 += 1
 	}
 
-	interupted := false
+	count := 0
 
 	for scanner_I1.Scan() {
 		scanner_I2.Scan()
@@ -245,7 +213,7 @@ func launchAnalysisOneFile(
 		index_1 := fmt.Sprintf("@%s:%s", index, id_I1[1:])
 		index_2 := fmt.Sprintf("@%s:%s", index, id_I2[1:])
 
-		to_write_R1 := fmt.Sprintf("%s\n%s\n%s\n%s\n", index_1,read_R1, strand_R1, qual_R1)
+		to_write_R1 := fmt.Sprintf("%s\n%s\n%s\n%s\n", index_1, read_R1, strand_R1, qual_R1)
 		to_write_R2 := fmt.Sprintf("%s\n%s\n%s\n%s\n", index_2, read_R2, strand_R2, qual_R2)
 
 		bzip_R1.Write([]byte(to_write_R1))
@@ -253,17 +221,11 @@ func launchAnalysisOneFile(
 
 		count += 1
 
-		if max_nb_reads !=0 && count >= max_nb_reads {
-			interupted = true
+		if max_nb_reads != 0 && count >= max_nb_reads {
 			break
 		}
 	}
 
-	if interupted == false {
-		readerStatus.isEOF = true
-	}
-
-	readerStatusChan <- readerStatus
 	return
 }
 

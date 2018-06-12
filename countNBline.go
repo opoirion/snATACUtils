@@ -1,36 +1,36 @@
 package main
 
-import(
-	"os";
-	"bytes";
-	"io"
+import (
+	"os"
+	// "fmt"
 )
-
-
-
 
 var FILENAME string
 var MAX int
 
-
 func countLine(fname string) int {
-	reader, err := os.Open(fname)
+	f_stat, err := os.Stat(fname)
 	check(err)
 
-	buf := make([]byte, 32*1024)
-	count := 0
-	lineSep := []byte{'\n'}
+	size := f_stat.Size()
+	scanner := return_reader_for_bzipfile(fname)
+	writer := return_writer_for_bzipfile("tmp.bz2")
 
-	for {
-		c, err := reader.Read(buf)
-		count += bytes.Count(buf[:c], lineSep)
-
-		switch {
-		case err == io.EOF:
-			return count
-
-		case err != nil:
-			return count
-		}
+	for i:=0;i<2000;i++ {
+		scanner.Scan()
+		writer.Write([]byte(scanner.Text()))
 	}
+	writer.Close()
+
+	f_stat_writer, err := os.Stat("tmp.bz2")
+	check(err)
+
+	size_writer := f_stat_writer.Size()
+
+	// fmt.Printf("\nsize %d\n", size)
+	// fmt.Printf("\nsize_writer %d\n", size_writer)
+	exe_cmd("rm tmp.bz2")
+
+	return (int(size) / int(size_writer)) * int(2000)
+
 }
