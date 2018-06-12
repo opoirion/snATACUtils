@@ -48,6 +48,17 @@ func main() {
 	fmt.Printf("fastq file read file 1 analyzed: %s\n", FASTQ_R1)
 	fmt.Printf("fastq file read file 2 analyzed: %s\n", FASTQ_R2)
 
+	var nb_lines int
+
+	switch {
+	case MAX_NB_READS != 0:
+		nb_lines = MAX_NB_READS
+	default:
+		nb_lines = countLine(FASTQ_I1)
+	}
+	fmt.Printf("%d\n", nb_lines)
+
+
 	t_start := time.Now().Second()
 
 	switch {
@@ -59,7 +70,7 @@ func main() {
 		log.Fatal(errors.New("threads should be >= 1!"))
 
 	case NB_THREADS > 1:
-		launchAnalysisMultipleFile("")
+		launchAnalysisMultipleFile("", nb_lines)
 	}
 
 	t_end := time.Now().Second()
@@ -67,7 +78,7 @@ func main() {
 }
 
 
-func launchAnalysisMultipleFile(path string) {
+func launchAnalysisMultipleFile(path string, lineNumber int) {
 	readerStatusChan := make(chan *ReaderStatus, NB_THREADS)
 
 	for i := 0; i < NB_THREADS; i++ {
@@ -79,6 +90,7 @@ func launchAnalysisMultipleFile(path string) {
 	index := 0
 	nb_threads_chunk := NB_THREADS_CHUNK - NB_THREADS_CHUNK%4
 	nbFinished := 0
+	isOnefinished := false
 
 	loop:
 	for {
@@ -99,8 +111,9 @@ func launchAnalysisMultipleFile(path string) {
 				index++
 				startingLine += nb_threads_chunk
 
-			case readerStatus.isEOF == true:
-				fmt.Printf("One finished!\n")
+			case isOnefinished == true || readerStatus.isEOF == true:
+				isOnefinished = true
+				fmt.Printf("thread finished!\n")
 				nbFinished++
 				fmt.Printf("%d chunk read done\n", nb_threads_chunk)
 			}
