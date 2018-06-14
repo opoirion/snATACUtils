@@ -347,6 +347,8 @@ func launchAnalysisOneFile(
 		if INDEX_REPLICATE_R2 != "" {
 			bzip_R1_repl2 = ReturnWriterForBzipfilePureGo(output_R1_repl2)
 			bzip_R2_repl2 = ReturnWriterForBzipfilePureGo(output_R2_repl2)
+			defer bzip_R1_repl2.Close()
+			defer bzip_R2_repl2.Close()
 		}
 
 	default:
@@ -360,6 +362,8 @@ func launchAnalysisOneFile(
 		if INDEX_REPLICATE_R2 != "" {
 			bzip_R1_repl2 = ReturnWriterForBzipfile(output_R1_repl2, COMPRESSION_MODE)
 			bzip_R2_repl2 = ReturnWriterForBzipfile(output_R2_repl2, COMPRESSION_MODE)
+			defer bzip_R1_repl2.Close()
+			defer bzip_R2_repl2.Close()
 		}
 
 	}
@@ -370,8 +374,6 @@ func launchAnalysisOneFile(
 	defer file_R2.Close()
 	defer bzip_R1_repl1.Close()
 	defer bzip_R2_repl1.Close()
-	defer bzip_R1_repl2.Close()
-	defer bzip_R2_repl2.Close()
 
 	var id_I1, id_I2, id_R1, id_R2 string
 	var read_I1, read_I2, read_R1, read_R2 string
