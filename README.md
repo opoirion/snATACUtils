@@ -71,7 +71,21 @@ The speed is not linear to the number of CPUs used, because each thread needs to
 ## bzip2 decompression and encoding
    * By default, this software uses the C header "bzlib.h" which provides the fastest implementation of bzip2 library. However, it is also possible to use a go bzip2 encoding/library, with the option -use_bzip2_go_lib which replaces the bzlib.h library, but is significantly slower (1.2 to 1.5 x slower).
 
-##
+## I5, I7, P5, P7 indexes
+The different indexes can provided as input with -index_replicate_r1  and -index_replicate_r2, or -index_no_replicate. In the default protocol, The first 8 bp of Index1 correspond to the p7 barcode and the last 8 bp to the i7 barcode. The first 8 bp of Index2 correspond to the i5 barcode and the last 8 bp to the p5 barcode.
+the format of the input files should be similar to:
+i7	GTCATGAA
+i7	CAAGTTCA
+i7	TATGCCAT
+i7	GAATTACG
+i5	GGATACTA
+i5	TAAGATCC
+...
+<indexID>\t<index>
+
+## Replicate demultiplexing
+
+The options -index_replicate_r1  and -index_replicate_r2 allows to demultiplex the reads according to 2 replicates
 
 ## Example
 
