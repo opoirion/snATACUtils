@@ -20,7 +20,10 @@ go get -u github.com/dsnet/compress/bzip2 # install the dependencies
 ## Usage
 
 ```bash
-ATACdemultiplex -hUsage of ATACdemultiplex:
+Usage of ATACdemultiplex:
+  -compressionMode int
+        compressionMode for native bzip2 lib
+         (1 faster -> 9 smaller) <default: 6> (default 6)
   -fastq_I1 string
         fastq index file index paired read 1
   -fastq_I2 string
@@ -29,13 +32,31 @@ ATACdemultiplex -hUsage of ATACdemultiplex:
         fastq read file index paired read 1
   -fastq_R2 string
         fastq read file index paired read 2
+  -guess_nb_lines
+        guess automatically position of the lines (for mulithread). May be not safe in some situation
+  -index_no_replicate string
+        <OPTIONAL> path toward indexes when only 1 replicate is used
+  -index_replicate_r1 string
+        <OPTIONAL> path toward indexes of R1 replicates (i.e. replicate number 1)
+  -index_replicate_r2 string
+        <OPTIONAL> path toward indexes of R2 replicates (i.e. replicate number 2)
+  -max_nb_mistake int
+        Maximum number of mistakes allowed to assign a reference read id (default 2) (default 2)
   -max_nb_reads int
         <OPTIONAL> max number of reads to process (default 0 => None)
   -nbThreads int
         number of threads to use (default 1)
+  -output_tag_name string
+        tag for the output file names (default None)
   -taglength int
         <OPTIONAL> number of nucleotides to consider at the end
          and begining (default 8) (default 8)
+  -use_bzip2_go_lib
+        use bzip2 go library instead of native C lib (slower)
+  -write_extensive_logs
+        write extensive logs (can consume extra RAM memory and slower the process)
+  -write_logs
+        write logs (might slower the execution time)
 
 ```
 
@@ -46,6 +67,11 @@ The speed is not linear to the number of CPUs used, because each thread needs to
 ## Warning
    * The input files should be compressed using the bzip2 protocol!
    * The 4 input files should be paired: i.e. the reads are ordered similarly and match between the files
+
+## bzip2 decompression and encoding
+   * By default, this software uses the C header "bzlib.h" which provides the fastest implementation of bzip2 library. However, it is also possible to use a go bzip2 encoding/library, with the option -use_bzip2_go_lib which replaces the bzlib.h library, but is significantly slower (1.2 to 1.5 x slower).
+
+##
 
 ## Example
 
@@ -60,7 +86,7 @@ wget http://enhancer.sdsc.edu/spreissl/Test/SP176_177_P56_R1.fastq.bz2
 
 ## Performance
 
-We have currently a speed of 10s for 100K reads
+Depending of the options chosen, the speed is between 1.5 Meg/s (for bzip fastq files) to 2.0 Meg/s. We also prodive a multi-threading option. However, the multi-threading does lot reduce the speed linearly (each thread needs to reach their respective starting lines, which takes some time!), but rather sublinerarly.
 
 
 ## Contact
