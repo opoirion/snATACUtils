@@ -11,6 +11,13 @@ import "time"
 import "errors"
 import "os/exec"
 import "sync"
+import "io"
+
+
+import (
+	originalbzip2  "compress/bzip2"
+	Cbzip2 "ATACdemultiplex/cbzip2"
+)
 
 var FASTQ_R1 string
 var FASTQ_R2 string
@@ -19,10 +26,25 @@ var FASTQ_I2 string
 var NB_THREADS int
 var TAGLENGTH int
 var MAX_NB_READS int
+var COMPRESSION_MODE int
+var USE_BZIP_GO_LIBRARY bool
+var GUESS_NB_LINES bool
+var WRITE_LOGS bool
+var WRITE_EXTENSIVE_LOGS bool
+var OUTPUT_TAG_NAME string
+var INDEX_REPLICATE_R1 string
+var INDEX_REPLICATE_R2 string
+var INDEX_NO_REPLICATE string
+var MAX_NB_MISTAKE int
 
-type ReaderStatus struct {
-	isEOF bool
-}
+var INDEX_R1_DICT map[string]map[string]bool
+var INDEX_R2_DICT map[string]map[string]bool
+var INDEX_NO_DICT map[string]map[string]bool
+
+var SUCCESS_LOG_CHAN chan map[string]int
+var FAIL_LOG_CHAN chan map[string]int
+var STATS_LOG_CHAN chan map[string]int
+
 
 func main() {
 	// counter := make(map[string]int)
@@ -30,41 +52,145 @@ func main() {
 	flag.StringVar(&FASTQ_I2, "fastq_I2", "", "fastq index file index paired read 2")
 	flag.StringVar(&FASTQ_R1, "fastq_R1", "", "fastq read file index paired read 1")
 	flag.StringVar(&FASTQ_R2, "fastq_R2", "", "fastq read file index paired read 2")
+	flag.IntVar(&MAX_NB_MISTAKE, "max_nb_mistake", 2, "Maximum number of mistakes allowed to assign a reference read id (default 2)")
+	flag.StringVar(&OUTPUT_TAG_NAME, "output_tag_name", "", "tag for the output file names (default None)")
+	flag.BoolVar(&USE_BZIP_GO_LIBRARY, "use_bzip2_go_lib", false, "use bzip2 go library instead of native C lib (slower)")
+	flag.BoolVar(&WRITE_LOGS, "write_logs", false, "write logs (might slower the execution time)")
+	flag.BoolVar(&WRITE_EXTENSIVE_LOGS, "write_extensive_logs", false, "write extensive logs (can consume extra RAM memory and slower the process)")
+	flag.BoolVar(&GUESS_NB_LINES, "guess_nb_lines", false, "guess automatically position of the lines (for mulithread). May be not safe in some situation")
+
+	flag.IntVar(&COMPRESSION_MODE, "compressionMode", 6, `compressionMode for native bzip2 lib
+ (1 faster -> 9 smaller) <default: 6>`)
 	flag.IntVar(&NB_THREADS, "nbThreads", 1, "number of threads to use")
 	flag.IntVar(&TAGLENGTH, "taglength", 8,
 		`<OPTIONAL> number of nucleotides to consider at the end
  and begining (default 8)`)
 	flag.IntVar(&MAX_NB_READS, "max_nb_reads", 0,
 		"<OPTIONAL> max number of reads to process (default 0 => None)")
+	flag.StringVar(&INDEX_REPLICATE_R1, "index_replicate_r1", "",
+		"<OPTIONAL> path toward indexes of R1 replicates (i.e. replicate number 1)")
+	flag.StringVar(&INDEX_REPLICATE_R2, "index_replicate_r2", "",
+		"<OPTIONAL> path toward indexes of R2 replicates (i.e. replicate number 2)")
+	flag.StringVar(&INDEX_NO_REPLICATE, "index_no_replicate", "",
+		"<OPTIONAL> path toward indexes when only 1 replicate is used")
 
 	flag.Parse()
+
+	if INDEX_REPLICATE_R1 != "" || INDEX_REPLICATE_R2 != "" {
+		if  INDEX_NO_REPLICATE != "" {
+			log.Fatal("Cannot set up index_no_replicate with either index_replicate_r1 or index_replicate_r2")
+		}
+		if INDEX_REPLICATE_R1 == "" || INDEX_REPLICATE_R2 == "" {
+			log.Fatal("Both index_replicate_r1 and index_replicate_r2 should be set up!")
+		}
+	}
+
+	loadIndexes(INDEX_NO_REPLICATE, &INDEX_NO_DICT)
+	loadIndexes(INDEX_REPLICATE_R1, &INDEX_R1_DICT)
+	loadIndexes(INDEX_REPLICATE_R2, &INDEX_R2_DICT)
+
+	if len(OUTPUT_TAG_NAME) > 0 {
+		OUTPUT_TAG_NAME = fmt.Sprintf("_%s", OUTPUT_TAG_NAME)
+	}
 
 	fmt.Printf("fastq file index 1 analyzed: %s\n", FASTQ_I1)
 	fmt.Printf("fastq file index 2 analyzed: %s\n", FASTQ_I2)
 	fmt.Printf("fastq file read file 1 analyzed: %s\n", FASTQ_R1)
 	fmt.Printf("fastq file read file 2 analyzed: %s\n", FASTQ_R2)
 
-	t_start := time.Now().Second()
+	t_start := time.Now()
 
 	switch {
 	case NB_THREADS == 1:
 		var waiting sync.WaitGroup
 		waiting.Add(1)
-		launchAnalysisOneFile(0, MAX_NB_READS, "", "", &waiting)
+		stats, success_logs, fail_logs := launchAnalysisOneFile(
+			0, MAX_NB_READS, "", "", &waiting)
+
+		if WRITE_LOGS{
+			writeReport(stats, success_logs, fail_logs)
+		}
+
 	case NB_THREADS < 1:
 		log.Fatal(errors.New("threads should be >= 1!"))
 
 	case NB_THREADS > 1:
+
+		SUCCESS_LOG_CHAN = make(chan map[string]int, NB_THREADS)
+		FAIL_LOG_CHAN = make(chan map[string]int, NB_THREADS)
+		STATS_LOG_CHAN = make(chan map[string]int, NB_THREADS)
+
 		launchAnalysisMultipleFile("")
 	}
 
-	t_end := time.Now().Second()
-	fmt.Printf("demultiplexing finished in %d s\n", t_end-t_start)
+	t_diff := time.Now().Sub(t_start)
+	fmt.Printf("demultiplexing finished in %f s\n", t_diff.Seconds())
+}
+
+func writeReport(
+	stats map[string]int,
+	success_logs map[string]int,
+	fail_logs map[string]int) {
+
+
+	json_filename := fmt.Sprintf("demultiplexed.%s%s.success.log",
+		strings.TrimSuffix(FASTQ_R2, ".bz2"),
+		OUTPUT_TAG_NAME)
+
+	file, err := os.Create(json_filename)
+	defer file.Close()
+	Check(err)
+
+	for key, value := range success_logs {
+		file.WriteString(fmt.Sprintf("%s: %d\n", key, value))
+	}
+
+	json_fail := fmt.Sprintf("demultiplexed.%s%s.fail.log",
+		strings.TrimSuffix(FASTQ_R2, ".bz2"),
+		OUTPUT_TAG_NAME)
+
+	fileFail, err := os.Create(json_fail)
+	defer fileFail.Close()
+	Check(err)
+
+	for key, value := range fail_logs {
+		fileFail.WriteString(fmt.Sprintf("%s: %d\n", key, value))
+	}
+
+	json_Stats := fmt.Sprintf("demultiplexed.%s%s.stats.log",
+		strings.TrimSuffix(FASTQ_R2, ".bz2"),
+		OUTPUT_TAG_NAME)
+
+	fileStats, err := os.Create(json_Stats)
+	defer fileStats.Close()
+	Check(err)
+
+	for key, value := range stats {
+		fileStats.WriteString(fmt.Sprintf("%s: %d\n", key, value))
+	}}
+
+func exctractDictFromChan(channel chan map[string]int) (map[string]int) {
+
+	dict := make(map[string]int)
+
+	loop:
+	for {
+		select{
+		case dictit := <-channel:
+			for key, value := range dictit {
+				dict[key] += value
+			}
+		default:
+			break loop
+		}
+	}
+
+	return dict
 }
 
 func launchAnalysisMultipleFile(path string) {
 
-	var nb_lines int
+	var nb_reads int
 	var chunk int
 
 	switch {
@@ -72,10 +198,10 @@ func launchAnalysisMultipleFile(path string) {
 		chunk = (MAX_NB_READS / NB_THREADS)
 	default:
 		fmt.Printf("computing number of lines...")
-		nb_lines = countLine(FASTQ_I1)
-		fmt.Printf("estimated number of lines:%d\n", nb_lines)
+		nb_reads = countLine(FASTQ_I1, COMPRESSION_MODE) / 4
+		fmt.Printf("estimated number of lines:%d\n", nb_reads)
 
-		chunk = ((nb_lines / NB_THREADS) - (nb_lines/NB_THREADS)%4) / 4
+		chunk = ((nb_reads / NB_THREADS) - (nb_reads/NB_THREADS)%4)
 	}
 
 	startingRead := 0
@@ -101,28 +227,60 @@ func launchAnalysisMultipleFile(path string) {
 
 	waiting.Wait()
 
-	output_R1 := fmt.Sprintf("%sdemultiplexed.%s.R1.bz2", path, strings.TrimSuffix(FASTQ_R1, ".bz2"))
-	output_R2 := fmt.Sprintf("%sdemultiplexed.%s.R2.bz2", path, strings.TrimSuffix(FASTQ_R2, ".bz2"))
+	output_R1 := fmt.Sprintf("%sdemultiplexed.%s%s.R1.repl1.bz2", path,
+		strings.TrimSuffix(FASTQ_R1, ".bz2"),
+		OUTPUT_TAG_NAME)
+	output_R2 := fmt.Sprintf("%sdemultiplexed.%s%s.R2.repl1.bz2", path,
+		strings.TrimSuffix(FASTQ_R2, ".bz2"),
+		OUTPUT_TAG_NAME)
 
-	cmd_1 := fmt.Sprintf("cat index_*demultiplexed*R1.bz2 > %s", output_R1)
-	cmd_2 := fmt.Sprintf("cat index_*demultiplexed*R2.bz2 > %s", output_R2)
+	cmd_1 := fmt.Sprintf("cat index_*demultiplexed*R1.repl1.bz2 > %s", output_R1)
+	cmd_2 := fmt.Sprintf("cat index_*demultiplexed*R2.repl1.bz2 > %s", output_R2)
 
 	fmt.Printf("concatenating read 1 files...\n")
 	fmt.Printf("%s\n", cmd_1)
 
-	exe_cmd(cmd_1)
+	ExceCmd(cmd_1)
 	fmt.Printf("concatenating read 2 files...\n")
-	exe_cmd(cmd_2)
+	ExceCmd(cmd_2)
+
+	if INDEX_REPLICATE_R2 != "" {
+		output_R1 := fmt.Sprintf("%sdemultiplexed.%s%s.R1.repl2.bz2", path,
+			strings.TrimSuffix(FASTQ_R1, ".bz2"),
+			OUTPUT_TAG_NAME)
+		output_R2 := fmt.Sprintf("%sdemultiplexed.%s%s.R2.repl2.bz2", path,
+			strings.TrimSuffix(FASTQ_R2, ".bz2"),
+			OUTPUT_TAG_NAME)
+
+		cmd_1 := fmt.Sprintf("cat index_*demultiplexed*R1.repl2.bz2 > %s", output_R1)
+		cmd_2 := fmt.Sprintf("cat index_*demultiplexed*R2.repl2.bz2 > %s", output_R2)
+
+		fmt.Printf("concatenating read 1 files...\n")
+		fmt.Printf("%s\n", cmd_1)
+
+		ExceCmd(cmd_1)
+		fmt.Printf("concatenating read 2 files...\n")
+		ExceCmd(cmd_2)
+	}
 
 	cmd := fmt.Sprintf("rm index_*demultiplexed*R*.bz2 ")
 
 	fmt.Printf("removing read index files...\n")
-	exe_cmd(cmd)
+	ExceCmd(cmd)
+
+	if WRITE_LOGS {
+
+		success_logs := exctractDictFromChan(SUCCESS_LOG_CHAN)
+		fail_logs := exctractDictFromChan(FAIL_LOG_CHAN)
+		stats := exctractDictFromChan(STATS_LOG_CHAN)
+
+		writeReport(stats, success_logs, fail_logs)
+	}
 }
 
-func exe_cmd(cmd string) {
+func ExceCmd(cmd string) {
 	_, err := exec.Command("sh", "-c", cmd).Output()
-	check(err)
+	Check(err)
 }
 
 func launchAnalysisOneFile(
@@ -130,122 +288,259 @@ func launchAnalysisOneFile(
 	max_nb_reads int,
 	path string,
 	index string,
-	waiting *sync.WaitGroup) {
+	waiting *sync.WaitGroup)(
+		stats map[string]int,
+		success_logs map[string]int,
+		fail_logs map[string]int) {
+
 	defer waiting.Done()
+	stats = make(map[string]int)
+	success_logs = make(map[string]int)
+	fail_logs = make(map[string]int)
 
-	//opening index 1
-	scanner_I1 := return_reader_for_bzipfile(FASTQ_I1)
+	var scanner_I1 * bufio.Scanner
+	var scanner_I2 * bufio.Scanner
+	var scanner_R1 * bufio.Scanner
+	var scanner_R2 * bufio.Scanner
+	var bzip_R1_repl1  io.WriteCloser
+	var bzip_R2_repl1  io.WriteCloser
+	var bzip_R1_repl2  io.WriteCloser
+	var bzip_R2_repl2  io.WriteCloser
 
-	//opening index 2
-	scanner_I2 := return_reader_for_bzipfile(FASTQ_I2)
+	var file_I1 * os.File
+	var file_I2 * os.File
+	var file_R1 * os.File
+	var file_R2 * os.File
 
-	//opening fastq read file 1
-	scanner_R1 := return_reader_for_bzipfile(FASTQ_R1)
+	output_R1_repl1 := fmt.Sprintf("%s%sdemultiplexed.%s%s.R1.repl1.bz2",
+		path, index, strings.TrimSuffix(FASTQ_R1, ".bz2"),
+		OUTPUT_TAG_NAME)
+	output_R2_repl1 := fmt.Sprintf("%s%sdemultiplexed.%s%s.R2.repl1.bz2", path, index,
+		strings.TrimSuffix(FASTQ_R2, ".bz2"),
+		OUTPUT_TAG_NAME)
 
-	//opening fastq read file 2
-	scanner_R2 := return_reader_for_bzipfile(FASTQ_R2)
+	output_R1_repl2 := fmt.Sprintf("%s%sdemultiplexed.%s%s.R1.repl2.bz2",
+		path, index, strings.TrimSuffix(FASTQ_R1, ".bz2"),
+		OUTPUT_TAG_NAME)
+	output_R2_repl2 := fmt.Sprintf("%s%sdemultiplexed.%s%s.R2.repl2.bz2", path, index,
+		strings.TrimSuffix(FASTQ_R2, ".bz2"),
+		OUTPUT_TAG_NAME)
 
-	output_R1 := fmt.Sprintf("%s%sdemultiplexed.%s.R1.bz2", path, index, strings.TrimSuffix(FASTQ_R1, ".bz2"))
-	output_R2 := fmt.Sprintf("%s%sdemultiplexed.%s.R2.bz2", path, index, strings.TrimSuffix(FASTQ_R2, ".bz2"))
+	pos_I1, pos_I2, pos_R1, pos_R2 := 0, 0, 0, 0
 
-	bzip_R1 := return_writer_for_bzipfile(output_R1)
-	bzip_R2 := return_writer_for_bzipfile(output_R2)
+	if GUESS_NB_LINES && startingRead > 0 {
+		pos_I1 = guessPosToGo(FASTQ_I1, startingRead * 4)
+		pos_I2 = guessPosToGo(FASTQ_I2, startingRead * 4)
+		pos_R1 = guessPosToGo(FASTQ_R1, startingRead * 4)
+		pos_R2 = guessPosToGo(FASTQ_R2, startingRead * 4)
+	}
 
-	defer bzip_R1.Close()
-	defer bzip_R2.Close()
+	switch  {
+	case USE_BZIP_GO_LIBRARY:
+		scanner_I1, file_I1 = ReturnReaderForBzipfilePureGo(FASTQ_I1, int64(pos_I1))
+		scanner_I2, file_I2 = ReturnReaderForBzipfilePureGo(FASTQ_I2, int64(pos_I2))
+		scanner_R1, file_R1 = ReturnReaderForBzipfilePureGo(FASTQ_R1, int64(pos_R1))
+		scanner_R2, file_R2 = ReturnReaderForBzipfilePureGo(FASTQ_R2, int64(pos_R2))
+		bzip_R1_repl1 = ReturnWriterForBzipfilePureGo(output_R1_repl1)
+		bzip_R2_repl1 = ReturnWriterForBzipfilePureGo(output_R2_repl1)
 
-	readCount2 := 0
+		if INDEX_REPLICATE_R2 != "" {
+			bzip_R1_repl2 = ReturnWriterForBzipfilePureGo(output_R1_repl2)
+			bzip_R2_repl2 = ReturnWriterForBzipfilePureGo(output_R2_repl2)
+		}
 
-	for readCount := 0; readCount < startingRead*4; readCount++ {
-		statusI1 := scanner_I1.Scan()
-		statusI2 := scanner_I2.Scan()
-		statusR1 := scanner_R1.Scan()
-		statusR2 := scanner_R2.Scan()
+	default:
+		scanner_I1, file_I1 = ReturnReaderForBzipfile(FASTQ_I1, int64(pos_I1))
+		scanner_I2, file_I2 = ReturnReaderForBzipfile(FASTQ_I2, int64(pos_I2))
+		scanner_R1, file_R1 = ReturnReaderForBzipfile(FASTQ_R1, int64(pos_R1))
+		scanner_R2, file_R2 = ReturnReaderForBzipfile(FASTQ_R2, int64(pos_R2))
+		bzip_R1_repl1 = ReturnWriterForBzipfile(output_R1_repl1, COMPRESSION_MODE)
+		bzip_R2_repl1 = ReturnWriterForBzipfile(output_R2_repl1, COMPRESSION_MODE)
+
+		if INDEX_REPLICATE_R2 != "" {
+			bzip_R1_repl2 = ReturnWriterForBzipfile(output_R1_repl2, COMPRESSION_MODE)
+			bzip_R2_repl2 = ReturnWriterForBzipfile(output_R2_repl2, COMPRESSION_MODE)
+		}
+
+	}
+
+	defer file_I1.Close()
+	defer file_I2.Close()
+	defer file_R1.Close()
+	defer file_R2.Close()
+	defer bzip_R1_repl1.Close()
+	defer bzip_R2_repl1.Close()
+	defer bzip_R1_repl2.Close()
+	defer bzip_R2_repl2.Close()
+
+	var id_I1, id_I2, id_R1, id_R2 string
+	var read_I1, read_I2, read_R1, read_R2 string
+	var strand_R1, strand_R2 string
+	var qual_R1, qual_R2 string
+	var index_p7, index_i7, index_p5, index_i5 string
+	var index_1, index_2 string
+	var to_write_R1, to_write_R2 string
+	var statusI1, statusI2, statusR1, statusR2 bool
+
+	gotoStartingLine:
+	for lineCount := 0; lineCount < startingRead*4; lineCount++ {
+		if GUESS_NB_LINES {
+			break gotoStartingLine
+		}
+
+		statusI1 = scanner_I1.Scan()
+		statusI2 = scanner_I2.Scan()
+		statusR1 = scanner_R1.Scan()
+		statusR2 = scanner_R2.Scan()
 
 		if statusI1 == false || statusI2 == false || statusR1 == false || statusR2 == false {
 			return
 		}
-		readCount2 += 1
 	}
 
 	count := 0
 
+	mainloop:
 	for scanner_I1.Scan() {
 		scanner_I2.Scan()
 		scanner_R1.Scan()
 		scanner_R2.Scan()
 
-		id_I1 := scanner_I1.Text()
-		id_I2 := scanner_I2.Text()
+		id_I1 = scanner_I1.Text()
+		id_I2 = scanner_I2.Text()
+		id_R1 = scanner_R1.Text()
+		id_R2 = scanner_R2.Text()
+
+		if id_I1[0] != byte('@') || id_I2[0] != byte('@') ||
+			id_R1[0] != byte('@') || id_R2[0] != byte('@') {
+			continue mainloop
+		}
 
 		scanner_I1.Scan()
 		scanner_I2.Scan()
 		scanner_R1.Scan()
 		scanner_R2.Scan()
 
-		read_I1 := scanner_I1.Text()
-		read_I2 := scanner_I2.Text()
-		read_R1 := scanner_R1.Text()
-		read_R2 := scanner_R2.Text()
+		read_I1 = scanner_I1.Text()
+		read_I2 = scanner_I2.Text()
+		read_R1 = scanner_R1.Text()
+		read_R2 = scanner_R2.Text()
 
 		scanner_I1.Scan()
 		scanner_I2.Scan()
 		scanner_R1.Scan()
 		scanner_R2.Scan()
 
-		strand_R1 := scanner_R1.Text()
-		strand_R2 := scanner_R2.Text()
+		strand_R1 = scanner_R1.Text()
+		strand_R2 = scanner_R2.Text()
 
 		scanner_I1.Scan()
 		scanner_I2.Scan()
 		scanner_R1.Scan()
 		scanner_R2.Scan()
 
-		qual_R1 := scanner_R1.Text()
-		qual_R2 := scanner_R2.Text()
+		qual_R1 = scanner_R1.Text()
+		qual_R2 = scanner_R2.Text()
 
-		index_p7 := read_I1[:TAGLENGTH]
-		index_i7 := read_I1[len(read_I1)-TAGLENGTH:]
-		index_p5 := read_I2[:TAGLENGTH]
-		index_i5 := read_I2[len(read_I2)-TAGLENGTH:]
+		index_p7 = read_I1[:TAGLENGTH]
+		index_i7 = read_I1[len(read_I1)-TAGLENGTH:]
+		index_i5 = read_I2[:TAGLENGTH]
+		index_p5 = read_I2[len(read_I2)-TAGLENGTH:]
 
-		index := fmt.Sprintf("%s%s%s%s", index_p7, index_i7, index_p5, index_i5)
-		index_1 := fmt.Sprintf("@%s:%s", index, id_I1[1:])
-		index_2 := fmt.Sprintf("@%s:%s", index, id_I2[1:])
+		isValid, Replicate := checkIndexes(&index_p7, &index_i7, &index_p5, &index_i5)
 
-		to_write_R1 := fmt.Sprintf("%s\n%s\n%s\n%s\n", index_1, read_R1, strand_R1, qual_R1)
-		to_write_R2 := fmt.Sprintf("%s\n%s\n%s\n%s\n", index_2, read_R2, strand_R2, qual_R2)
+		index = fmt.Sprintf("%s%s%s%s", index_p7, index_i7, index_p5, index_i5)
 
-		bzip_R1.Write([]byte(to_write_R1))
-		bzip_R2.Write([]byte(to_write_R2))
+		index_1 = fmt.Sprintf("@%s:%s", index, id_I1[1:])
+		index_2 = fmt.Sprintf("@%s:%s", index, id_I2[1:])
 
+		if WRITE_LOGS {
+			switch {
+			case isValid:
+				if WRITE_EXTENSIVE_LOGS {
+					if _, isInside := success_logs[index]; !isInside {
+						stats["number of cells"]++
+						stats[fmt.Sprintf("number of cells for Repl. %d", Replicate)]++
+					}
+					success_logs[index] += 1
+				}
+				stats[fmt.Sprintf("number of reads for Repl. %d", Replicate)]++
+
+			default:
+				if WRITE_EXTENSIVE_LOGS{
+					if _, isInside := fail_logs[index]; !isInside {
+						stats["number of cells (FAIL)"]++
+					}
+					fail_logs[index] += 1
+				}
+				stats["number of reads (FAIL) "]++
+			}
+
+		}
+
+		if !isValid {
+			// fmt.Printf("i5 %s p5 %s i7 %s p7 %s not valid! %d\n", index_i5, index_p5, index_i7, index_p7, count)
+			goto endmainloop
+		}
+
+		to_write_R1 = fmt.Sprintf("%s\n%s\n%s\n%s\n", index_1, read_R1, strand_R1, qual_R1)
+		to_write_R2 = fmt.Sprintf("%s\n%s\n%s\n%s\n", index_2, read_R2, strand_R2, qual_R2)
+
+		switch {
+		case Replicate == 1:
+			bzip_R1_repl1.Write([]byte(to_write_R1))
+			bzip_R2_repl1.Write([]byte(to_write_R2))
+		case Replicate == 2:
+			bzip_R1_repl2.Write([]byte(to_write_R1))
+			bzip_R2_repl2.Write([]byte(to_write_R2))
+		default:
+			log.Fatal("Error wrong replicate!")
+		}
+
+		endmainloop:
 		count += 1
-
 		if max_nb_reads != 0 && count >= max_nb_reads {
-			break
+			break mainloop
 		}
 	}
 
-	return
+	if NB_THREADS > 1 {
+		SUCCESS_LOG_CHAN <- success_logs
+		FAIL_LOG_CHAN <- fail_logs
+		STATS_LOG_CHAN <- stats
+	}
+
+
+	return stats, success_logs, fail_logs
 }
 
-func check(err error) {
+func Check(err error) {
 	if err != nil {
 		log.Fatal(err)
 	}
 }
 
-func return_writer_for_bzipfile(fname string) *bzip2.Writer {
+func ReturnWriterForBzipfile(fname string, compressionMode int) (io.WriteCloser) {
 	output_file, err := os.Create(fname)
-	check(err)
-	bzip_file, err := bzip2.NewWriter(output_file, new(bzip2.WriterConfig))
-	check(err)
+	Check(err)
+	bzip_file := Cbzip2.NewWriter(output_file, compressionMode)
+	Check(err)
 
 	return bzip_file
 }
 
-func return_reader_for_bzipfile(fname string) *bufio.Scanner {
+func ReturnWriterForBzipfilePureGo(fname string) (*bzip2.Writer) {
+	output_file, err := os.Create(fname)
+	Check(err)
+	bzip_file, err := bzip2.NewWriter(output_file, new(bzip2.WriterConfig))
+	Check(err)
+
+	return bzip_file
+}
+
+func ReturnReaderForBzipfileOld(fname string, seekPos int64) (*bufio.Scanner, *os.File) {
 	file_open, err := os.OpenFile(fname, 0, 0)
+	file_open.Seek(seekPos, 0)
 
 	if err != nil {
 		log.Fatal(err)
@@ -254,9 +549,42 @@ func return_reader_for_bzipfile(fname string) *bufio.Scanner {
 
 	reader_os := bufio.NewReader(file_open)
 	reader_bzip, err := bzip2.NewReader(reader_os, config)
-	check(err)
+	Check(err)
 	reader_os2 := bufio.NewReader(reader_bzip)
 	bzip_scanner := bufio.NewScanner(reader_os2)
 
-	return bzip_scanner
+	return bzip_scanner, file_open
+}
+
+
+func ReturnReaderForBzipfilePureGo(fname string, seekPos int64) (*bufio.Scanner, *os.File) {
+	file_open, err := os.OpenFile(fname, 0, 0)
+	file_open.Seek(seekPos, 0)
+
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	reader_os := bufio.NewReader(file_open)
+	reader_bzip := originalbzip2.NewReader(reader_os)
+	// reader_os2 := bufio.NewReader(reader_bzip)
+	bzip_scanner := bufio.NewScanner(reader_bzip)
+
+	return bzip_scanner, file_open
+}
+
+func ReturnReaderForBzipfile(fname string, seekPos int64) (*bufio.Scanner, *os.File) {
+	file_open, err := os.OpenFile(fname, 0, 0)
+	file_open.Seek(seekPos, 0)
+
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	reader_os := bufio.NewReader(file_open)
+	reader_bzip := Cbzip2.NewReader(reader_os)
+	bzip_scanner := bufio.NewScanner(reader_bzip)
+
+
+	return bzip_scanner, file_open
 }
