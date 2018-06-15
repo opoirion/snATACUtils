@@ -1,4 +1,4 @@
-package main
+package ATACdemultiplex
 
 import (
 	"os"
