@@ -74,7 +74,7 @@ The speed is not linear to the number of CPUs used, because each thread needs to
 ## I5, I7, P5, P7 indexes
 The different indexes can provided as input with -index_replicate_r1  and -index_replicate_r2, or -index_no_replicate. In the default protocol, The first 8 bp of Index1 correspond to the p7 barcode and the last 8 bp to the i7 barcode. The first 8 bp of Index2 correspond to the i5 barcode and the last 8 bp to the p5 barcode.
 the format of the input files should be similar to:
-```csv
+```
 i7    GTCATGAA
 i7    CAAGTTCA
 i7    TATGCCAT
