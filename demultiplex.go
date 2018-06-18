@@ -133,7 +133,7 @@ func writeReport(
 	fail_logs map[string]int) {
 
 
-	json_filename := fmt.Sprintf("demultiplexed.%s%s.success.log",
+	json_filename := fmt.Sprintf("%s%s.demultiplexed.success.log",
 		strings.TrimSuffix(FASTQ_R2, ".bz2"),
 		OUTPUT_TAG_NAME)
 
@@ -145,7 +145,7 @@ func writeReport(
 		file.WriteString(fmt.Sprintf("%s: %d\n", key, value))
 	}
 
-	json_fail := fmt.Sprintf("demultiplexed.%s%s.fail.log",
+	json_fail := fmt.Sprintf("%s%s.demultiplexed.fail.log",
 		strings.TrimSuffix(FASTQ_R2, ".bz2"),
 		OUTPUT_TAG_NAME)
 
@@ -157,7 +157,7 @@ func writeReport(
 		fileFail.WriteString(fmt.Sprintf("%s: %d\n", key, value))
 	}
 
-	json_Stats := fmt.Sprintf("demultiplexed.%s%s.stats.log",
+	json_Stats := fmt.Sprintf("%s%s.demultiplexed.stats.log",
 		strings.TrimSuffix(FASTQ_R2, ".bz2"),
 		OUTPUT_TAG_NAME)
 
@@ -227,15 +227,15 @@ func launchAnalysisMultipleFile(path string) {
 
 	waiting.Wait()
 
-	output_R1 := fmt.Sprintf("%sdemultiplexed.%s%s.R1.repl1.bz2", path,
+	output_R1 := fmt.Sprintf("%s%s%s.demultiplexed.repl1.bz2", path,
 		strings.TrimSuffix(FASTQ_R1, ".bz2"),
 		OUTPUT_TAG_NAME)
-	output_R2 := fmt.Sprintf("%sdemultiplexed.%s%s.R2.repl1.bz2", path,
+	output_R2 := fmt.Sprintf("%s%s%s.demultiplexed.repl1.bz2", path,
 		strings.TrimSuffix(FASTQ_R2, ".bz2"),
 		OUTPUT_TAG_NAME)
 
-	cmd_1 := fmt.Sprintf("cat index_*demultiplexed*R1.repl1.bz2 > %s", output_R1)
-	cmd_2 := fmt.Sprintf("cat index_*demultiplexed*R2.repl1.bz2 > %s", output_R2)
+	cmd_1 := fmt.Sprintf("cat index_*demultiplexed.repl1.bz2 > %s", output_R1)
+	cmd_2 := fmt.Sprintf("cat index_*demultiplexed.repl1.bz2 > %s", output_R2)
 
 	fmt.Printf("concatenating read 1 files...\n")
 	fmt.Printf("%s\n", cmd_1)
@@ -245,15 +245,15 @@ func launchAnalysisMultipleFile(path string) {
 	ExceCmd(cmd_2)
 
 	if INDEX_REPLICATE_R2 != "" {
-		output_R1 := fmt.Sprintf("%sdemultiplexed.%s%s.R1.repl2.bz2", path,
+		output_R1 := fmt.Sprintf("%s%s%s.demultiplexed.repl2.bz2", path,
 			strings.TrimSuffix(FASTQ_R1, ".bz2"),
 			OUTPUT_TAG_NAME)
-		output_R2 := fmt.Sprintf("%sdemultiplexed.%s%s.R2.repl2.bz2", path,
+		output_R2 := fmt.Sprintf("%s%s%s.demultiplexed.repl2.bz2", path,
 			strings.TrimSuffix(FASTQ_R2, ".bz2"),
 			OUTPUT_TAG_NAME)
 
-		cmd_1 := fmt.Sprintf("cat index_*demultiplexed*R1.repl2.bz2 > %s", output_R1)
-		cmd_2 := fmt.Sprintf("cat index_*demultiplexed*R2.repl2.bz2 > %s", output_R2)
+		cmd_1 := fmt.Sprintf("cat index_*demultiplexed.repl2.bz2 > %s", output_R1)
+		cmd_2 := fmt.Sprintf("cat index_*demultiplexed.repl2.bz2 > %s", output_R2)
 
 		fmt.Printf("concatenating read 1 files...\n")
 		fmt.Printf("%s\n", cmd_1)
@@ -263,7 +263,7 @@ func launchAnalysisMultipleFile(path string) {
 		ExceCmd(cmd_2)
 	}
 
-	cmd := fmt.Sprintf("rm index_*demultiplexed*R*.bz2 ")
+	cmd := fmt.Sprintf("rm index_*demultiplexed.repl*.bz2 ")
 
 	fmt.Printf("removing read index files...\n")
 	ExceCmd(cmd)
@@ -312,17 +312,17 @@ func launchAnalysisOneFile(
 	var file_R1 * os.File
 	var file_R2 * os.File
 
-	output_R1_repl1 := fmt.Sprintf("%s%sdemultiplexed.%s%s.R1.repl1.bz2",
+	output_R1_repl1 := fmt.Sprintf("%s%s%s%s.demultiplexed.repl1.bz2",
 		path, index, strings.TrimSuffix(FASTQ_R1, ".bz2"),
 		OUTPUT_TAG_NAME)
-	output_R2_repl1 := fmt.Sprintf("%s%sdemultiplexed.%s%s.R2.repl1.bz2", path, index,
+	output_R2_repl1 := fmt.Sprintf("%s%s%s%s.demultiplexed.repl1.bz2", path, index,
 		strings.TrimSuffix(FASTQ_R2, ".bz2"),
 		OUTPUT_TAG_NAME)
 
-	output_R1_repl2 := fmt.Sprintf("%s%sdemultiplexed.%s%s.R1.repl2.bz2",
+	output_R1_repl2 := fmt.Sprintf("%s%s%s%s.demultiplexed.repl2.bz2",
 		path, index, strings.TrimSuffix(FASTQ_R1, ".bz2"),
 		OUTPUT_TAG_NAME)
-	output_R2_repl2 := fmt.Sprintf("%s%sdemultiplexed.%s%s.R2.repl2.bz2", path, index,
+	output_R2_repl2 := fmt.Sprintf("%s%s%s%s.demultiplexed.repl2.bz2", path, index,
 		strings.TrimSuffix(FASTQ_R2, ".bz2"),
 		OUTPUT_TAG_NAME)
 
