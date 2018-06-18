@@ -1,4 +1,4 @@
-package ATACdemultiplex
+package main
 
 import "fmt"
 import "flag"
