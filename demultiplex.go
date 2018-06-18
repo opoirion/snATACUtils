@@ -8,7 +8,6 @@ import "bufio"
 import "strings"
 import "time"
 import "errors"
-import "os/exec"
 import "sync"
 import "io"
 
@@ -238,9 +237,9 @@ func launchAnalysisMultipleFile(path string) {
 	fmt.Printf("concatenating read 1 files...\n")
 	fmt.Printf("%s\n", cmd_1)
 
-	ExceCmd(cmd_1)
+	utils.ExceCmd(cmd_1)
 	fmt.Printf("concatenating read 2 files...\n")
-	ExceCmd(cmd_2)
+	utils.ExceCmd(cmd_2)
 
 	if INDEX_REPLICATE_R2 != "" {
 		output_R1 := fmt.Sprintf("%s%s%s.demultiplexed.repl2.bz2", path,
@@ -256,15 +255,15 @@ func launchAnalysisMultipleFile(path string) {
 		fmt.Printf("concatenating read 1 files...\n")
 		fmt.Printf("%s\n", cmd_1)
 
-		ExceCmd(cmd_1)
+		utils.ExceCmd(cmd_1)
 		fmt.Printf("concatenating read 2 files...\n")
-		ExceCmd(cmd_2)
+		utils.ExceCmd(cmd_2)
 	}
 
 	cmd := fmt.Sprintf("rm index_*demultiplexed.repl*.bz2 ")
 
 	fmt.Printf("removing read index files...\n")
-	ExceCmd(cmd)
+	utils.ExceCmd(cmd)
 
 	if WRITE_LOGS {
 
@@ -274,11 +273,6 @@ func launchAnalysisMultipleFile(path string) {
 
 		writeReport(stats, success_logs, fail_logs)
 	}
-}
-
-func ExceCmd(cmd string) {
-	_, err := exec.Command("sh", "-c", cmd).Output()
-	Check(err)
 }
 
 func launchAnalysisOneFile(

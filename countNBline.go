@@ -34,7 +34,7 @@ func countLine(fname string, compressionMode int) int {
 	Check(err)
 
 	size_writer := f_stat_writer.Size()
-	ExceCmd("rm tmp.bz2")
+	utils.ExceCmd("rm tmp.bz2")
 
 	return (int(size) / int(size_writer)) * int(2000)
 

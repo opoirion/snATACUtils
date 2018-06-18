@@ -5,6 +5,7 @@ import "io"
 import "os"
 import "log"
 import "github.com/dsnet/compress/bzip2"
+import "os/exec"
 
 import (
 	originalbzip2  "compress/bzip2"
@@ -18,6 +19,11 @@ func Check(err error) {
 	}
 }
 
+
+func ExceCmd(cmd string) {
+	_, err := exec.Command("sh", "-c", cmd).Output()
+	Check(err)
+}
 
 func ReturnWriterForBzipfile(fname string, compressionMode int) (io.WriteCloser) {
 	output_file, err := os.Create(fname)
