@@ -6,7 +6,6 @@ import "os"
 import "log"
 import "bufio"
 import "strings"
-import "github.com/dsnet/compress/bzip2"
 import "time"
 import "errors"
 import "os/exec"
@@ -15,8 +14,7 @@ import "io"
 
 
 import (
-	originalbzip2  "compress/bzip2"
-	Cbzip2 "ATACdemultiplex/cbzip2"
+	utils "ATACdemultiplex/ATACdemultiplexUtils"
 )
 
 var FASTQ_R1 string
@@ -337,31 +335,31 @@ func launchAnalysisOneFile(
 
 	switch  {
 	case USE_BZIP_GO_LIBRARY:
-		scanner_I1, file_I1 = ReturnReaderForBzipfilePureGo(FASTQ_I1, int64(pos_I1))
-		scanner_I2, file_I2 = ReturnReaderForBzipfilePureGo(FASTQ_I2, int64(pos_I2))
-		scanner_R1, file_R1 = ReturnReaderForBzipfilePureGo(FASTQ_R1, int64(pos_R1))
-		scanner_R2, file_R2 = ReturnReaderForBzipfilePureGo(FASTQ_R2, int64(pos_R2))
-		bzip_R1_repl1 = ReturnWriterForBzipfilePureGo(output_R1_repl1)
-		bzip_R2_repl1 = ReturnWriterForBzipfilePureGo(output_R2_repl1)
+		scanner_I1, file_I1 = utils.ReturnReaderForBzipfilePureGo(FASTQ_I1, int64(pos_I1))
+		scanner_I2, file_I2 = utils.ReturnReaderForBzipfilePureGo(FASTQ_I2, int64(pos_I2))
+		scanner_R1, file_R1 = utils.ReturnReaderForBzipfilePureGo(FASTQ_R1, int64(pos_R1))
+		scanner_R2, file_R2 = utils.ReturnReaderForBzipfilePureGo(FASTQ_R2, int64(pos_R2))
+		bzip_R1_repl1 = utils.ReturnWriterForBzipfilePureGo(output_R1_repl1)
+		bzip_R2_repl1 = utils.ReturnWriterForBzipfilePureGo(output_R2_repl1)
 
 		if INDEX_REPLICATE_R2 != "" {
-			bzip_R1_repl2 = ReturnWriterForBzipfilePureGo(output_R1_repl2)
-			bzip_R2_repl2 = ReturnWriterForBzipfilePureGo(output_R2_repl2)
+			bzip_R1_repl2 = utils.ReturnWriterForBzipfilePureGo(output_R1_repl2)
+			bzip_R2_repl2 = utils.ReturnWriterForBzipfilePureGo(output_R2_repl2)
 			defer bzip_R1_repl2.Close()
 			defer bzip_R2_repl2.Close()
 		}
 
 	default:
-		scanner_I1, file_I1 = ReturnReaderForBzipfile(FASTQ_I1, int64(pos_I1))
-		scanner_I2, file_I2 = ReturnReaderForBzipfile(FASTQ_I2, int64(pos_I2))
-		scanner_R1, file_R1 = ReturnReaderForBzipfile(FASTQ_R1, int64(pos_R1))
-		scanner_R2, file_R2 = ReturnReaderForBzipfile(FASTQ_R2, int64(pos_R2))
-		bzip_R1_repl1 = ReturnWriterForBzipfile(output_R1_repl1, COMPRESSION_MODE)
-		bzip_R2_repl1 = ReturnWriterForBzipfile(output_R2_repl1, COMPRESSION_MODE)
+		scanner_I1, file_I1 = utils.ReturnReaderForBzipfile(FASTQ_I1, int64(pos_I1))
+		scanner_I2, file_I2 = utils.ReturnReaderForBzipfile(FASTQ_I2, int64(pos_I2))
+		scanner_R1, file_R1 = utils.ReturnReaderForBzipfile(FASTQ_R1, int64(pos_R1))
+		scanner_R2, file_R2 = utils.ReturnReaderForBzipfile(FASTQ_R2, int64(pos_R2))
+		bzip_R1_repl1 = utils.ReturnWriterForBzipfile(output_R1_repl1, COMPRESSION_MODE)
+		bzip_R2_repl1 = utils.ReturnWriterForBzipfile(output_R2_repl1, COMPRESSION_MODE)
 
 		if INDEX_REPLICATE_R2 != "" {
-			bzip_R1_repl2 = ReturnWriterForBzipfile(output_R1_repl2, COMPRESSION_MODE)
-			bzip_R2_repl2 = ReturnWriterForBzipfile(output_R2_repl2, COMPRESSION_MODE)
+			bzip_R1_repl2 = utils.ReturnWriterForBzipfile(output_R1_repl2, COMPRESSION_MODE)
+			bzip_R2_repl2 = utils.ReturnWriterForBzipfile(output_R2_repl2, COMPRESSION_MODE)
 			defer bzip_R1_repl2.Close()
 			defer bzip_R2_repl2.Close()
 		}
@@ -520,73 +518,4 @@ func Check(err error) {
 	if err != nil {
 		log.Fatal(err)
 	}
-}
-
-func ReturnWriterForBzipfile(fname string, compressionMode int) (io.WriteCloser) {
-	output_file, err := os.Create(fname)
-	Check(err)
-	bzip_file := Cbzip2.NewWriter(output_file, compressionMode)
-	Check(err)
-
-	return bzip_file
-}
-
-func ReturnWriterForBzipfilePureGo(fname string) (*bzip2.Writer) {
-	output_file, err := os.Create(fname)
-	Check(err)
-	bzip_file, err := bzip2.NewWriter(output_file, new(bzip2.WriterConfig))
-	Check(err)
-
-	return bzip_file
-}
-
-func ReturnReaderForBzipfileOld(fname string, seekPos int64) (*bufio.Scanner, *os.File) {
-	file_open, err := os.OpenFile(fname, 0, 0)
-	file_open.Seek(seekPos, 0)
-
-	if err != nil {
-		log.Fatal(err)
-	}
-	config := new(bzip2.ReaderConfig)
-
-	reader_os := bufio.NewReader(file_open)
-	reader_bzip, err := bzip2.NewReader(reader_os, config)
-	Check(err)
-	reader_os2 := bufio.NewReader(reader_bzip)
-	bzip_scanner := bufio.NewScanner(reader_os2)
-
-	return bzip_scanner, file_open
-}
-
-
-func ReturnReaderForBzipfilePureGo(fname string, seekPos int64) (*bufio.Scanner, *os.File) {
-	file_open, err := os.OpenFile(fname, 0, 0)
-	file_open.Seek(seekPos, 0)
-
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	reader_os := bufio.NewReader(file_open)
-	reader_bzip := originalbzip2.NewReader(reader_os)
-	// reader_os2 := bufio.NewReader(reader_bzip)
-	bzip_scanner := bufio.NewScanner(reader_bzip)
-
-	return bzip_scanner, file_open
-}
-
-func ReturnReaderForBzipfile(fname string, seekPos int64) (*bufio.Scanner, *os.File) {
-	file_open, err := os.OpenFile(fname, 0, 0)
-	file_open.Seek(seekPos, 0)
-
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	reader_os := bufio.NewReader(file_open)
-	reader_bzip := Cbzip2.NewReader(reader_os)
-	bzip_scanner := bufio.NewScanner(reader_bzip)
-
-
-	return bzip_scanner, file_open
 }

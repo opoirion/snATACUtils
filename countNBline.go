@@ -6,6 +6,7 @@ import (
 	"log"
 	"bufio"
 	originalbzip2  "compress/bzip2"
+	utils "ATACdemultiplex/ATACdemultiplexUtils"
 	"strings"
 )
 
@@ -18,9 +19,9 @@ func countLine(fname string, compressionMode int) int {
 	Check(err)
 
 	size := f_stat.Size()
-	scanner, file_scanner := ReturnReaderForBzipfile(fname, 0)
+	scanner, file_scanner := utils.ReturnReaderForBzipfile(fname, 0)
 	defer file_scanner.Close()
-	writer := ReturnWriterForBzipfile("tmp.bz2", compressionMode)
+	writer := utils.ReturnWriterForBzipfile("tmp.bz2", compressionMode)
 	defer writer.Close()
 
 	for i:=0;i<2000;i++ {
