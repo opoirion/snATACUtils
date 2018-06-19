@@ -9,7 +9,6 @@ import "os/exec"
 import "strings"
 
 import (
-	"fmt"
 	originalbzip2  "compress/bzip2"
 	Cbzip2 "ATACdemultiplex/cbzip2"
 )
@@ -106,7 +105,6 @@ func ReturnReaderForBzipfilePureGo(fname string, startingLine int) (*bufio.Scann
 	reader_bzip.Read(buffer)
 
 	nbLines := strings.Count(string(buffer), "\n")
-	fmt.Printf("nb lines per buffer: %d\n", nbLines)
 	currentLine := nbLines
 
 
@@ -132,7 +130,6 @@ func ReturnReaderForBzipfile(fname string, startingLine int) (*bufio.Scanner, *o
 	reader_bzip.Read(buffer)
 
 	nbLines := strings.Count(string(buffer), "\n")
-	fmt.Printf("nb lines per buffer: %d\n", nbLines)
 	currentLine := nbLines
 
 	bzip_scanner = bufio.NewScanner(reader_bzip)
