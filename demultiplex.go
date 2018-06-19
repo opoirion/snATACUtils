@@ -27,7 +27,6 @@ var COMPRESSION_MODE int
 var USE_BZIP_GO_LIBRARY bool
 var GUESS_NB_LINES bool
 var WRITE_LOGS bool
-var WRITE_EXTENSIVE_LOGS bool
 var OUTPUT_TAG_NAME string
 var INDEX_REPLICATE_R1 string
 var INDEX_REPLICATE_R2 string
@@ -38,9 +37,58 @@ var INDEX_R1_DICT map[string]map[string]bool
 var INDEX_R2_DICT map[string]map[string]bool
 var INDEX_NO_DICT map[string]map[string]bool
 
-var SUCCESS_LOG_CHAN chan map[string]int
-var FAIL_LOG_CHAN chan map[string]int
-var STATS_LOG_CHAN chan map[string]int
+
+var LOG_CHAN map[string]chan StatsDict
+var LOG_INDEX_READ_CHAN map[string]chan StatsDict
+var LOG_INDEX_CELL_CHAN map[string]chan StatsDict
+
+var LOG_TYPE  = []string {
+	"stats",
+	"success_repl_1",
+	"success_repl_2",
+	"fail",
+}
+
+var LOG_INDEX_TYPE  = []string {
+	"success_p5_repl1",
+	"success_p7_repl1",
+	"success_i5_repl1",
+	"success_i7_repl1",
+
+	"success_p5_repl2",
+	"success_p7_repl2",
+	"success_i5_repl2",
+	"success_i7_repl2",
+
+	"fail_p5",
+	"fail_p7",
+	"fail_i5",
+	"fail_i7",
+}
+
+
+
+
+type StatsDict struct {
+	dict map[string]int
+	name string
+}
+
+func (statDict *StatsDict) Init() {
+	statDict.dict = make(map[string]int)
+}
+
+
+func initChan(log_chan * map[string]chan StatsDict, log_type []string) {
+
+	(*log_chan) = make(map[string] chan StatsDict)
+
+	for _, value := range log_type {
+		(*log_chan)[value] = make(chan StatsDict, NB_THREADS)
+	}
+
+
+}
 
 
 func main() {
@@ -53,7 +101,6 @@ func main() {
 	flag.StringVar(&OUTPUT_TAG_NAME, "output_tag_name", "", "tag for the output file names (default None)")
 	flag.BoolVar(&USE_BZIP_GO_LIBRARY, "use_bzip2_go_lib", false, "use bzip2 go library instead of native C lib (slower)")
 	flag.BoolVar(&WRITE_LOGS, "write_logs", false, "write logs (might slower the execution time)")
-	flag.BoolVar(&WRITE_EXTENSIVE_LOGS, "write_extensive_logs", false, "write extensive logs (can consume extra RAM memory and slower the process)")
 	flag.BoolVar(&GUESS_NB_LINES, "guess_nb_lines", false, "guess automatically position of the lines (for mulithread). May be not safe in some situation")
 
 	flag.IntVar(&COMPRESSION_MODE, "compressionMode", 6, `compressionMode for native bzip2 lib
@@ -82,6 +129,10 @@ func main() {
 		}
 	}
 
+	initChan(&LOG_CHAN, LOG_TYPE)
+	initChan(&LOG_INDEX_READ_CHAN, LOG_INDEX_TYPE)
+	initChan(&LOG_INDEX_CELL_CHAN, LOG_INDEX_TYPE)
+
 	loadIndexes(INDEX_NO_REPLICATE, &INDEX_NO_DICT)
 	loadIndexes(INDEX_REPLICATE_R1, &INDEX_R1_DICT)
 	loadIndexes(INDEX_REPLICATE_R2, &INDEX_R2_DICT)
@@ -101,79 +152,94 @@ func main() {
 	case NB_THREADS == 1:
 		var waiting sync.WaitGroup
 		waiting.Add(1)
-		stats, success_logs, fail_logs := launchAnalysisOneFile(
-			0, MAX_NB_READS, "", "", &waiting)
-
-		if WRITE_LOGS{
-			writeReport(stats, success_logs, fail_logs)
-		}
+		launchAnalysisOneFile(0, MAX_NB_READS, "", "", &waiting)
 
 	case NB_THREADS < 1:
 		log.Fatal(errors.New("threads should be >= 1!"))
 
 	case NB_THREADS > 1:
-
-		SUCCESS_LOG_CHAN = make(chan map[string]int, NB_THREADS)
-		FAIL_LOG_CHAN = make(chan map[string]int, NB_THREADS)
-		STATS_LOG_CHAN = make(chan map[string]int, NB_THREADS)
-
 		launchAnalysisMultipleFile("")
 	}
+
+	writeReport()
 
 	t_diff := time.Now().Sub(t_start)
 	fmt.Printf("demultiplexing finished in %f s\n", t_diff.Seconds())
 }
 
-func writeReport(
-	stats map[string]int,
-	success_logs map[string]int,
-	fail_logs map[string]int) {
+func writeReport() {
 
+	if !WRITE_LOGS{
+		return
+	}
 
-	json_filename := fmt.Sprintf("%s%s.demultiplexed.success.log",
-		strings.TrimSuffix(FASTQ_R2, ".bz2"),
-		OUTPUT_TAG_NAME)
+	writeReportFromMultipleDict(&LOG_INDEX_CELL_CHAN, "index_cell")
+	writeReportFromMultipleDict(&LOG_INDEX_READ_CHAN, "index_read")
 
-	file, err := os.Create(json_filename)
+	for key, log_chan := range LOG_CHAN {
+		logs := extractDictFromChan(log_chan)
+		filename := fmt.Sprintf("report%s_%s.log",
+			OUTPUT_TAG_NAME, key)
+
+		file, err := os.Create(filename)
+		defer file.Close()
+		Check(err)
+
+		file.WriteString("#<key>\t<value>\n")
+
+		for key, value := range logs {
+			file.WriteString(fmt.Sprintf("%s\t%d\n", key, value))
+		}
+
+	}
+}
+
+func writeReportFromMultipleDict(channel * map[string]chan StatsDict, fname string) {
+	filename := fmt.Sprintf("report%s_%s.log",
+		OUTPUT_TAG_NAME, fname)
+	file, err := os.Create(filename)
+
 	defer file.Close()
 	Check(err)
 
-	for key, value := range success_logs {
-		file.WriteString(fmt.Sprintf("%s: %d\n", key, value))
-	}
 
-	json_fail := fmt.Sprintf("%s%s.demultiplexed.fail.log",
-		strings.TrimSuffix(FASTQ_R2, ".bz2"),
-		OUTPUT_TAG_NAME)
+	filename = fmt.Sprintf("report%s_%s_fail.log",
+		OUTPUT_TAG_NAME, fname)
+	file_fail, err := os.Create(filename)
 
-	fileFail, err := os.Create(json_fail)
-	defer fileFail.Close()
+	defer file_fail.Close()
 	Check(err)
 
-	for key, value := range fail_logs {
-		fileFail.WriteString(fmt.Sprintf("%s: %d\n", key, value))
+	var fp *os.File
+
+	for dict_type, log_chan := range *channel {
+
+		switch{
+		case strings.Contains(dict_type, "fail"):
+			fp = file_fail
+		default:
+			fp = file
+		}
+
+		logs := extractDictFromChan(log_chan)
+		fp.WriteString(fmt.Sprintf("#### %s\n", dict_type))
+
+		for key, value := range logs {
+			fp.WriteString(fmt.Sprintf("%s\t%s\t%d\n", dict_type, key, value))
+		}
+		fp.WriteString("\n")
 	}
+}
 
-	json_Stats := fmt.Sprintf("%s%s.demultiplexed.stats.log",
-		strings.TrimSuffix(FASTQ_R2, ".bz2"),
-		OUTPUT_TAG_NAME)
-
-	fileStats, err := os.Create(json_Stats)
-	defer fileStats.Close()
-	Check(err)
-
-	for key, value := range stats {
-		fileStats.WriteString(fmt.Sprintf("%s: %d\n", key, value))
-	}}
-
-func exctractDictFromChan(channel chan map[string]int) (map[string]int) {
+func extractDictFromChan(channel chan StatsDict) (map[string]int) {
 
 	dict := make(map[string]int)
 
 	loop:
 	for {
 		select{
-		case dictit := <-channel:
+		case statsDict := <-channel:
+			dictit := statsDict.dict
 			for key, value := range dictit {
 				dict[key] += value
 			}
@@ -264,15 +330,18 @@ func launchAnalysisMultipleFile(path string) {
 
 	fmt.Printf("removing read index files...\n")
 	utils.ExceCmd(cmd)
+}
 
-	if WRITE_LOGS {
+func initLog(log_type []string) (logs map[string]*StatsDict) {
 
-		success_logs := exctractDictFromChan(SUCCESS_LOG_CHAN)
-		fail_logs := exctractDictFromChan(FAIL_LOG_CHAN)
-		stats := exctractDictFromChan(STATS_LOG_CHAN)
+	logs = make(map[string]*StatsDict)
 
-		writeReport(stats, success_logs, fail_logs)
+	for _, value := range log_type {
+			logs[value] = &StatsDict{name:value}
+			logs[value].Init()
 	}
+
+	return logs
 }
 
 func launchAnalysisOneFile(
@@ -280,15 +349,13 @@ func launchAnalysisOneFile(
 	max_nb_reads int,
 	path string,
 	index string,
-	waiting *sync.WaitGroup)(
-		stats map[string]int,
-		success_logs map[string]int,
-		fail_logs map[string]int) {
+	waiting *sync.WaitGroup) {
 
 	defer waiting.Done()
-	stats = make(map[string]int)
-	success_logs = make(map[string]int)
-	fail_logs = make(map[string]int)
+
+	logs := initLog(LOG_TYPE)
+	logs_index_read := initLog(LOG_INDEX_TYPE)
+	logs_index_cell := initLog(LOG_INDEX_TYPE)
 
 	var scanner_I1 * bufio.Scanner
 	var scanner_I2 * bufio.Scanner
@@ -318,21 +385,15 @@ func launchAnalysisOneFile(
 		strings.TrimSuffix(FASTQ_R2, ".bz2"),
 		OUTPUT_TAG_NAME)
 
-	pos_I1, pos_I2, pos_R1, pos_R2 := 0, 0, 0, 0
-
-	if GUESS_NB_LINES && startingRead > 0 {
-		pos_I1 = guessPosToGo(FASTQ_I1, startingRead * 4)
-		pos_I2 = guessPosToGo(FASTQ_I2, startingRead * 4)
-		pos_R1 = guessPosToGo(FASTQ_R1, startingRead * 4)
-		pos_R2 = guessPosToGo(FASTQ_R2, startingRead * 4)
-	}
-
 	switch  {
 	case USE_BZIP_GO_LIBRARY:
-		scanner_I1, file_I1 = utils.ReturnReaderForBzipfilePureGo(FASTQ_I1, int64(pos_I1))
-		scanner_I2, file_I2 = utils.ReturnReaderForBzipfilePureGo(FASTQ_I2, int64(pos_I2))
-		scanner_R1, file_R1 = utils.ReturnReaderForBzipfilePureGo(FASTQ_R1, int64(pos_R1))
-		scanner_R2, file_R2 = utils.ReturnReaderForBzipfilePureGo(FASTQ_R2, int64(pos_R2))
+		scanner_I1, file_I1 = utils.ReturnReaderForBzipfilePureGo(FASTQ_I1, startingRead * 4)
+		scanner_I2, file_I2 = utils.ReturnReaderForBzipfilePureGo(FASTQ_I2, startingRead * 4)
+		scanner_R1, file_R1 = utils.ReturnReaderForBzipfilePureGo(FASTQ_R1, startingRead * 4)
+		scanner_R2, file_R2 = utils.ReturnReaderForBzipfilePureGo(FASTQ_R2, startingRead * 4)
+
+		GUESS_NB_LINES = false
+
 		bzip_R1_repl1 = utils.ReturnWriterForBzipfilePureGo(output_R1_repl1)
 		bzip_R2_repl1 = utils.ReturnWriterForBzipfilePureGo(output_R2_repl1)
 
@@ -344,10 +405,10 @@ func launchAnalysisOneFile(
 		}
 
 	default:
-		scanner_I1, file_I1 = utils.ReturnReaderForBzipfile(FASTQ_I1, int64(pos_I1))
-		scanner_I2, file_I2 = utils.ReturnReaderForBzipfile(FASTQ_I2, int64(pos_I2))
-		scanner_R1, file_R1 = utils.ReturnReaderForBzipfile(FASTQ_R1, int64(pos_R1))
-		scanner_R2, file_R2 = utils.ReturnReaderForBzipfile(FASTQ_R2, int64(pos_R2))
+		scanner_I1, file_I1 = utils.ReturnReaderForBzipfile(FASTQ_I1, startingRead * 4)
+		scanner_I2, file_I2 = utils.ReturnReaderForBzipfile(FASTQ_I2, startingRead * 4)
+		scanner_R1, file_R1 = utils.ReturnReaderForBzipfile(FASTQ_R1, startingRead * 4)
+		scanner_R2, file_R2 = utils.ReturnReaderForBzipfile(FASTQ_R2, startingRead * 4)
 		bzip_R1_repl1 = utils.ReturnWriterForBzipfile(output_R1_repl1, COMPRESSION_MODE)
 		bzip_R2_repl1 = utils.ReturnWriterForBzipfile(output_R2_repl1, COMPRESSION_MODE)
 
@@ -374,23 +435,6 @@ func launchAnalysisOneFile(
 	var index_p7, index_i7, index_p5, index_i5 string
 	var index_1, index_2 string
 	var to_write_R1, to_write_R2 string
-	var statusI1, statusI2, statusR1, statusR2 bool
-
-	gotoStartingLine:
-	for lineCount := 0; lineCount < startingRead*4; lineCount++ {
-		if GUESS_NB_LINES {
-			break gotoStartingLine
-		}
-
-		statusI1 = scanner_I1.Scan()
-		statusI2 = scanner_I2.Scan()
-		statusR1 = scanner_R1.Scan()
-		statusR2 = scanner_R2.Scan()
-
-		if statusI1 == false || statusI2 == false || statusR1 == false || statusR2 == false {
-			return
-		}
-	}
 
 	count := 0
 
@@ -445,35 +489,69 @@ func launchAnalysisOneFile(
 
 		index = fmt.Sprintf("%s%s%s%s", index_p7, index_i7, index_p5, index_i5)
 
-		index_1 = fmt.Sprintf("@%s:%s", index, id_I1[1:])
-		index_2 = fmt.Sprintf("@%s:%s", index, id_I2[1:])
-
 		if WRITE_LOGS {
 			switch {
-			case isValid:
-				if WRITE_EXTENSIVE_LOGS {
-					if _, isInside := success_logs[index]; !isInside {
-						stats["number of cells"]++
-						stats[fmt.Sprintf("number of cells for Repl. %d", Replicate)]++
-					}
-					success_logs[index] += 1
+			case isValid && Replicate == 1:
+				if _, isInside := logs["success_repl_1"].dict[index]; !isInside {
+					logs["stats"].dict["Number of cells repl. 1"]++
+
+					logs_index_cell["success_p5_repl1"].dict[index_p5]++
+					logs_index_cell["success_p7_repl1"].dict[index_p7]++
+					logs_index_cell["success_i5_repl1"].dict[index_i5]++
+					logs_index_cell["success_i7_repl1"].dict[index_i7]++
+
 				}
-				stats[fmt.Sprintf("number of reads for Repl. %d", Replicate)]++
+				logs["success_repl_1"].dict[index] += 1
+				logs["stats"].dict["Number of reads repl. 1"]++
+
+				logs_index_read["success_p5_repl1"].dict[index_p5]++
+				logs_index_read["success_p7_repl1"].dict[index_p7]++
+				logs_index_read["success_i5_repl1"].dict[index_i5]++
+				logs_index_read["success_i7_repl1"].dict[index_i7]++
+
+			case isValid && Replicate == 2:
+				if _, isInside := logs["success_repl_2"].dict[index]; !isInside {
+					logs["stats"].dict["Number of cells repl. 2"]++
+
+					logs_index_cell["success_p5_repl2"].dict[index_p5]++
+					logs_index_cell["success_p7_repl2"].dict[index_p7]++
+					logs_index_cell["success_i5_repl2"].dict[index_i5]++
+					logs_index_cell["success_i7_repl2"].dict[index_i7]++
+				}
+
+				logs["success_repl_2"].dict[index] += 1
+				logs["stats"].dict["Number of reads repl. 2"]++
+
+				logs_index_read["success_p5_repl2"].dict[index_p5]++
+				logs_index_read["success_p7_repl2"].dict[index_p7]++
+				logs_index_read["success_i5_repl2"].dict[index_i5]++
+				logs_index_read["success_i7_repl2"].dict[index_i7]++
 
 			default:
-				if WRITE_EXTENSIVE_LOGS{
-					if _, isInside := fail_logs[index]; !isInside {
-						stats["number of cells (FAIL)"]++
-					}
-					fail_logs[index] += 1
+				if _, isInside := logs["fail"].dict[index]; !isInside {
+					logs["stats"].dict["number of cells (FAIL)"]++
+
+					logs_index_cell["fail_p5"].dict[index_p5]++
+					logs_index_cell["fail_p7"].dict[index_p7]++
+					logs_index_cell["fail_i5"].dict[index_i5]++
+					logs_index_cell["fail_i7"].dict[index_i7]++
 				}
-				stats["number of reads (FAIL) "]++
+
+				logs["fail"].dict[index] += 1
+				logs["stats"].dict["number of reads (FAIL) "]++
+
+				logs_index_read["fail_p5"].dict[index_p5]++
+				logs_index_read["fail_p7"].dict[index_p7]++
+				logs_index_read["fail_i5"].dict[index_i5]++
+				logs_index_read["fail_i7"].dict[index_i7]++
 			}
 
 		}
 
+		index_1 = fmt.Sprintf("@%s:%s", index, id_I1[1:])
+		index_2 = fmt.Sprintf("@%s:%s", index, id_I2[1:])
+
 		if !isValid {
-			// fmt.Printf("i5 %s p5 %s i7 %s p7 %s not valid! %d\n", index_i5, index_p5, index_i7, index_p7, count)
 			goto endmainloop
 		}
 
@@ -498,15 +576,20 @@ func launchAnalysisOneFile(
 		}
 	}
 
-	if NB_THREADS > 1 {
-		SUCCESS_LOG_CHAN <- success_logs
-		FAIL_LOG_CHAN <- fail_logs
-		STATS_LOG_CHAN <- stats
+	for key, value := range logs {
+		LOG_CHAN[key] <- *value
 	}
 
+	for key, value := range logs_index_cell {
+		LOG_INDEX_CELL_CHAN[key] <- *value
+	}
 
-	return stats, success_logs, fail_logs
+	for key, value := range logs_index_read {
+		LOG_INDEX_READ_CHAN[key] <- *value
+	}
+
 }
+
 
 func Check(err error) {
 	if err != nil {

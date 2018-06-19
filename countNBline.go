@@ -2,7 +2,6 @@ package main
 
 import (
 	"os"
-	"fmt"
 	"log"
 	"bufio"
 	originalbzip2  "compress/bzip2"
@@ -53,8 +52,6 @@ func guessPosToGo(fname string, lineToGo int) int {
 	chunk := make([]byte, 10000)
 	reader_bzip.Read(chunk)
 	nbLines := strings.Count(string(chunk), "\n")
-
-	fmt.Printf("number of lines for %s: %d\n", fname, nbLines)
 
 	return lineToGo * 10000 / nbLines
 

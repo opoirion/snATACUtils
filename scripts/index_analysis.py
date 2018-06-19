@@ -34,13 +34,13 @@ def main():
 
 
     fname = glob('{0}/*{1}.success.log'.format(PATH_DATA, NO_FILTER))[0]
-    data_ref = load_files(fname)
+    # data_ref = load_files(fname)
 
-    value_ref = list(data_ref.values())
+    # value_ref = list(data_ref.values())
 
     frame_success = pd.DataFrame({'type':'success', "value": value_success})
     frame_fail = pd.DataFrame({'type':'fail', "value": value_fail})
-    frame_ref = pd.DataFrame({'type':'ref', "value": value_ref})
+    # frame_ref = pd.DataFrame({'type':'ref', "value": value_ref})
     # frame = pd.concat([frame_success, frame_fail])
 
     sns.kdeplot(np.log10(1.0 + frame_success['value']), shade=True, ax=ax, label='success tag')
