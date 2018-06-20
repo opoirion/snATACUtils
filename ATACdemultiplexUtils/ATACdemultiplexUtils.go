@@ -107,10 +107,23 @@ func ReturnReaderForBzipfilePureGo(fname string, startingLine int) (*bufio.Scann
 	nbLines := strings.Count(string(buffer), "\n")
 	currentLine := nbLines
 
+loop:
+	for {
+		switch {
+		case nbLines > startingLine:
+			file_open, _ := os.OpenFile(fname, 0, 0)
+			reader_os := bufio.NewReader(file_open)
+			reader_bzip := originalbzip2.NewReader(reader_os)
+			bzip_scanner = bufio.NewScanner(reader_bzip)
+			scanUntilStartingLine(bzip_scanner, startingLine)
+			break loop
 
-	bzip_scanner = bufio.NewScanner(reader_bzip)
-	scanUntilStartingLine(bzip_scanner, startingLine - currentLine)
-
+		default:
+			bzip_scanner = bufio.NewScanner(reader_bzip)
+			scanUntilStartingLine(bzip_scanner, startingLine - currentLine)
+			break loop
+		}
+	}
 	return bzip_scanner, file_open
 }
 
@@ -132,29 +145,21 @@ func ReturnReaderForBzipfile(fname string, startingLine int) (*bufio.Scanner, *o
 	nbLines := strings.Count(string(buffer), "\n")
 	currentLine := nbLines
 
-	bzip_scanner = bufio.NewScanner(reader_bzip)
-	scanUntilStartingLine(bzip_scanner, startingLine - currentLine)
+loop:
+	for {
+		switch {
+		case nbLines > startingLine:
+			reader_bzip, file_open = returnCbzipReader(fname)
+			bzip_scanner = bufio.NewScanner(reader_bzip)
+			scanUntilStartingLine(bzip_scanner, startingLine)
+			break loop
 
-// loop:
-// 	for {
-// 		switch {
-// 		case nbLines > startingLine:
-// 			reader_bzip, file_open = returnCbzipReader(fname)
-// 			bzip_scanner = bufio.NewScanner(reader_bzip)
-// 			scanUntilStartingLine(bzip_scanner, startingLine)
-// 			break loop
-
-// 		case currentLine < startingLine - nbLines:
-// 			reader_bzip.Read(buffer)
-// 			nbLineIt := strings.Count(string(buffer), "\n")
-// 			currentLine += nbLineIt
-
-// 		default:
-// 			bzip_scanner = bufio.NewScanner(reader_bzip)
-// 			scanUntilStartingLine(bzip_scanner, startingLine - currentLine)
-// 			break loop
-// 		}
-// 	}
+		default:
+			bzip_scanner = bufio.NewScanner(reader_bzip)
+			scanUntilStartingLine(bzip_scanner, startingLine - currentLine)
+			break loop
+		}
+	}
 	return bzip_scanner, file_open
 }
 
