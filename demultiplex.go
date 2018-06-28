@@ -339,8 +339,10 @@ func launchAnalysisMultipleFile() {
 			strings.TrimSuffix(filenameR2, ".fastq.bz2"),
 			OUTPUT_TAG_NAME)
 
-		cmd1 := fmt.Sprintf("cat %sindex_*demultiplexed.repl2.fastq.bz2 > %s", OUTPUT_PATH, outputR1)
-		cmd2 := fmt.Sprintf("cat %sindex_*demultiplexed.repl2.fastq.bz2 > %s", OUTPUT_PATH, outputR2)
+		cmd1 := fmt.Sprintf("cat %sindex_*demultiplexed.repl2.fastq.bz2 > %s",
+			OUTPUT_PATH, outputR1)
+		cmd2 := fmt.Sprintf("cat %sindex_*demultiplexed.repl2.fastq.bz2 > %s",
+			OUTPUT_PATH, outputR2)
 
 		fmt.Printf("concatenating read 1 files...\n")
 		fmt.Printf("%s\n", cmd1)
@@ -350,7 +352,7 @@ func launchAnalysisMultipleFile() {
 		utils.ExceCmd(cmd2)
 	}
 
-	cmd := fmt.Sprintf("rm index_*demultiplexed.repl*.bz2 ")
+	cmd := fmt.Sprintf("rm %sindex_*demultiplexed.repl*.bz2 ", OUTPUT_PATH)
 
 	fmt.Printf("removing read index files...\n")
 	utils.ExceCmd(cmd)
