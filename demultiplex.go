@@ -169,13 +169,13 @@ func main() {
 	case NB_THREADS == 1:
 		var waiting sync.WaitGroup
 		waiting.Add(1)
-		launchAnalysisOneFile(0, MAX_NB_READS, "", "", &waiting)
+		launchAnalysisOneFile(0, MAX_NB_READS, "", &waiting)
 
 	case NB_THREADS < 1:
-		log.Fatal(errors.New("threads should be >= 1!"))
+		panic(errors.New("threads should be >= 1! "))
 
 	case NB_THREADS > 1:
-		launchAnalysisMultipleFile("")
+		launchAnalysisMultipleFile()
 	}
 
 	writeReport()
@@ -272,7 +272,7 @@ func extractDictFromChan(channel chan StatsDict) (map[string]int) {
 }
 
 /* */
-func launchAnalysisMultipleFile(path string) {
+func launchAnalysisMultipleFile() {
 
 	var nbReads int
 	var chunk int
@@ -301,7 +301,6 @@ func launchAnalysisMultipleFile(path string) {
 		}
 		go launchAnalysisOneFile(
 			startingRead, chunk,
-			"",
 			fmt.Sprintf("index_%d.", index),
 			&waiting)
 		startingRead += chunk
@@ -331,10 +330,10 @@ func launchAnalysisMultipleFile(path string) {
 	utils.ExceCmd(cmd2)
 
 	if INDEX_REPLICATE_R2 != "" {
-		outputR1 := fmt.Sprintf("%s%s%s.demultiplexed.repl2.fastq.bz2", path,
+		outputR1 := fmt.Sprintf("%s%s%s.demultiplexed.repl2.fastq.bz2", OUTPUT_PATH,
 			strings.TrimSuffix(filenameR1, ".fastq.bz2"),
 			OUTPUT_TAG_NAME)
-		outputR2 := fmt.Sprintf("%s%s%s.demultiplexed.repl2.fastq.bz2", path,
+		outputR2 := fmt.Sprintf("%s%s%s.demultiplexed.repl2.fastq.bz2", OUTPUT_PATH,
 			strings.TrimSuffix(filenameR2, ".fastq.bz2"),
 			OUTPUT_TAG_NAME)
 
@@ -372,7 +371,6 @@ func initLog(logType []string) (logs map[string]*StatsDict) {
 func launchAnalysisOneFile(
 	startingRead int,
 	maxNbReads int,
-	path string,
 	index string,
 	waiting *sync.WaitGroup) {
 
@@ -400,16 +398,16 @@ func launchAnalysisOneFile(
 	_, filenameR2 := pathutils.Split(FASTQ_R2)
 
 	outputR1Repl1 := fmt.Sprintf("%s%s%s%s.demultiplexed.repl1.fastq.bz2",
-		path, index, strings.TrimSuffix(filenameR1, ".fastq.bz2"),
+		OUTPUT_PATH, index, strings.TrimSuffix(filenameR1, ".fastq.bz2"),
 		OUTPUT_TAG_NAME)
-	outputR2Repl1 := fmt.Sprintf("%s%s%s%s.demultiplexed.repl1.fastq.bz2", path, index,
+	outputR2Repl1 := fmt.Sprintf("%s%s%s%s.demultiplexed.repl1.fastq.bz2", OUTPUT_PATH, index,
 		strings.TrimSuffix(filenameR2, ".fastq.bz2"),
 		OUTPUT_TAG_NAME)
 
 	outputR1Repl2 := fmt.Sprintf("%s%s%s%s.demultiplexed.repl2.fastq.bz2",
-		path, index, strings.TrimSuffix(filenameR1, ".fastq.bz2"),
+		OUTPUT_PATH, index, strings.TrimSuffix(filenameR1, ".fastq.bz2"),
 		OUTPUT_TAG_NAME)
-	outputR2Repl2 := fmt.Sprintf("%s%s%s%s.demultiplexed.repl2.fastq.bz2", path, index,
+	outputR2Repl2 := fmt.Sprintf("%s%s%s%s.demultiplexed.repl2.fastq.bz2", OUTPUT_PATH, index,
 		strings.TrimSuffix(filenameR2, ".fastq.bz2"),
 		OUTPUT_TAG_NAME)
 
@@ -622,6 +620,6 @@ func launchAnalysisOneFile(
 /* */
 func Check(err error) {
 	if err != nil {
-		log.Fatal(err)
+		panic(err)
 	}
 }
