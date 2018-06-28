@@ -114,7 +114,7 @@ func main() {
 	flag.IntVar(&TAGLENGTH, "taglength", 8,
 		`<OPTIONAL> number of nucleotides to consider at the end
  and begining (default 8)`)
-	flag.IntVar(&MAX_NB_READS, "maxNbReads", 0,
+	flag.IntVar(&MAX_NB_READS, "max_nb_reads", 0,
 		"<OPTIONAL> max number of reads to process (default 0 => None)")
 	flag.StringVar(&INDEX_REPLICATE_R1, "index_replicate_r1", "",
 		"<OPTIONAL> path toward indexes of R1 replicates (i.e. replicate number 1)")
