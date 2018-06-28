@@ -319,8 +319,10 @@ func launchAnalysisMultipleFile() {
 		strings.TrimSuffix(filenameR2, ".fastq.bz2"),
 		OUTPUT_TAG_NAME)
 
-	cmd1 := fmt.Sprintf("cat index_*demultiplexed.repl1.fastq.bz2 > %s", outputR1)
-	cmd2 := fmt.Sprintf("cat index_*demultiplexed.repl1.fastq.bz2 > %s", outputR2)
+	cmd1 := fmt.Sprintf("cat %sindex_*demultiplexed.repl1.fastq.bz2 > %s",
+		OUTPUT_PATH, outputR1)
+	cmd2 := fmt.Sprintf("cat %sindex_*demultiplexed.repl1.fastq.bz2 > %s",
+		OUTPUT_PATH, outputR2)
 
 	fmt.Printf("concatenating read 1 files...\n")
 	fmt.Printf("%s\n", cmd1)
