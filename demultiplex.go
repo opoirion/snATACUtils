@@ -148,9 +148,11 @@ func main() {
 		OUTPUT_TAG_NAME = fmt.Sprintf("_%s", OUTPUT_TAG_NAME)
 	}
 
-	if OUTPUT_PATH == "." {
+	if OUTPUT_PATH == "." || OUTPUT_PATH == "" {
 		OUTPUT_PATH = "./"
 	}
+
+	OUTPUT_PATH = fmt.Sprintf("%s/", OUTPUT_PATH)
 
 	if _, err := os.Stat(OUTPUT_PATH); err != nil {
 		os.Mkdir(OUTPUT_PATH, os.ModePerm)
