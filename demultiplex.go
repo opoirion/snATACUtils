@@ -14,6 +14,7 @@ import "io"
 
 import (
 	utils "ATACdemultiplex/ATACdemultiplexUtils"
+	pathutils "path"
 )
 
 var FASTQ_R1 string
@@ -31,6 +32,7 @@ var OUTPUT_TAG_NAME string
 var INDEX_REPLICATE_R1 string
 var INDEX_REPLICATE_R2 string
 var INDEX_NO_REPLICATE string
+var OUTPUT_PATH string
 var MAX_NB_MISTAKE int
 
 var INDEX_R1_DICT map[string]map[string]bool
@@ -68,29 +70,32 @@ var LOG_INDEX_TYPE  = []string {
 
 
 
-
+/*StatsDict doc */
 type StatsDict struct {
 	dict map[string]int
 	name string
 }
 
+/*Init doc */
 func (statDict *StatsDict) Init() {
 	statDict.dict = make(map[string]int)
 }
 
 
-func initChan(log_chan * map[string]chan StatsDict, log_type []string) {
+/* */
+func initChan(logChan * map[string]chan StatsDict, logType []string) {
 
-	(*log_chan) = make(map[string] chan StatsDict)
+	(*logChan) = make(map[string] chan StatsDict)
 
-	for _, value := range log_type {
-		(*log_chan)[value] = make(chan StatsDict, NB_THREADS)
+	for _, value := range logType {
+		(*logChan)[value] = make(chan StatsDict, NB_THREADS)
 	}
 
 
 }
 
 
+/* */
 func main() {
 	// counter := make(map[string]int)
 	flag.StringVar(&FASTQ_I1, "fastq_I1", "", "fastq index file index paired read 1")
@@ -109,7 +114,7 @@ func main() {
 	flag.IntVar(&TAGLENGTH, "taglength", 8,
 		`<OPTIONAL> number of nucleotides to consider at the end
  and begining (default 8)`)
-	flag.IntVar(&MAX_NB_READS, "max_nb_reads", 0,
+	flag.IntVar(&MAX_NB_READS, "maxNbReads", 0,
 		"<OPTIONAL> max number of reads to process (default 0 => None)")
 	flag.StringVar(&INDEX_REPLICATE_R1, "index_replicate_r1", "",
 		"<OPTIONAL> path toward indexes of R1 replicates (i.e. replicate number 1)")
@@ -117,6 +122,8 @@ func main() {
 		"<OPTIONAL> path toward indexes of R2 replicates (i.e. replicate number 2)")
 	flag.StringVar(&INDEX_NO_REPLICATE, "index_no_replicate", "",
 		"<OPTIONAL> path toward indexes when only 1 replicate is used")
+	flag.StringVar(&OUTPUT_PATH, "output_path", "",
+		"<OPTIONAL> output path being used")
 
 	flag.Parse()
 
@@ -141,12 +148,20 @@ func main() {
 		OUTPUT_TAG_NAME = fmt.Sprintf("_%s", OUTPUT_TAG_NAME)
 	}
 
+	if OUTPUT_PATH == "." {
+		OUTPUT_PATH = "./"
+	}
+
+	if _, err := os.Stat(OUTPUT_PATH); err != nil {
+		os.Mkdir(OUTPUT_PATH, os.ModePerm)
+	}
+
 	fmt.Printf("fastq file index 1 analyzed: %s\n", FASTQ_I1)
 	fmt.Printf("fastq file index 2 analyzed: %s\n", FASTQ_I2)
 	fmt.Printf("fastq file read file 1 analyzed: %s\n", FASTQ_R1)
 	fmt.Printf("fastq file read file 2 analyzed: %s\n", FASTQ_R2)
 
-	t_start := time.Now()
+	tStart := time.Now()
 
 	switch {
 	case NB_THREADS == 1:
@@ -163,10 +178,11 @@ func main() {
 
 	writeReport()
 
-	t_diff := time.Now().Sub(t_start)
-	fmt.Printf("demultiplexing finished in %f s\n", t_diff.Seconds())
+	tDiff := time.Now().Sub(tStart)
+	fmt.Printf("demultiplexing finished in %f s\n", tDiff.Seconds())
 }
 
+/* */
 func writeReport() {
 
 	if !WRITE_LOGS{
@@ -176,10 +192,10 @@ func writeReport() {
 	writeReportFromMultipleDict(&LOG_INDEX_CELL_CHAN, "index_cell")
 	writeReportFromMultipleDict(&LOG_INDEX_READ_CHAN, "index_read")
 
-	for key, log_chan := range LOG_CHAN {
-		logs := extractDictFromChan(log_chan)
-		filename := fmt.Sprintf("report%s_%s.log",
-			OUTPUT_TAG_NAME, key)
+	for key, logChan := range LOG_CHAN {
+		logs := extractDictFromChan(logChan)
+		filename := fmt.Sprintf("%sreport%s_%s.log",
+			OUTPUT_PATH, OUTPUT_TAG_NAME, key)
 
 		file, err := os.Create(filename)
 		defer file.Close()
@@ -194,43 +210,45 @@ func writeReport() {
 	}
 }
 
+/* */
 func writeReportFromMultipleDict(channel * map[string]chan StatsDict, fname string) {
-	filename := fmt.Sprintf("report%s_%s.log",
-		OUTPUT_TAG_NAME, fname)
+	filename := fmt.Sprintf("%sreport%s_%s.log",
+		OUTPUT_PATH, OUTPUT_TAG_NAME, fname)
 	file, err := os.Create(filename)
 
 	defer file.Close()
 	Check(err)
 
 
-	filename = fmt.Sprintf("report%s_%s_fail.log",
-		OUTPUT_TAG_NAME, fname)
-	file_fail, err := os.Create(filename)
+	filename = fmt.Sprintf("%sreport%s_%s_fail.log",
+		OUTPUT_PATH, OUTPUT_TAG_NAME, fname)
+	fileFail, err := os.Create(filename)
 
-	defer file_fail.Close()
+	defer fileFail.Close()
 	Check(err)
 
 	var fp *os.File
 
-	for dict_type, log_chan := range *channel {
+	for dictType, logChan := range *channel {
 
 		switch{
-		case strings.Contains(dict_type, "fail"):
-			fp = file_fail
+		case strings.Contains(dictType, "fail"):
+			fp = fileFail
 		default:
 			fp = file
 		}
 
-		logs := extractDictFromChan(log_chan)
-		fp.WriteString(fmt.Sprintf("#### %s\n", dict_type))
+		logs := extractDictFromChan(logChan)
+		fp.WriteString(fmt.Sprintf("#### %s\n", dictType))
 
 		for key, value := range logs {
-			fp.WriteString(fmt.Sprintf("%s\t%s\t%d\n", dict_type, key, value))
+			fp.WriteString(fmt.Sprintf("%s\t%s\t%d\n", dictType, key, value))
 		}
 		fp.WriteString("\n")
 	}
 }
 
+/* */
 func extractDictFromChan(channel chan StatsDict) (map[string]int) {
 
 	dict := make(map[string]int)
@@ -251,9 +269,10 @@ func extractDictFromChan(channel chan StatsDict) (map[string]int) {
 	return dict
 }
 
+/* */
 func launchAnalysisMultipleFile(path string) {
 
-	var nb_reads int
+	var nbReads int
 	var chunk int
 
 	switch {
@@ -261,10 +280,10 @@ func launchAnalysisMultipleFile(path string) {
 		chunk = (MAX_NB_READS / NB_THREADS)
 	default:
 		fmt.Printf("computing number of lines...")
-		nb_reads = countLine(FASTQ_I1, COMPRESSION_MODE) / 4
-		fmt.Printf("estimated number of lines:%d\n", nb_reads)
+		nbReads = countLine(FASTQ_I1, COMPRESSION_MODE) / 4
+		fmt.Printf("estimated number of lines:%d\n", nbReads)
 
-		chunk = ((nb_reads / NB_THREADS) - (nb_reads/NB_THREADS)%4)
+		chunk = ((nbReads / NB_THREADS) - (nbReads/NB_THREADS)%4)
 	}
 
 	startingRead := 0
@@ -284,45 +303,48 @@ func launchAnalysisMultipleFile(path string) {
 			fmt.Sprintf("index_%d.", index),
 			&waiting)
 		startingRead += chunk
-		index += 1
+		index++
 	}
 
 	waiting.Wait()
 
-	output_R1 := fmt.Sprintf("%s%s%s.demultiplexed.repl1.fastq.bz2", path,
-		strings.TrimSuffix(FASTQ_R1, ".fastq.bz2"),
+	_, filenameR1 := pathutils.Split(FASTQ_R1)
+	_, filenameR2 := pathutils.Split(FASTQ_R2)
+
+	outputR1 := fmt.Sprintf("%s%s%s.demultiplexed.repl1.fastq.bz2", OUTPUT_PATH,
+		strings.TrimSuffix(filenameR1, ".fastq.bz2"),
 		OUTPUT_TAG_NAME)
-	output_R2 := fmt.Sprintf("%s%s%s.demultiplexed.repl1.fastq.bz2", path,
-		strings.TrimSuffix(FASTQ_R2, ".fastq.bz2"),
+	outputR2 := fmt.Sprintf("%s%s%s.demultiplexed.repl1.fastq.bz2", OUTPUT_PATH,
+		strings.TrimSuffix(filenameR2, ".fastq.bz2"),
 		OUTPUT_TAG_NAME)
 
-	cmd_1 := fmt.Sprintf("cat index_*demultiplexed.repl1.fastq.bz2 > %s", output_R1)
-	cmd_2 := fmt.Sprintf("cat index_*demultiplexed.repl1.fastq.bz2 > %s", output_R2)
+	cmd1 := fmt.Sprintf("cat index_*demultiplexed.repl1.fastq.bz2 > %s", outputR1)
+	cmd2 := fmt.Sprintf("cat index_*demultiplexed.repl1.fastq.bz2 > %s", outputR2)
 
 	fmt.Printf("concatenating read 1 files...\n")
-	fmt.Printf("%s\n", cmd_1)
+	fmt.Printf("%s\n", cmd1)
 
-	utils.ExceCmd(cmd_1)
+	utils.ExceCmd(cmd1)
 	fmt.Printf("concatenating read 2 files...\n")
-	utils.ExceCmd(cmd_2)
+	utils.ExceCmd(cmd2)
 
 	if INDEX_REPLICATE_R2 != "" {
-		output_R1 := fmt.Sprintf("%s%s%s.demultiplexed.repl2.fastq.bz2", path,
-			strings.TrimSuffix(FASTQ_R1, ".fastq.bz2"),
+		outputR1 := fmt.Sprintf("%s%s%s.demultiplexed.repl2.fastq.bz2", path,
+			strings.TrimSuffix(filenameR1, ".fastq.bz2"),
 			OUTPUT_TAG_NAME)
-		output_R2 := fmt.Sprintf("%s%s%s.demultiplexed.repl2.fastq.bz2", path,
-			strings.TrimSuffix(FASTQ_R2, ".fastq.bz2"),
+		outputR2 := fmt.Sprintf("%s%s%s.demultiplexed.repl2.fastq.bz2", path,
+			strings.TrimSuffix(filenameR2, ".fastq.bz2"),
 			OUTPUT_TAG_NAME)
 
-		cmd_1 := fmt.Sprintf("cat index_*demultiplexed.repl2.fastq.bz2 > %s", output_R1)
-		cmd_2 := fmt.Sprintf("cat index_*demultiplexed.repl2.fastq.bz2 > %s", output_R2)
+		cmd1 := fmt.Sprintf("cat index_*demultiplexed.repl2.fastq.bz2 > %s", outputR1)
+		cmd2 := fmt.Sprintf("cat index_*demultiplexed.repl2.fastq.bz2 > %s", outputR2)
 
 		fmt.Printf("concatenating read 1 files...\n")
-		fmt.Printf("%s\n", cmd_1)
+		fmt.Printf("%s\n", cmd1)
 
-		utils.ExceCmd(cmd_1)
+		utils.ExceCmd(cmd1)
 		fmt.Printf("concatenating read 2 files...\n")
-		utils.ExceCmd(cmd_2)
+		utils.ExceCmd(cmd2)
 	}
 
 	cmd := fmt.Sprintf("rm index_*demultiplexed.repl*.bz2 ")
@@ -331,11 +353,12 @@ func launchAnalysisMultipleFile(path string) {
 	utils.ExceCmd(cmd)
 }
 
-func initLog(log_type []string) (logs map[string]*StatsDict) {
+/* */
+func initLog(logType []string) (logs map[string]*StatsDict) {
 
 	logs = make(map[string]*StatsDict)
 
-	for _, value := range log_type {
+	for _, value := range logType {
 			logs[value] = &StatsDict{name:value}
 			logs[value].Init()
 	}
@@ -343,9 +366,10 @@ func initLog(log_type []string) (logs map[string]*StatsDict) {
 	return logs
 }
 
+/* */
 func launchAnalysisOneFile(
 	startingRead int,
-	max_nb_reads int,
+	maxNbReads int,
 	path string,
 	index string,
 	waiting *sync.WaitGroup) {
@@ -353,79 +377,82 @@ func launchAnalysisOneFile(
 	defer waiting.Done()
 
 	logs := initLog(LOG_TYPE)
-	logs_index_read := initLog(LOG_INDEX_TYPE)
-	logs_index_cell := initLog(LOG_INDEX_TYPE)
+	logsIndexRead := initLog(LOG_INDEX_TYPE)
+	logsIndexCell := initLog(LOG_INDEX_TYPE)
 
-	var scanner_I1 * bufio.Scanner
-	var scanner_I2 * bufio.Scanner
-	var scanner_R1 * bufio.Scanner
-	var scanner_R2 * bufio.Scanner
-	var bzip_R1_repl1  io.WriteCloser
-	var bzip_R2_repl1  io.WriteCloser
-	var bzip_R1_repl2  io.WriteCloser
-	var bzip_R2_repl2  io.WriteCloser
+	var scannerI1 * bufio.Scanner
+	var scannerI2 * bufio.Scanner
+	var scannerR1 * bufio.Scanner
+	var scannerR2 * bufio.Scanner
+	var bzipR1repl1  io.WriteCloser
+	var bzipR2repl1  io.WriteCloser
+	var bzipR1repl2  io.WriteCloser
+	var bzipR2repl2  io.WriteCloser
 
-	var file_I1 * os.File
-	var file_I2 * os.File
-	var file_R1 * os.File
-	var file_R2 * os.File
+	var fileI1 * os.File
+	var fileI2 * os.File
+	var fileR1 * os.File
+	var fileR2 * os.File
 
-	output_R1_repl1 := fmt.Sprintf("%s%s%s%s.demultiplexed.repl1.fastq.bz2",
-		path, index, strings.TrimSuffix(FASTQ_R1, ".fastq.bz2"),
+	_, filenameR1 := pathutils.Split(FASTQ_R1)
+	_, filenameR2 := pathutils.Split(FASTQ_R2)
+
+	outputR1Repl1 := fmt.Sprintf("%s%s%s%s.demultiplexed.repl1.fastq.bz2",
+		path, index, strings.TrimSuffix(filenameR1, ".fastq.bz2"),
 		OUTPUT_TAG_NAME)
-	output_R2_repl1 := fmt.Sprintf("%s%s%s%s.demultiplexed.repl1.fastq.bz2", path, index,
-		strings.TrimSuffix(FASTQ_R2, ".fastq.bz2"),
+	outputR2Repl1 := fmt.Sprintf("%s%s%s%s.demultiplexed.repl1.fastq.bz2", path, index,
+		strings.TrimSuffix(filenameR2, ".fastq.bz2"),
 		OUTPUT_TAG_NAME)
 
-	output_R1_repl2 := fmt.Sprintf("%s%s%s%s.demultiplexed.repl2.fastq.bz2",
-		path, index, strings.TrimSuffix(FASTQ_R1, ".fastq.bz2"),
+	outputR1Repl2 := fmt.Sprintf("%s%s%s%s.demultiplexed.repl2.fastq.bz2",
+		path, index, strings.TrimSuffix(filenameR1, ".fastq.bz2"),
 		OUTPUT_TAG_NAME)
-	output_R2_repl2 := fmt.Sprintf("%s%s%s%s.demultiplexed.repl2.fastq.bz2", path, index,
-		strings.TrimSuffix(FASTQ_R2, ".fastq.bz2"),
+	outputR2Repl2 := fmt.Sprintf("%s%s%s%s.demultiplexed.repl2.fastq.bz2", path, index,
+		strings.TrimSuffix(filenameR2, ".fastq.bz2"),
 		OUTPUT_TAG_NAME)
 
 	switch  {
 	case USE_BZIP_GO_LIBRARY:
-		scanner_I1, file_I1 = utils.ReturnReaderForBzipfilePureGo(FASTQ_I1, startingRead * 4)
-		scanner_I2, file_I2 = utils.ReturnReaderForBzipfilePureGo(FASTQ_I2, startingRead * 4)
-		scanner_R1, file_R1 = utils.ReturnReaderForBzipfilePureGo(FASTQ_R1, startingRead * 4)
-		scanner_R2, file_R2 = utils.ReturnReaderForBzipfilePureGo(FASTQ_R2, startingRead * 4)
+		scannerI1, fileI1 = utils.ReturnReaderForBzipfilePureGo(FASTQ_I1, startingRead * 4)
+		scannerI2, fileI2 = utils.ReturnReaderForBzipfilePureGo(FASTQ_I2, startingRead * 4)
+		scannerR1, fileR1 = utils.ReturnReaderForBzipfilePureGo(FASTQ_R1, startingRead * 4)
+		scannerR2, fileR2 = utils.ReturnReaderForBzipfilePureGo(FASTQ_R2, startingRead * 4)
 
 		GUESS_NB_LINES = false
 
-		bzip_R1_repl1 = utils.ReturnWriterForBzipfilePureGo(output_R1_repl1)
-		bzip_R2_repl1 = utils.ReturnWriterForBzipfilePureGo(output_R2_repl1)
+		bzipR1repl1 = utils.ReturnWriterForBzipfilePureGo(outputR1Repl1)
+		bzipR2repl1 = utils.ReturnWriterForBzipfilePureGo(outputR2Repl1)
 
 		if INDEX_REPLICATE_R2 != "" {
-			bzip_R1_repl2 = utils.ReturnWriterForBzipfilePureGo(output_R1_repl2)
-			bzip_R2_repl2 = utils.ReturnWriterForBzipfilePureGo(output_R2_repl2)
-			defer bzip_R1_repl2.Close()
-			defer bzip_R2_repl2.Close()
+			bzipR1repl2 = utils.ReturnWriterForBzipfilePureGo(outputR1Repl2)
+			bzipR2repl2 = utils.ReturnWriterForBzipfilePureGo(outputR2Repl2)
+			defer bzipR1repl2.Close()
+			defer bzipR2repl2.Close()
 		}
 
 	default:
-		scanner_I1, file_I1 = utils.ReturnReaderForBzipfile(FASTQ_I1, startingRead * 4)
-		scanner_I2, file_I2 = utils.ReturnReaderForBzipfile(FASTQ_I2, startingRead * 4)
-		scanner_R1, file_R1 = utils.ReturnReaderForBzipfile(FASTQ_R1, startingRead * 4)
-		scanner_R2, file_R2 = utils.ReturnReaderForBzipfile(FASTQ_R2, startingRead * 4)
-		bzip_R1_repl1 = utils.ReturnWriterForBzipfile(output_R1_repl1, COMPRESSION_MODE)
-		bzip_R2_repl1 = utils.ReturnWriterForBzipfile(output_R2_repl1, COMPRESSION_MODE)
+		scannerI1, fileI1 = utils.ReturnReaderForBzipfile(FASTQ_I1, startingRead * 4)
+		scannerI2, fileI2 = utils.ReturnReaderForBzipfile(FASTQ_I2, startingRead * 4)
+		scannerR1, fileR1 = utils.ReturnReaderForBzipfile(FASTQ_R1, startingRead * 4)
+		scannerR2, fileR2 = utils.ReturnReaderForBzipfile(FASTQ_R2, startingRead * 4)
+		bzipR1repl1 = utils.ReturnWriterForBzipfile(outputR1Repl1, COMPRESSION_MODE)
+		bzipR2repl1 = utils.ReturnWriterForBzipfile(outputR2Repl1, COMPRESSION_MODE)
 
 		if INDEX_REPLICATE_R2 != "" {
-			bzip_R1_repl2 = utils.ReturnWriterForBzipfile(output_R1_repl2, COMPRESSION_MODE)
-			bzip_R2_repl2 = utils.ReturnWriterForBzipfile(output_R2_repl2, COMPRESSION_MODE)
-			defer bzip_R1_repl2.Close()
-			defer bzip_R2_repl2.Close()
+			bzipR1repl2 = utils.ReturnWriterForBzipfile(outputR1Repl2, COMPRESSION_MODE)
+			bzipR2repl2 = utils.ReturnWriterForBzipfile(outputR2Repl2, COMPRESSION_MODE)
+			defer bzipR1repl2.Close()
+			defer bzipR2repl2.Close()
 		}
 
 	}
 
-	defer file_I1.Close()
-	defer file_I2.Close()
-	defer file_R1.Close()
-	defer file_R2.Close()
-	defer bzip_R1_repl1.Close()
-	defer bzip_R2_repl1.Close()
+	defer fileI1.Close()
+	defer fileI2.Close()
+	defer fileR1.Close()
+	defer fileR2.Close()
+	defer bzipR1repl1.Close()
+	defer bzipR2repl1.Close()
 
 	var id_I1, id_I2, id_R1, id_R2 string
 	var read_I1, read_I2, read_R1, read_R2 string
@@ -438,46 +465,46 @@ func launchAnalysisOneFile(
 	count := 0
 
 	mainloop:
-	for scanner_I1.Scan() {
-		scanner_I2.Scan()
-		scanner_R1.Scan()
-		scanner_R2.Scan()
+	for scannerI1.Scan() {
+		scannerI2.Scan()
+		scannerR1.Scan()
+		scannerR2.Scan()
 
-		id_I1 = scanner_I1.Text()
-		id_I2 = scanner_I2.Text()
-		id_R1 = scanner_R1.Text()
-		id_R2 = scanner_R2.Text()
+		id_I1 = scannerI1.Text()
+		id_I2 = scannerI2.Text()
+		id_R1 = scannerR1.Text()
+		id_R2 = scannerR2.Text()
 
 		if id_I1[0] != byte('@') || id_I2[0] != byte('@') ||
 			id_R1[0] != byte('@') || id_R2[0] != byte('@') {
 			continue mainloop
 		}
 
-		scanner_I1.Scan()
-		scanner_I2.Scan()
-		scanner_R1.Scan()
-		scanner_R2.Scan()
+		scannerI1.Scan()
+		scannerI2.Scan()
+		scannerR1.Scan()
+		scannerR2.Scan()
 
-		read_I1 = scanner_I1.Text()
-		read_I2 = scanner_I2.Text()
-		read_R1 = scanner_R1.Text()
-		read_R2 = scanner_R2.Text()
+		read_I1 = scannerI1.Text()
+		read_I2 = scannerI2.Text()
+		read_R1 = scannerR1.Text()
+		read_R2 = scannerR2.Text()
 
-		scanner_I1.Scan()
-		scanner_I2.Scan()
-		scanner_R1.Scan()
-		scanner_R2.Scan()
+		scannerI1.Scan()
+		scannerI2.Scan()
+		scannerR1.Scan()
+		scannerR2.Scan()
 
-		strand_R1 = scanner_R1.Text()
-		strand_R2 = scanner_R2.Text()
+		strand_R1 = scannerR1.Text()
+		strand_R2 = scannerR2.Text()
 
-		scanner_I1.Scan()
-		scanner_I2.Scan()
-		scanner_R1.Scan()
-		scanner_R2.Scan()
+		scannerI1.Scan()
+		scannerI2.Scan()
+		scannerR1.Scan()
+		scannerR2.Scan()
 
-		qual_R1 = scanner_R1.Text()
-		qual_R2 = scanner_R2.Text()
+		qual_R1 = scannerR1.Text()
+		qual_R2 = scannerR2.Text()
 
 		index_p7 = read_I1[:TAGLENGTH]
 		index_i7 = read_I1[len(read_I1)-TAGLENGTH:]
@@ -494,55 +521,55 @@ func launchAnalysisOneFile(
 				if _, isInside := logs["success_repl_1"].dict[index]; !isInside {
 					logs["stats"].dict["Number of cells repl. 1"]++
 
-					logs_index_cell["success_p5_repl1"].dict[index_p5]++
-					logs_index_cell["success_p7_repl1"].dict[index_p7]++
-					logs_index_cell["success_i5_repl1"].dict[index_i5]++
-					logs_index_cell["success_i7_repl1"].dict[index_i7]++
+					logsIndexCell["success_p5_repl1"].dict[index_p5]++
+					logsIndexCell["success_p7_repl1"].dict[index_p7]++
+					logsIndexCell["success_i5_repl1"].dict[index_i5]++
+					logsIndexCell["success_i7_repl1"].dict[index_i7]++
 
 				}
-				logs["success_repl_1"].dict[index] += 1
+				logs["success_repl_1"].dict[index]++
 				logs["stats"].dict["Number of reads repl. 1"]++
 
-				logs_index_read["success_p5_repl1"].dict[index_p5]++
-				logs_index_read["success_p7_repl1"].dict[index_p7]++
-				logs_index_read["success_i5_repl1"].dict[index_i5]++
-				logs_index_read["success_i7_repl1"].dict[index_i7]++
+				logsIndexRead["success_p5_repl1"].dict[index_p5]++
+				logsIndexRead["success_p7_repl1"].dict[index_p7]++
+				logsIndexRead["success_i5_repl1"].dict[index_i5]++
+				logsIndexRead["success_i7_repl1"].dict[index_i7]++
 
 			case isValid && Replicate == 2:
 				if _, isInside := logs["success_repl_2"].dict[index]; !isInside {
 					logs["stats"].dict["Number of cells repl. 2"]++
 
-					logs_index_cell["success_p5_repl2"].dict[index_p5]++
-					logs_index_cell["success_p7_repl2"].dict[index_p7]++
-					logs_index_cell["success_i5_repl2"].dict[index_i5]++
-					logs_index_cell["success_i7_repl2"].dict[index_i7]++
+					logsIndexCell["success_p5_repl2"].dict[index_p5]++
+					logsIndexCell["success_p7_repl2"].dict[index_p7]++
+					logsIndexCell["success_i5_repl2"].dict[index_i5]++
+					logsIndexCell["success_i7_repl2"].dict[index_i7]++
 				}
 
-				logs["success_repl_2"].dict[index] += 1
+				logs["success_repl_2"].dict[index]++
 				logs["stats"].dict["Number of reads repl. 2"]++
 
-				logs_index_read["success_p5_repl2"].dict[index_p5]++
-				logs_index_read["success_p7_repl2"].dict[index_p7]++
-				logs_index_read["success_i5_repl2"].dict[index_i5]++
-				logs_index_read["success_i7_repl2"].dict[index_i7]++
+				logsIndexRead["success_p5_repl2"].dict[index_p5]++
+				logsIndexRead["success_p7_repl2"].dict[index_p7]++
+				logsIndexRead["success_i5_repl2"].dict[index_i5]++
+				logsIndexRead["success_i7_repl2"].dict[index_i7]++
 
 			default:
 				if _, isInside := logs["fail"].dict[index]; !isInside {
 					logs["stats"].dict["number of cells (FAIL)"]++
 
-					logs_index_cell["fail_p5"].dict[index_p5]++
-					logs_index_cell["fail_p7"].dict[index_p7]++
-					logs_index_cell["fail_i5"].dict[index_i5]++
-					logs_index_cell["fail_i7"].dict[index_i7]++
+					logsIndexCell["fail_p5"].dict[index_p5]++
+					logsIndexCell["fail_p7"].dict[index_p7]++
+					logsIndexCell["fail_i5"].dict[index_i5]++
+					logsIndexCell["fail_i7"].dict[index_i7]++
 				}
 
-				logs["fail"].dict[index] += 1
+				logs["fail"].dict[index]++
 				logs["stats"].dict["number of reads (FAIL) "]++
 
-				logs_index_read["fail_p5"].dict[index_p5]++
-				logs_index_read["fail_p7"].dict[index_p7]++
-				logs_index_read["fail_i5"].dict[index_i5]++
-				logs_index_read["fail_i7"].dict[index_i7]++
+				logsIndexRead["fail_p5"].dict[index_p5]++
+				logsIndexRead["fail_p7"].dict[index_p7]++
+				logsIndexRead["fail_i5"].dict[index_i5]++
+				logsIndexRead["fail_i7"].dict[index_i7]++
 			}
 
 		}
@@ -559,18 +586,18 @@ func launchAnalysisOneFile(
 
 		switch {
 		case Replicate == 1:
-			bzip_R1_repl1.Write([]byte(to_write_R1))
-			bzip_R2_repl1.Write([]byte(to_write_R2))
+			bzipR1repl1.Write([]byte(to_write_R1))
+			bzipR2repl1.Write([]byte(to_write_R2))
 		case Replicate == 2:
-			bzip_R1_repl2.Write([]byte(to_write_R1))
-			bzip_R2_repl2.Write([]byte(to_write_R2))
+			bzipR1repl2.Write([]byte(to_write_R1))
+			bzipR2repl2.Write([]byte(to_write_R2))
 		default:
 			log.Fatal("Error wrong replicate!")
 		}
 
 		endmainloop:
-		count += 1
-		if max_nb_reads != 0 && count >= max_nb_reads {
+		count++
+		if maxNbReads != 0 && count >= maxNbReads {
 			break mainloop
 		}
 	}
@@ -579,17 +606,18 @@ func launchAnalysisOneFile(
 		LOG_CHAN[key] <- *value
 	}
 
-	for key, value := range logs_index_cell {
+	for key, value := range logsIndexCell {
 		LOG_INDEX_CELL_CHAN[key] <- *value
 	}
 
-	for key, value := range logs_index_read {
+	for key, value := range logsIndexRead {
 		LOG_INDEX_READ_CHAN[key] <- *value
 	}
 
 }
 
 
+/* */
 func Check(err error) {
 	if err != nil {
 		log.Fatal(err)
