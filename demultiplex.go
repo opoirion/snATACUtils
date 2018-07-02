@@ -415,40 +415,25 @@ func launchAnalysisOneFile(
 		strings.TrimSuffix(filenameR2, ".fastq.bz2"),
 		OUTPUT_TAG_NAME)
 
-	switch  {
-	case USE_BZIP_GO_LIBRARY:
-		scannerI1, fileI1 = utils.ReturnReaderForBzipfilePureGo(FASTQ_I1, startingRead * 4)
-		scannerI2, fileI2 = utils.ReturnReaderForBzipfilePureGo(FASTQ_I2, startingRead * 4)
-		scannerR1, fileR1 = utils.ReturnReaderForBzipfilePureGo(FASTQ_R1, startingRead * 4)
-		scannerR2, fileR2 = utils.ReturnReaderForBzipfilePureGo(FASTQ_R2, startingRead * 4)
+	scannerI1, fileI1 = utils.ReturnReader(FASTQ_I1, startingRead * 4, USE_BZIP_GO_LIBRARY)
+	scannerI2, fileI2 = utils.ReturnReader(FASTQ_I2, startingRead * 4, USE_BZIP_GO_LIBRARY)
+	scannerR1, fileR1 = utils.ReturnReader(FASTQ_R1, startingRead * 4, USE_BZIP_GO_LIBRARY)
+	scannerR2, fileR2 = utils.ReturnReader(FASTQ_R2, startingRead * 4, USE_BZIP_GO_LIBRARY)
 
-		GUESS_NB_LINES = false
+	GUESS_NB_LINES = false
 
-		bzipR1repl1 = utils.ReturnWriterForBzipfilePureGo(outputR1Repl1)
-		bzipR2repl1 = utils.ReturnWriterForBzipfilePureGo(outputR2Repl1)
+	bzipR1repl1 = utils.ReturnWriter(outputR1Repl1, COMPRESSION_MODE,
+		USE_BZIP_GO_LIBRARY)
+	bzipR2repl1 = utils.ReturnWriter(outputR2Repl1, COMPRESSION_MODE,
+		USE_BZIP_GO_LIBRARY)
 
-		if INDEX_REPLICATE_R2 != "" {
-			bzipR1repl2 = utils.ReturnWriterForBzipfilePureGo(outputR1Repl2)
-			bzipR2repl2 = utils.ReturnWriterForBzipfilePureGo(outputR2Repl2)
-			defer bzipR1repl2.Close()
-			defer bzipR2repl2.Close()
-		}
-
-	default:
-		scannerI1, fileI1 = utils.ReturnReaderForBzipfile(FASTQ_I1, startingRead * 4)
-		scannerI2, fileI2 = utils.ReturnReaderForBzipfile(FASTQ_I2, startingRead * 4)
-		scannerR1, fileR1 = utils.ReturnReaderForBzipfile(FASTQ_R1, startingRead * 4)
-		scannerR2, fileR2 = utils.ReturnReaderForBzipfile(FASTQ_R2, startingRead * 4)
-		bzipR1repl1 = utils.ReturnWriterForBzipfile(outputR1Repl1, COMPRESSION_MODE)
-		bzipR2repl1 = utils.ReturnWriterForBzipfile(outputR2Repl1, COMPRESSION_MODE)
-
-		if INDEX_REPLICATE_R2 != "" {
-			bzipR1repl2 = utils.ReturnWriterForBzipfile(outputR1Repl2, COMPRESSION_MODE)
-			bzipR2repl2 = utils.ReturnWriterForBzipfile(outputR2Repl2, COMPRESSION_MODE)
-			defer bzipR1repl2.Close()
-			defer bzipR2repl2.Close()
-		}
-
+	if INDEX_REPLICATE_R2 != "" {
+		bzipR1repl2 = utils.ReturnWriter(outputR1Repl2, COMPRESSION_MODE,
+			USE_BZIP_GO_LIBRARY)
+		bzipR2repl2 = utils.ReturnWriter(outputR2Repl2, COMPRESSION_MODE,
+			USE_BZIP_GO_LIBRARY)
+		defer bzipR1repl2.Close()
+		defer bzipR2repl2.Close()
 	}
 
 	defer fileI1.Close()

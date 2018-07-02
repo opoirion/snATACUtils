@@ -4,9 +4,12 @@ import "bufio"
 import "io"
 import "os"
 import "log"
+import "path"
 import "github.com/dsnet/compress/bzip2"
 import "os/exec"
 import "strings"
+import "compress/gzip"
+import "fmt"
 
 import (
 	originalbzip2  "compress/bzip2"
@@ -14,9 +17,10 @@ import (
 )
 
 
-const BUFFER_SIZE = 1000000
+const BUFFERSIZE = 1000000
 
 
+/*Check ... */
 func Check(err error) {
 	if err != nil {
 		log.Fatal(err)
@@ -24,85 +28,149 @@ func Check(err error) {
 }
 
 
+/*ExceCmd ... */
 func ExceCmd(cmd string) {
 	_, err := exec.Command("sh", "-c", cmd).Output()
 	Check(err)
 }
 
+/*ReturnWriterForBzipfile ... */
 func ReturnWriterForBzipfile(fname string, compressionMode int) (io.WriteCloser) {
-	output_file, err := os.Create(fname)
+	outputFile, err := os.Create(fname)
 	Check(err)
-	bzip_file := Cbzip2.NewWriter(output_file, compressionMode)
+	bzipFile := Cbzip2.NewWriter(outputFile, compressionMode)
 	Check(err)
 
-	return bzip_file
+	return bzipFile
 }
 
+/*ReturnWriter ... */
+func ReturnWriter(fname string, compressionMode int, pureGo bool) (io.WriteCloser) {
+
+	ext := path.Ext(fname)
+	var bzipFile io.WriteCloser
+
+	switch ext {
+	case  "bz2":
+		switch pureGo {
+		case true:
+			bzipFile = ReturnWriterForBzipfilePureGo(fname)
+		default:
+			bzipFile = ReturnWriterForBzipfile(fname, compressionMode)
+		}
+	case "gz":
+		bzipFile = ReturnWriterForGzipFile(fname)
+	default:
+		panic(fmt.Sprintf("%s does not have either bzip2 (bz) or gzip (gz) extension!",
+			fname))
+	}
+
+	return bzipFile
+}
+
+
+/*ReturnWriterForGzipFile ... */
+func ReturnWriterForGzipFile(fname string) (io.WriteCloser) {
+	outputFile, err := os.Create(fname)
+	Check(err)
+	bzipFile := gzip.NewWriter(outputFile)
+	Check(err)
+
+	return bzipFile
+}
+
+/*ReturnWriterForBzipfilePureGo ... */
 func ReturnWriterForBzipfilePureGo(fname string) (*bzip2.Writer) {
-	output_file, err := os.Create(fname)
+	outputFile, err := os.Create(fname)
 	Check(err)
-	bzip_file, err := bzip2.NewWriter(output_file, new(bzip2.WriterConfig))
+	bzipFile, err := bzip2.NewWriter(outputFile, new(bzip2.WriterConfig))
 	Check(err)
 
-	return bzip_file
+	return bzipFile
 }
 
+/*ReturnReaderForBzipfileOld ... */
 func ReturnReaderForBzipfileOld(fname string, seekPos int) (*bufio.Scanner, *os.File) {
-	file_open, err := os.OpenFile(fname, 0, 0)
+	fileOpen, err := os.OpenFile(fname, 0, 0)
 
 	if err != nil {
 		log.Fatal(err)
 	}
 	config := new(bzip2.ReaderConfig)
 
-	reader_os := bufio.NewReader(file_open)
-	reader_bzip, err := bzip2.NewReader(reader_os, config)
+	readerOs := bufio.NewReader(fileOpen)
+	readerBzip, err := bzip2.NewReader(readerOs, config)
 	Check(err)
-	reader_os2 := bufio.NewReader(reader_bzip)
-	bzip_scanner := bufio.NewScanner(reader_os2)
+	readerOs2 := bufio.NewReader(readerBzip)
+	bzipScanner := bufio.NewScanner(readerOs2)
 
-	return bzip_scanner, file_open
+	return bzipScanner, fileOpen
 }
 
+/*ReturnReader ... */
+func ReturnReader(fname string, startingLine int, pureGo bool) (*bufio.Scanner, *os.File) {
+	ext := path.Ext(fname)
+	var bzipScanner * bufio.Scanner
+	var fileOpen * os.File
 
-func ReturnReaderForBzipfilePureGoOld(fname string, seekPos int) (*bufio.Scanner, *os.File) {
-	file_open, err := os.OpenFile(fname, 0, 0)
+	switch ext {
+	case "bz2":
+		switch pureGo {
+		case true:
+			bzipScanner, fileOpen = ReturnReaderForBzipfilePureGo(fname, startingLine)
+		default:
+			bzipScanner, fileOpen = ReturnReaderForBzipfile(fname, startingLine)
+		}
+	case "gz":
+		bzipScanner, fileOpen = ReturnReaderForGzipfile(fname, startingLine)
+	default:
+		panic(fmt.Sprintf("%s does not have either bzip2 (bz) or gzip (gz) extension!",
+			fname))
+	}
+
+	return bzipScanner, fileOpen
+
+}
+
+/*ReturnReaderForGzipfile ... */
+func ReturnReaderForGzipfile(fname string, startingLine int) (*bufio.Scanner, *os.File) {
+	fileOpen, err := os.OpenFile(fname, 0, 0)
 
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	reader_os := bufio.NewReader(file_open)
-	reader_bzip := originalbzip2.NewReader(reader_os)
+	readerOs := bufio.NewReader(fileOpen)
+	readerBzip, _ := gzip.NewReader(readerOs)
+	bzipScanner := bufio.NewScanner(readerBzip)
 
-	// if seekPos > 0 {
-	// 	seekFile(reader_bzip, seekPos)
-	// }
-	// reader_os2 := bufio.NewReader(reader_bzip)
-	bzip_scanner := bufio.NewScanner(reader_bzip)
+	if startingLine > 0 {
+		scanUntilStartingLine(bzipScanner, startingLine)
+	}
 
-	return bzip_scanner, file_open
+	return bzipScanner, fileOpen
 }
 
+/*ReturnReaderForBzipfilePureGo ... */
 func ReturnReaderForBzipfilePureGo(fname string, startingLine int) (*bufio.Scanner, *os.File) {
-	var bzip_scanner * bufio.Scanner
-	buffer := make([]byte, BUFFER_SIZE, BUFFER_SIZE)
+	var bzipScanner * bufio.Scanner
+	buffer := make([]byte, BUFFERSIZE, BUFFERSIZE)
 
-	file_open, err := os.OpenFile(fname, 0, 0)
+	fileOpen, err := os.OpenFile(fname, 0, 0)
 
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	reader_os := bufio.NewReader(file_open)
-	reader_bzip := originalbzip2.NewReader(reader_os)
+	readerOs := bufio.NewReader(fileOpen)
+	readerBzip := originalbzip2.NewReader(readerOs)
 
 	if startingLine == 0 {
-		bzip_scanner = bufio.NewScanner(reader_bzip)
-		return bzip_scanner, file_open
+		bzipScanner = bufio.NewScanner(readerBzip)
+		return bzipScanner, fileOpen
 	}
 
-	reader_bzip.Read(buffer)
+	readerBzip.Read(buffer)
 
 	nbLines := strings.Count(string(buffer), "\n")
 	currentLine := nbLines
@@ -111,36 +179,37 @@ loop:
 	for {
 		switch {
 		case nbLines > startingLine:
-			file_open, _ := os.OpenFile(fname, 0, 0)
-			reader_os := bufio.NewReader(file_open)
-			reader_bzip := originalbzip2.NewReader(reader_os)
-			bzip_scanner = bufio.NewScanner(reader_bzip)
-			scanUntilStartingLine(bzip_scanner, startingLine)
+			fileOpen, _ := os.OpenFile(fname, 0, 0)
+			readerOs := bufio.NewReader(fileOpen)
+			readerBzip := originalbzip2.NewReader(readerOs)
+			bzipScanner = bufio.NewScanner(readerBzip)
+			scanUntilStartingLine(bzipScanner, startingLine)
 			break loop
 
 		default:
-			bzip_scanner = bufio.NewScanner(reader_bzip)
-			scanUntilStartingLine(bzip_scanner, startingLine - currentLine)
+			bzipScanner = bufio.NewScanner(readerBzip)
+			scanUntilStartingLine(bzipScanner, startingLine - currentLine)
 			break loop
 		}
 	}
-	return bzip_scanner, file_open
+	return bzipScanner, fileOpen
 }
 
 
+/*ReturnReaderForBzipfile ... */
 func ReturnReaderForBzipfile(fname string, startingLine int) (*bufio.Scanner, *os.File) {
-	var bzip_scanner * bufio.Scanner
+	var bzipScanner * bufio.Scanner
 
-	buffer := make([]byte, BUFFER_SIZE, BUFFER_SIZE)
+	buffer := make([]byte, BUFFERSIZE, BUFFERSIZE)
 
-	reader_bzip, file_open := returnCbzipReader(fname)
+	readerBzip, fileOpen := returnCbzipReader(fname)
 
 	if startingLine == 0 {
-		bzip_scanner = bufio.NewScanner(reader_bzip)
-		return bzip_scanner, file_open
+		bzipScanner = bufio.NewScanner(readerBzip)
+		return bzipScanner, fileOpen
 	}
 
-	reader_bzip.Read(buffer)
+	readerBzip.Read(buffer)
 
 	nbLines := strings.Count(string(buffer), "\n")
 	currentLine := nbLines
@@ -149,20 +218,21 @@ loop:
 	for {
 		switch {
 		case nbLines > startingLine:
-			reader_bzip, file_open = returnCbzipReader(fname)
-			bzip_scanner = bufio.NewScanner(reader_bzip)
-			scanUntilStartingLine(bzip_scanner, startingLine)
+			readerBzip, fileOpen = returnCbzipReader(fname)
+			bzipScanner = bufio.NewScanner(readerBzip)
+			scanUntilStartingLine(bzipScanner, startingLine)
 			break loop
 
 		default:
-			bzip_scanner = bufio.NewScanner(reader_bzip)
-			scanUntilStartingLine(bzip_scanner, startingLine - currentLine)
+			bzipScanner = bufio.NewScanner(readerBzip)
+			scanUntilStartingLine(bzipScanner, startingLine - currentLine)
 			break loop
 		}
 	}
-	return bzip_scanner, file_open
+	return bzipScanner, fileOpen
 }
 
+/*scanUntilStartingLine ... */
 func scanUntilStartingLine(scanner * bufio.Scanner, nbLine int) {
 	for i := 0;i < nbLine; i++ {
 		scanner.Scan()
@@ -171,32 +241,35 @@ func scanUntilStartingLine(scanner * bufio.Scanner, nbLine int) {
 }
 
 
+/*returnCbzipReader ... */
 func returnCbzipReader(fname string) (io.ReadCloser, *os.File) {
-	file_open, err := os.OpenFile(fname, 0, 0)
+	fileOpen, err := os.OpenFile(fname, 0, 0)
 
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	reader_os := bufio.NewReader(file_open)
-	reader_bzip := Cbzip2.NewReader(reader_os)
+	readerOs := bufio.NewReader(fileOpen)
+	readerBzip := Cbzip2.NewReader(readerOs)
 
-	return reader_bzip, file_open
+	return readerBzip, fileOpen
 }
 
+/*seekLine ... */
 func seekLine(fname, startingLine int)  {
 
 
 }
 
 
+/*seekFile ... */
 func seekFile(reader * io.ReadCloser, pos int) {
 	currentPos := 0
-	buff := make([]byte, BUFFER_SIZE)
+	buff := make([]byte, BUFFERSIZE)
 
 loop:
 	for {
-		if pos - currentPos < BUFFER_SIZE {
+		if pos - currentPos < BUFFERSIZE {
 			buff := make([]byte, pos - currentPos)
 			(*reader).Read(buff)
 			break loop
@@ -204,6 +277,6 @@ loop:
 
 		_, err := (*reader).Read(buff)
 		Check(err)
-		currentPos += BUFFER_SIZE
+		currentPos += BUFFERSIZE
 	}
 }
