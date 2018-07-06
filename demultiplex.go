@@ -324,11 +324,9 @@ func launchAnalysisMultipleFile() {
 	cmd2 := fmt.Sprintf("cat %sindex_*demultiplexed.repl1.fastq.bz2 > %s",
 		OUTPUT_PATH, outputR2)
 
-	fmt.Printf("concatenating read 1 files...\n")
-	fmt.Printf("%s\n", cmd1)
-
+	fmt.Printf("concatenating repl. 1 read 1 files...\n")
 	utils.ExceCmd(cmd1)
-	fmt.Printf("concatenating read 2 files...\n")
+	fmt.Printf("concatenating repl. 1 read 2 files...\n")
 	utils.ExceCmd(cmd2)
 
 	if INDEX_REPLICATE_R2 != "" {
@@ -344,11 +342,11 @@ func launchAnalysisMultipleFile() {
 		cmd2 := fmt.Sprintf("cat %sindex_*demultiplexed.repl2.fastq.bz2 > %s",
 			OUTPUT_PATH, outputR2)
 
-		fmt.Printf("concatenating read 1 files...\n")
+		fmt.Printf("concatenating repl. 2 read 1 files...\n")
 		fmt.Printf("%s\n", cmd1)
 
 		utils.ExceCmd(cmd1)
-		fmt.Printf("concatenating read 2 files...\n")
+		fmt.Printf("concatenating repl. 2 read 2 files...\n")
 		utils.ExceCmd(cmd2)
 	}
 
