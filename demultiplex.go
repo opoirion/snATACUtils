@@ -322,10 +322,10 @@ func launchAnalysisMultipleFile() {
 		strings.TrimSuffix(filenameR2, fmt.Sprintf(".fastq.%s", ext)),
 		OUTPUT_TAG_NAME, ext)
 
-	cmd1 := fmt.Sprintf("cat %sindex_*demultiplexed.repl1.fastq.bz2 > %s",
-		OUTPUT_PATH, outputR1)
-	cmd2 := fmt.Sprintf("cat %sindex_*demultiplexed.repl1.fastq.bz2 > %s",
-		OUTPUT_PATH, outputR2)
+	cmd1 := fmt.Sprintf("cat %sindex_*demultiplexed.repl1.fastq.%s > %s",
+		OUTPUT_PATH, ext, outputR1)
+	cmd2 := fmt.Sprintf("cat %sindex_*demultiplexed.repl1.fastq.%s > %s",
+		OUTPUT_PATH, ext, outputR2)
 
 	fmt.Printf("concatenating repl. 1 read 1 files...\n")
 	utils.ExceCmd(cmd1)
@@ -340,10 +340,10 @@ func launchAnalysisMultipleFile() {
 			strings.TrimSuffix(filenameR2, fmt.Sprintf(".fastq.%s", ext)),
 			OUTPUT_TAG_NAME, ext)
 
-		cmd1 := fmt.Sprintf("cat %sindex_*demultiplexed.repl2.fastq.bz2 > %s",
-			OUTPUT_PATH, outputR1)
-		cmd2 := fmt.Sprintf("cat %sindex_*demultiplexed.repl2.fastq.bz2 > %s",
-			OUTPUT_PATH, outputR2)
+		cmd1 := fmt.Sprintf("cat %sindex_*demultiplexed.repl2.fastq.%s > %s",
+			OUTPUT_PATH, ext, outputR1)
+		cmd2 := fmt.Sprintf("cat %sindex_*demultiplexed.repl2.fastq.%s > %s",
+			OUTPUT_PATH, ext, outputR2)
 
 		fmt.Printf("concatenating repl. 2 read 1 files...\n")
 		fmt.Printf("%s\n", cmd1)
@@ -353,7 +353,7 @@ func launchAnalysisMultipleFile() {
 		utils.ExceCmd(cmd2)
 	}
 
-	cmd := fmt.Sprintf("rm %sindex_*demultiplexed.repl*.bz2 ", OUTPUT_PATH)
+	cmd := fmt.Sprintf("rm %sindex_*demultiplexed.repl*.%s ", OUTPUT_PATH, ext)
 
 	fmt.Printf("removing read index files...\n")
 	utils.ExceCmd(cmd)
