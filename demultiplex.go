@@ -313,10 +313,12 @@ func launchAnalysisMultipleFile() {
 	_, filenameR2 := pathutils.Split(FASTQ_R2)
 
 	outputR1 := fmt.Sprintf("%s%s%s.demultiplexed.repl1.fastq.bz2", OUTPUT_PATH,
-		strings.TrimSuffix(filenameR1, ".fastq.bz2"),
+		strings.TrimSuffix(filenameR1, ".fastq.bz2").TrimSuffix(
+			filenameR1, ".fastq.gz"),
 		OUTPUT_TAG_NAME)
 	outputR2 := fmt.Sprintf("%s%s%s.demultiplexed.repl1.fastq.bz2", OUTPUT_PATH,
-		strings.TrimSuffix(filenameR2, ".fastq.bz2"),
+		strings.TrimSuffix(filenameR2, ".fastq.bz2").TrimSuffix(
+			filenameR2, ".fastq.gz"),
 		OUTPUT_TAG_NAME)
 
 	cmd1 := fmt.Sprintf("cat %sindex_*demultiplexed.repl1.fastq.bz2 > %s",
@@ -331,10 +333,12 @@ func launchAnalysisMultipleFile() {
 
 	if INDEX_REPLICATE_R2 != "" {
 		outputR1 := fmt.Sprintf("%s%s%s.demultiplexed.repl2.fastq.bz2", OUTPUT_PATH,
-			strings.TrimSuffix(filenameR1, ".fastq.bz2"),
+			strings.TrimSuffix(filenameR1, ".fastq.bz2").TrimSuffix(
+				filenameR1, ".fastq.gz"),
 			OUTPUT_TAG_NAME)
 		outputR2 := fmt.Sprintf("%s%s%s.demultiplexed.repl2.fastq.bz2", OUTPUT_PATH,
-			strings.TrimSuffix(filenameR2, ".fastq.bz2"),
+			strings.TrimSuffix(filenameR2, ".fastq.bz2").TrimSuffix(
+				filenameR2, ".fastq.gz"),
 			OUTPUT_TAG_NAME)
 
 		cmd1 := fmt.Sprintf("cat %sindex_*demultiplexed.repl2.fastq.bz2 > %s",
@@ -400,17 +404,21 @@ func launchAnalysisOneFile(
 	_, filenameR2 := pathutils.Split(FASTQ_R2)
 
 	outputR1Repl1 := fmt.Sprintf("%s%s%s%s.demultiplexed.repl1.fastq.bz2",
-		OUTPUT_PATH, index, strings.TrimSuffix(filenameR1, ".fastq.bz2"),
+		OUTPUT_PATH, index, strings.TrimSuffix(filenameR1, ".fastq.bz2").TrimSuffix(
+			filenameR1, ".fastq.gz"),
 		OUTPUT_TAG_NAME)
 	outputR2Repl1 := fmt.Sprintf("%s%s%s%s.demultiplexed.repl1.fastq.bz2", OUTPUT_PATH, index,
-		strings.TrimSuffix(filenameR2, ".fastq.bz2"),
+		strings.TrimSuffix(filenameR2, ".fastq.bz2").TrimSuffix(
+			filenameR2, ".fastq.gz"),
 		OUTPUT_TAG_NAME)
 
 	outputR1Repl2 := fmt.Sprintf("%s%s%s%s.demultiplexed.repl2.fastq.bz2",
-		OUTPUT_PATH, index, strings.TrimSuffix(filenameR1, ".fastq.bz2"),
+		OUTPUT_PATH, index, strings.TrimSuffix(filenameR1, ".fastq.bz2").TrimSuffix(
+			filenameR1, ".fastq.gz"),
 		OUTPUT_TAG_NAME)
 	outputR2Repl2 := fmt.Sprintf("%s%s%s%s.demultiplexed.repl2.fastq.bz2", OUTPUT_PATH, index,
-		strings.TrimSuffix(filenameR2, ".fastq.bz2"),
+		strings.TrimSuffix(filenameR2, ".fastq.bz2").TrimSuffix(
+			filenameR2, ".fastq.gz"),
 		OUTPUT_TAG_NAME)
 
 	scannerI1, fileI1 = utils.ReturnReader(FASTQ_I1, startingRead * 4, USE_BZIP_GO_LIBRARY)
