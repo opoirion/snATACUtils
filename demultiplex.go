@@ -10,6 +10,7 @@ import "time"
 import "errors"
 import "sync"
 import "io"
+import "path"
 
 
 import (
@@ -312,14 +313,14 @@ func launchAnalysisMultipleFile() {
 	_, filenameR1 := pathutils.Split(FASTQ_R1)
 	_, filenameR2 := pathutils.Split(FASTQ_R2)
 
-	outputR1 := fmt.Sprintf("%s%s%s.demultiplexed.repl1.fastq.bz2", OUTPUT_PATH,
-		strings.TrimSuffix(
-			strings.TrimSuffix(filenameR1, ".fastq.bz2"), ".fastq.gz"),
-		OUTPUT_TAG_NAME)
-	outputR2 := fmt.Sprintf("%s%s%s.demultiplexed.repl1.fastq.bz2", OUTPUT_PATH,
-		strings.TrimSuffix(
-			strings.TrimSuffix(filenameR2, ".fastq.bz2"), ".fastq.gz"),
-		OUTPUT_TAG_NAME)
+	ext := path.Ext(filenameR1)
+
+	outputR1 := fmt.Sprintf("%s%s%s.demultiplexed.repl1.fastq.%s", OUTPUT_PATH,
+		strings.TrimSuffix(filenameR1, fmt.Sprintf(".fastq.%s", ext)),
+		OUTPUT_TAG_NAME, ext)
+	outputR2 := fmt.Sprintf("%s%s%s.demultiplexed.repl1.fastq.%s", OUTPUT_PATH,
+		strings.TrimSuffix(filenameR2, fmt.Sprintf(".fastq.%s", ext)),
+		OUTPUT_TAG_NAME, ext)
 
 	cmd1 := fmt.Sprintf("cat %sindex_*demultiplexed.repl1.fastq.bz2 > %s",
 		OUTPUT_PATH, outputR1)
@@ -332,14 +333,12 @@ func launchAnalysisMultipleFile() {
 	utils.ExceCmd(cmd2)
 
 	if INDEX_REPLICATE_R2 != "" {
-		outputR1 := fmt.Sprintf("%s%s%s.demultiplexed.repl2.fastq.bz2", OUTPUT_PATH,
-			strings.TrimSuffix(
-				strings.TrimSuffix(filenameR1, ".fastq.bz2"), ".fastq.gz"),
-			OUTPUT_TAG_NAME)
-		outputR2 := fmt.Sprintf("%s%s%s.demultiplexed.repl2.fastq.bz2", OUTPUT_PATH,
-			strings.TrimSuffix(
-				strings.TrimSuffix(filenameR2, ".fastq.bz2"), ".fastq.gz"),
-			OUTPUT_TAG_NAME)
+		outputR1 := fmt.Sprintf("%s%s%s.demultiplexed.repl2.fastq.%s", OUTPUT_PATH,
+			strings.TrimSuffix(filenameR1, fmt.Sprintf(".fastq.%s", ext)),
+			OUTPUT_TAG_NAME, ext)
+		outputR2 := fmt.Sprintf("%s%s%s.demultiplexed.repl2.fastq.%s", OUTPUT_PATH,
+			strings.TrimSuffix(filenameR2, fmt.Sprintf(".fastq.%s", ext)),
+			OUTPUT_TAG_NAME, ext)
 
 		cmd1 := fmt.Sprintf("cat %sindex_*demultiplexed.repl2.fastq.bz2 > %s",
 			OUTPUT_PATH, outputR1)
@@ -403,23 +402,24 @@ func launchAnalysisOneFile(
 	_, filenameR1 := pathutils.Split(FASTQ_R1)
 	_, filenameR2 := pathutils.Split(FASTQ_R2)
 
-	outputR1Repl1 := fmt.Sprintf("%s%s%s%s.demultiplexed.repl1.fastq.bz2",
-		OUTPUT_PATH, index, strings.TrimSuffix(
-			strings.TrimSuffix(filenameR1, ".fastq.bz2"), ".fastq.gz"),
-		OUTPUT_TAG_NAME)
-	outputR2Repl1 := fmt.Sprintf("%s%s%s%s.demultiplexed.repl1.fastq.bz2", OUTPUT_PATH, index,
-		strings.TrimSuffix(
-			strings.TrimSuffix(filenameR2, ".fastq.bz2"), ".fastq.gz"),
-		OUTPUT_TAG_NAME)
+	ext := path.Ext(filenameR1)
 
-	outputR1Repl2 := fmt.Sprintf("%s%s%s%s.demultiplexed.repl2.fastq.bz2",
-		OUTPUT_PATH, index, strings.TrimSuffix(
-			strings.TrimSuffix(filenameR1, ".fastq.bz2"), ".fastq.gz"),
-		OUTPUT_TAG_NAME)
-	outputR2Repl2 := fmt.Sprintf("%s%s%s%s.demultiplexed.repl2.fastq.bz2", OUTPUT_PATH, index,
-		strings.TrimSuffix(
-			strings.TrimSuffix(filenameR2, ".fastq.bz2"), ".fastq.gz"),
-		OUTPUT_TAG_NAME)
+	outputR1Repl1 := fmt.Sprintf("%s%s%s%s.demultiplexed.repl1.fastq.%s",
+		OUTPUT_PATH, index,
+		strings.TrimSuffix(filenameR1, fmt.Sprintf(".fastq.%s", ext)),
+		OUTPUT_TAG_NAME, ext)
+	outputR2Repl1 := fmt.Sprintf("%s%s%s%s.demultiplexed.repl1.fastq.%s", OUTPUT_PATH, index,
+		strings.TrimSuffix(filenameR2, fmt.Sprintf(".fastq.%s", ext)),
+		OUTPUT_TAG_NAME, ext)
+
+	outputR1Repl2 := fmt.Sprintf("%s%s%s%s.demultiplexed.repl2.fastq.%s",
+		OUTPUT_PATH, index,
+		strings.TrimSuffix(filenameR1, fmt.Sprintf(".fastq.%s", ext)),
+		OUTPUT_TAG_NAME, ext)
+	outputR2Repl2 := fmt.Sprintf("%s%s%s%s.demultiplexed.repl2.fastq.%s", OUTPUT_PATH, index,
+		strings.TrimSuffix(filenameR2, fmt.Sprintf(".fastq.%s", ext)),
+		OUTPUT_TAG_NAME, ext)
+
 
 	scannerI1, fileI1 = utils.ReturnReader(FASTQ_I1, startingRead * 4, USE_BZIP_GO_LIBRARY)
 	scannerI2, fileI2 = utils.ReturnReader(FASTQ_I2, startingRead * 4, USE_BZIP_GO_LIBRARY)
