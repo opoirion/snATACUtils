@@ -296,7 +296,6 @@ func launchAnalysisMultipleFile() {
 	waiting.Add(NB_THREADS)
 
 	for i := 0; i < NB_THREADS; i++ {
-		break
 		if i == NB_THREADS-1 && MAX_NB_READS == 0 {
 			chunk = 0
 		}
@@ -308,7 +307,7 @@ func launchAnalysisMultipleFile() {
 		index++
 	}
 
-	// waiting.Wait()
+	waiting.Wait()
 
 	_, filenameR1 := pathutils.Split(FASTQ_R1)
 	_, filenameR2 := pathutils.Split(FASTQ_R2)
@@ -406,19 +405,19 @@ func launchAnalysisOneFile(
 
 	ext := path.Ext(filenameR1)
 
-	outputR1Repl1 := fmt.Sprintf("%s%s%s%s.demultiplexed.repl1.fastq%s",
+	outputR1Repl1 := fmt.Sprintf("%s%s%s%s.R1.demultiplexed.repl1.fastq%s",
 		OUTPUT_PATH, index,
 		strings.TrimSuffix(filenameR1, fmt.Sprintf(".fastq%s", ext)),
 		OUTPUT_TAG_NAME, ext)
-	outputR2Repl1 := fmt.Sprintf("%s%s%s%s.demultiplexed.repl1.fastq%s", OUTPUT_PATH, index,
+	outputR2Repl1 := fmt.Sprintf("%s%s%s%s.R2.demultiplexed.repl1.fastq%s", OUTPUT_PATH, index,
 		strings.TrimSuffix(filenameR2, fmt.Sprintf(".fastq%s", ext)),
 		OUTPUT_TAG_NAME, ext)
 
-	outputR1Repl2 := fmt.Sprintf("%s%s%s%s.demultiplexed.repl2.fastq%s",
+	outputR1Repl2 := fmt.Sprintf("%s%s%s%s.R1.demultiplexed.repl2.fastq%s",
 		OUTPUT_PATH, index,
 		strings.TrimSuffix(filenameR1, fmt.Sprintf(".fastq%s", ext)),
 		OUTPUT_TAG_NAME, ext)
-	outputR2Repl2 := fmt.Sprintf("%s%s%s%s.demultiplexed.repl2.fastq%s", OUTPUT_PATH, index,
+	outputR2Repl2 := fmt.Sprintf("%s%s%s%s.R2.demultiplexed.repl2.fastq%s", OUTPUT_PATH, index,
 		strings.TrimSuffix(filenameR2, fmt.Sprintf(".fastq%s", ext)),
 		OUTPUT_TAG_NAME, ext)
 
