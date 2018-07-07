@@ -39,7 +39,7 @@ func countLine(fname string, compressionMode int) int {
 	case ".gz":
 		scanner, file_scanner = utils.ReturnReaderForGzipfile(fname, 0)
 		writer = utils.ReturnWriterForGzipFile(fmt.Sprintf("tmp%s", ext))
-		factor = 1
+		factor = 2
 	default:
 		panic(fmt.Sprintf("%s not a valid extension for %s!", ext, fname))
 	}

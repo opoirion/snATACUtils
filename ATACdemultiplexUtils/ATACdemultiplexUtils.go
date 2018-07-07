@@ -260,12 +260,6 @@ func returnCbzipReader(fname string) (io.ReadCloser, *os.File) {
 	return readerBzip, fileOpen
 }
 
-/*seekLine ... */
-func seekLine(fname, startingLine int)  {
-
-
-}
-
 
 /*seekFile ... */
 func seekFile(reader * io.ReadCloser, pos int) {
