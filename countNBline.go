@@ -23,17 +23,23 @@ func countLine(fname string, compressionMode int) int {
 	ext := path.Ext(fname)
 
 	size := f_stat.Size()
+
+	nbLines := 4000
+
 	var scanner * bufio.Scanner
 	var file_scanner * os.File
 	var writer io.WriteCloser
+	var factor int
 
 	switch ext {
 	case ".bz2":
 		scanner, file_scanner = utils.ReturnReaderForBzipfile(fname, 0)
 		writer = utils.ReturnWriterForBzipfile(fmt.Sprintf("tmp%s", ext), compressionMode)
+		factor = 1
 	case ".gz":
 		scanner, file_scanner = utils.ReturnReaderForGzipfile(fname, 0)
 		writer = utils.ReturnWriterForGzipFile(fmt.Sprintf("tmp%s", ext))
+		factor = 1
 	default:
 		panic(fmt.Sprintf("%s not a valid extension for %s!", ext, fname))
 	}
@@ -42,7 +48,7 @@ func countLine(fname string, compressionMode int) int {
 	defer file_scanner.Close()
 	defer writer.Close()
 
-	for i:=0;i<2000;i++ {
+	for i:=0;i<nbLines;i++ {
 		scanner.Scan()
 		writer.Write([]byte(scanner.Text()))
 	}
@@ -54,7 +60,7 @@ func countLine(fname string, compressionMode int) int {
 	size_writer := f_stat_writer.Size()
 	utils.ExceCmd(fmt.Sprintf("rm tmp%s", ext))
 
-	return (int(size) / int(size_writer)) * int(2000)
+	return (int(size) / int(size_writer)) * int(nbLines) / factor
 
 }
 

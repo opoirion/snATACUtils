@@ -284,7 +284,7 @@ func launchAnalysisMultipleFile() {
 	default:
 		fmt.Printf("computing number of lines...")
 		nbReads = countLine(FASTQ_I1, COMPRESSION_MODE) / 4
-		fmt.Printf("estimated number of lines:%d\n", nbReads)
+		fmt.Printf("estimated number of reads:%d\n", nbReads)
 
 		chunk = ((nbReads / NB_THREADS) - (nbReads/NB_THREADS)%4)
 	}
@@ -322,9 +322,9 @@ func launchAnalysisMultipleFile() {
 		strings.TrimSuffix(filenameR2, fmt.Sprintf(".fastq%s", ext)),
 		OUTPUT_TAG_NAME, ext)
 
-	cmd1 := fmt.Sprintf("cat %sindex_*.R1_*demultiplexed.repl1.fastq%s > %s",
+	cmd1 := fmt.Sprintf("cat %sindex_*.R1*.demultiplexed.repl1.fastq%s > %s",
 		OUTPUT_PATH, ext, outputR1)
-	cmd2 := fmt.Sprintf("cat %sindex_*.R2_*demultiplexed.repl1.fastq%s > %s",
+	cmd2 := fmt.Sprintf("cat %sindex_*.R2*.demultiplexed.repl1.fastq%s > %s",
 		OUTPUT_PATH, ext, outputR2)
 
 	fmt.Printf("concatenating repl. 1 read 1 files...\n")
@@ -340,9 +340,9 @@ func launchAnalysisMultipleFile() {
 			strings.TrimSuffix(filenameR2, fmt.Sprintf(".fastq%s", ext)),
 			OUTPUT_TAG_NAME, ext)
 
-		cmd1 := fmt.Sprintf("cat %sindex_*.R1_*demultiplexed.repl2.fastq%s > %s",
+		cmd1 := fmt.Sprintf("cat %sindex_*.R1*.demultiplexed.repl2.fastq%s > %s",
 			OUTPUT_PATH, ext, outputR1)
-		cmd2 := fmt.Sprintf("cat %sindex_*.R2_*demultiplexed.repl2.fastq%s > %s",
+		cmd2 := fmt.Sprintf("cat %sindex_*.R2*.demultiplexed.repl2.fastq%s > %s",
 			OUTPUT_PATH, ext, outputR2)
 
 		fmt.Printf("concatenating repl. 2 read 1 files...\n")
