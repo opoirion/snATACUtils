@@ -354,7 +354,7 @@ func launchAnalysisMultipleFile() {
 		utils.ExceCmd(cmd2)
 	}
 
-	cmd := fmt.Sprintf("rm %sindex_*demultiplexed.repl*%s ", OUTPUT_PATH, ext)
+	cmd := fmt.Sprintf("rm %sindex_*demultiplexed*repl*%s ", OUTPUT_PATH, ext)
 
 	fmt.Printf("removing read index files...\n")
 	utils.ExceCmd(cmd)
