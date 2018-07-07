@@ -314,10 +314,10 @@ func launchAnalysisMultipleFile() {
 
 	ext := path.Ext(filenameR1)
 
-	outputR1 := fmt.Sprintf("%s%s%s.demultiplexed.repl1.fastq%s", OUTPUT_PATH,
+	outputR1 := fmt.Sprintf("%s%s%s.demultiplexed.R1.repl1.fastq%s", OUTPUT_PATH,
 		strings.TrimSuffix(filenameR1, fmt.Sprintf(".fastq%s", ext)),
 		OUTPUT_TAG_NAME, ext)
-	outputR2 := fmt.Sprintf("%s%s%s.demultiplexed.repl1.fastq%s", OUTPUT_PATH,
+	outputR2 := fmt.Sprintf("%s%s%s.demultiplexed.R2.repl1.fastq%s", OUTPUT_PATH,
 		strings.TrimSuffix(filenameR2, fmt.Sprintf(".fastq%s", ext)),
 		OUTPUT_TAG_NAME, ext)
 
@@ -334,10 +334,10 @@ func launchAnalysisMultipleFile() {
 	utils.ExceCmd(cmd2)
 
 	if INDEX_REPLICATE_R2 != "" {
-		outputR1 := fmt.Sprintf("%s%s%s.demultiplexed.repl2.fastq%s", OUTPUT_PATH,
+		outputR1 := fmt.Sprintf("%s%s%s.demultiplexed.R1.repl2.fastq%s", OUTPUT_PATH,
 			strings.TrimSuffix(filenameR1, fmt.Sprintf(".fastq%s", ext)),
 			OUTPUT_TAG_NAME, ext)
-		outputR2 := fmt.Sprintf("%s%s%s.demultiplexed.repl2.fastq%s", OUTPUT_PATH,
+		outputR2 := fmt.Sprintf("%s%s%s.demultiplexed.R2.repl2.fastq%s", OUTPUT_PATH,
 			strings.TrimSuffix(filenameR2, fmt.Sprintf(".fastq%s", ext)),
 			OUTPUT_TAG_NAME, ext)
 
@@ -405,19 +405,19 @@ func launchAnalysisOneFile(
 
 	ext := path.Ext(filenameR1)
 
-	outputR1Repl1 := fmt.Sprintf("%s%s%s%s.R1.demultiplexed.repl1.fastq%s",
+	outputR1Repl1 := fmt.Sprintf("%s%s%s%s.demultiplexed.R1.repl1.fastq%s",
 		OUTPUT_PATH, index,
 		strings.TrimSuffix(filenameR1, fmt.Sprintf(".fastq%s", ext)),
 		OUTPUT_TAG_NAME, ext)
-	outputR2Repl1 := fmt.Sprintf("%s%s%s%s.R2.demultiplexed.repl1.fastq%s", OUTPUT_PATH, index,
+	outputR2Repl1 := fmt.Sprintf("%s%s%s%s.demultiplexed.R2.repl1.fastq%s", OUTPUT_PATH, index,
 		strings.TrimSuffix(filenameR2, fmt.Sprintf(".fastq%s", ext)),
 		OUTPUT_TAG_NAME, ext)
 
-	outputR1Repl2 := fmt.Sprintf("%s%s%s%s.R1.demultiplexed.repl2.fastq%s",
+	outputR1Repl2 := fmt.Sprintf("%s%s%s%s.demultiplexed.R1.repl2.fastq%s",
 		OUTPUT_PATH, index,
 		strings.TrimSuffix(filenameR1, fmt.Sprintf(".fastq%s", ext)),
 		OUTPUT_TAG_NAME, ext)
-	outputR2Repl2 := fmt.Sprintf("%s%s%s%s.R2.demultiplexed.repl2.fastq%s", OUTPUT_PATH, index,
+	outputR2Repl2 := fmt.Sprintf("%s%s%s%s.demultiplexed.R2.repl2.fastq%s", OUTPUT_PATH, index,
 		strings.TrimSuffix(filenameR2, fmt.Sprintf(".fastq%s", ext)),
 		OUTPUT_TAG_NAME, ext)
 
