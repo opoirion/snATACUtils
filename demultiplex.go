@@ -300,7 +300,7 @@ func launchAnalysisMultipleFile() {
 		if i == NB_THREADS-1 && MAX_NB_READS == 0 {
 			chunk = 0
 		}
-		go launchAnalysisOneFile(
+		launchAnalysisOneFile(
 			startingRead, chunk,
 			fmt.Sprintf("index_%d.", index),
 			&waiting)
@@ -322,9 +322,9 @@ func launchAnalysisMultipleFile() {
 		strings.TrimSuffix(filenameR2, fmt.Sprintf(".fastq%s", ext)),
 		OUTPUT_TAG_NAME, ext)
 
-	cmd1 := fmt.Sprintf("cat %sindex_*demultiplexed.repl1.fastq%s > %s",
+	cmd1 := fmt.Sprintf("cat %sindex_*.R1_*demultiplexed.repl1.fastq%s > %s",
 		OUTPUT_PATH, ext, outputR1)
-	cmd2 := fmt.Sprintf("cat %sindex_*demultiplexed.repl1.fastq%s > %s",
+	cmd2 := fmt.Sprintf("cat %sindex_*.R2_*demultiplexed.repl1.fastq%s > %s",
 		OUTPUT_PATH, ext, outputR2)
 
 	fmt.Printf("concatenating repl. 1 read 1 files...\n")
@@ -340,9 +340,9 @@ func launchAnalysisMultipleFile() {
 			strings.TrimSuffix(filenameR2, fmt.Sprintf(".fastq%s", ext)),
 			OUTPUT_TAG_NAME, ext)
 
-		cmd1 := fmt.Sprintf("cat %sindex_*demultiplexed.repl2.fastq%s > %s",
+		cmd1 := fmt.Sprintf("cat %sindex_*.R1_*demultiplexed.repl2.fastq%s > %s",
 			OUTPUT_PATH, ext, outputR1)
-		cmd2 := fmt.Sprintf("cat %sindex_*demultiplexed.repl2.fastq%s > %s",
+		cmd2 := fmt.Sprintf("cat %sindex_*.R2_*demultiplexed.repl2.fastq%s > %s",
 			OUTPUT_PATH, ext, outputR2)
 
 		fmt.Printf("concatenating repl. 2 read 1 files...\n")

@@ -234,8 +234,13 @@ loop:
 
 /*scanUntilStartingLine ... */
 func scanUntilStartingLine(scanner * bufio.Scanner, nbLine int) {
+	var ok bool
 	for i := 0;i < nbLine; i++ {
-		scanner.Scan()
+		ok = scanner.Scan()
+
+		if !ok {
+			break
+		}
 	}
 
 }

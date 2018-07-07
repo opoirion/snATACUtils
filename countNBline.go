@@ -7,6 +7,9 @@ import (
 	originalbzip2  "compress/bzip2"
 	utils "ATACdemultiplex/ATACdemultiplexUtils"
 	"strings"
+	"path"
+	"io"
+	"fmt"
 )
 
 
@@ -17,10 +20,26 @@ func countLine(fname string, compressionMode int) int {
 	f_stat, err := os.Stat(fname)
 	Check(err)
 
+	ext := path.Ext(fname)
+
 	size := f_stat.Size()
-	scanner, file_scanner := utils.ReturnReaderForBzipfile(fname, 0)
+	var scanner * bufio.Scanner
+	var file_scanner * os.File
+	var writer io.WriteCloser
+
+	switch ext {
+	case ".bz2":
+		scanner, file_scanner = utils.ReturnReaderForBzipfile(fname, 0)
+		writer = utils.ReturnWriterForBzipfile(fmt.Sprintf("tmp%s", ext), compressionMode)
+	case ".gz":
+		scanner, file_scanner = utils.ReturnReaderForGzipfile(fname, 0)
+		writer = utils.ReturnWriterForGzipFile(fmt.Sprintf("tmp%s", ext))
+	default:
+		panic(fmt.Sprintf("%s not a valid extension for %s!", ext, fname))
+	}
+
+
 	defer file_scanner.Close()
-	writer := utils.ReturnWriterForBzipfile("tmp.bz2", compressionMode)
 	defer writer.Close()
 
 	for i:=0;i<2000;i++ {
@@ -29,11 +48,11 @@ func countLine(fname string, compressionMode int) int {
 	}
 	writer.Close()
 
-	f_stat_writer, err := os.Stat("tmp.bz2")
+	f_stat_writer, err := os.Stat(fmt.Sprintf("tmp%s", ext))
 	Check(err)
 
 	size_writer := f_stat_writer.Size()
-	utils.ExceCmd("rm tmp.bz2")
+	utils.ExceCmd(fmt.Sprintf("rm tmp%s", ext))
 
 	return (int(size) / int(size_writer)) * int(2000)
 
