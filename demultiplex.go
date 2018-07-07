@@ -296,7 +296,7 @@ func launchAnalysisMultipleFile() {
 	waiting.Add(NB_THREADS)
 
 	for i := 0; i < NB_THREADS; i++ {
-
+		break
 		if i == NB_THREADS-1 && MAX_NB_READS == 0 {
 			chunk = 0
 		}
@@ -308,7 +308,7 @@ func launchAnalysisMultipleFile() {
 		index++
 	}
 
-	waiting.Wait()
+	// waiting.Wait()
 
 	_, filenameR1 := pathutils.Split(FASTQ_R1)
 	_, filenameR2 := pathutils.Split(FASTQ_R2)
@@ -328,8 +328,10 @@ func launchAnalysisMultipleFile() {
 		OUTPUT_PATH, ext, outputR2)
 
 	fmt.Printf("concatenating repl. 1 read 1 files...\n")
+	fmt.Printf("%s\n", cmd1)
 	utils.ExceCmd(cmd1)
 	fmt.Printf("concatenating repl. 1 read 2 files...\n")
+	fmt.Printf("%s\n", cmd2)
 	utils.ExceCmd(cmd2)
 
 	if INDEX_REPLICATE_R2 != "" {
