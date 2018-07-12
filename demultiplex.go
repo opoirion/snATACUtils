@@ -501,20 +501,18 @@ func launchAnalysisOneFile(
 		qual_R1 = scannerR1.Text()
 		qual_R2 = scannerR2.Text()
 
-		if DEBUG {
-			if TAGLENGTH > len(read_I1) || TAGLENGTH > len(read_I2) {
-				fmt.Printf("#### error at read nb: %d\n", count)
-				fmt.Printf("## error! ID I1: %s\n", id_I1)
-				fmt.Printf("## error! ID I2: %s\n", id_I2)
-				fmt.Printf("## error! ID I1: %s\n", id_R1)
-				fmt.Printf("## error! ID I2: %s\n", id_R2)
-				fmt.Printf("## error! read I1: %s\n", read_I1)
-				fmt.Printf("## error! read I2: %s\n", read_I2)
-				fmt.Printf("## error! read R1: %s\n", read_R1)
-				fmt.Printf("## error! read R2: %s\n", read_R2)
-				fmt.Printf("## error! strand R1: %s\n", strand_R1)
-				fmt.Printf("## error! read I2: %s\n", strand_R2)
-			}
+		if TAGLENGTH > len(read_I1) || TAGLENGTH > len(read_I2) {
+			fmt.Printf("#### error at read nb: %d\n", count)
+			fmt.Printf("## error! ID I1: %s\n", id_I1)
+			fmt.Printf("## error! ID I2: %s\n", id_I2)
+			fmt.Printf("## error! ID I1: %s\n", id_R1)
+			fmt.Printf("## error! ID I2: %s\n", id_R2)
+			fmt.Printf("## error! read I1: %s\n", read_I1)
+			fmt.Printf("## error! read I2: %s\n", read_I2)
+			fmt.Printf("## error! read R1: %s\n", read_R1)
+			fmt.Printf("## error! read R2: %s\n", read_R2)
+			fmt.Printf("## error! strand R1: %s\n", strand_R1)
+			fmt.Printf("## error! read I2: %s\n", strand_R2)
 
 			if ERRORHANDLING != "" {
 				switch ERRORHANDLING {
