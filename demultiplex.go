@@ -27,7 +27,6 @@ var TAGLENGTH int
 var MAX_NB_READS int
 var COMPRESSION_MODE int
 var USE_BZIP_GO_LIBRARY bool
-var GUESS_NB_LINES bool
 var WRITE_LOGS bool
 var OUTPUT_TAG_NAME string
 var INDEX_REPLICATE_R1 string
@@ -35,6 +34,8 @@ var INDEX_REPLICATE_R2 string
 var INDEX_NO_REPLICATE string
 var OUTPUT_PATH string
 var MAX_NB_MISTAKE int
+var DEBUG bool
+var ERRORHANDLING string
 
 var INDEX_R1_DICT map[string]map[string]bool
 var INDEX_R2_DICT map[string]map[string]bool
@@ -91,8 +92,6 @@ func initChan(logChan * map[string]chan StatsDict, logType []string) {
 	for _, value := range logType {
 		(*logChan)[value] = make(chan StatsDict, NB_THREADS)
 	}
-
-
 }
 
 
@@ -103,11 +102,11 @@ func main() {
 	flag.StringVar(&FASTQ_I2, "fastq_I2", "", "fastq index file index paired read 2")
 	flag.StringVar(&FASTQ_R1, "fastq_R1", "", "fastq read file index paired read 1")
 	flag.StringVar(&FASTQ_R2, "fastq_R2", "", "fastq read file index paired read 2")
+	flag.BoolVar(&DEBUG, "debug", false, "debug wrongly formated reads")
 	flag.IntVar(&MAX_NB_MISTAKE, "max_nb_mistake", 2, "Maximum number of mistakes allowed to assign a reference read id (default 2)")
 	flag.StringVar(&OUTPUT_TAG_NAME, "output_tag_name", "", "tag for the output file names (default None)")
 	flag.BoolVar(&USE_BZIP_GO_LIBRARY, "use_bzip2_go_lib", false, "use bzip2 go library instead of native C lib (slower)")
 	flag.BoolVar(&WRITE_LOGS, "write_logs", false, "write logs (might slower the execution time)")
-	flag.BoolVar(&GUESS_NB_LINES, "guess_nb_lines", false, "guess automatically position of the lines (for mulithread). May be not safe in some situation")
 
 	flag.IntVar(&COMPRESSION_MODE, "compressionMode", 6, `compressionMode for native bzip2 lib
  (1 faster -> 9 smaller) <default: 6>`)
@@ -125,7 +124,9 @@ func main() {
 		"<OPTIONAL> path toward indexes when only 1 replicate is used")
 	flag.StringVar(&OUTPUT_PATH, "output_path", "",
 		"<OPTIONAL> output path being used")
-
+	flag.StringVar(&ERRORHANDLING, "error_handling", "return",
+		"error handling strategy (currently return or raise)." +
+		" if return, the demultiplex returns in case of an error and continue.")
 	flag.Parse()
 
 	if INDEX_REPLICATE_R1 != "" || INDEX_REPLICATE_R2 != "" {
@@ -427,8 +428,6 @@ func launchAnalysisOneFile(
 	scannerR1, fileR1 = utils.ReturnReader(FASTQ_R1, startingRead * 4, USE_BZIP_GO_LIBRARY)
 	scannerR2, fileR2 = utils.ReturnReader(FASTQ_R2, startingRead * 4, USE_BZIP_GO_LIBRARY)
 
-	GUESS_NB_LINES = false
-
 	bzipR1repl1 = utils.ReturnWriter(outputR1Repl1, COMPRESSION_MODE,
 		USE_BZIP_GO_LIBRARY)
 	bzipR2repl1 = utils.ReturnWriter(outputR2Repl1, COMPRESSION_MODE,
@@ -501,6 +500,41 @@ func launchAnalysisOneFile(
 
 		qual_R1 = scannerR1.Text()
 		qual_R2 = scannerR2.Text()
+
+		if DEBUG {
+			if TAGLENGTH > len(read_I1) || TAGLENGTH > len(read_I2) {
+				fmt.Printf("#### error at read nb: %d\n", count)
+				fmt.Printf("## error! ID I1: %s\n", id_I1)
+				fmt.Printf("## error! ID I2: %s\n", id_I2)
+				fmt.Printf("## error! ID I1: %s\n", id_R1)
+				fmt.Printf("## error! ID I2: %s\n", id_R2)
+				fmt.Printf("## error! read I1: %s\n", read_I1)
+				fmt.Printf("## error! read I2: %s\n", read_I2)
+				fmt.Printf("## error! read R1: %s\n", read_R1)
+				fmt.Printf("## error! read R2: %s\n", read_R2)
+				fmt.Printf("## error! strand R1: %s\n", strand_R1)
+				fmt.Printf("## error! read I2: %s\n", strand_R2)
+			}
+
+			if ERRORHANDLING != "" {
+				switch ERRORHANDLING {
+
+				case "return":
+					return
+				case "raise":
+					err := fmt.Sprintf("#### error at read nb: %d\n", count)
+					if TAGLENGTH > len(read_I1) {
+						err += fmt.Sprintf("error with id_I1: %s read:%s\n",
+							id_I1, read_I1)
+					} else {
+						err += fmt.Sprintf("error with id_I2: %s read:%s\n",
+							id_I2, read_I2)
+					}
+					panic(err)
+				}
+			}
+		}
+
 
 		index_p7 = read_I1[:TAGLENGTH]
 		index_i7 = read_I1[len(read_I1)-TAGLENGTH:]
