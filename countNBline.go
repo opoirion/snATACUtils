@@ -50,8 +50,6 @@ func countLine(fname string, compressionMode int) int {
 	}
 
 	seek, err := fileScanner.Seek(0, 1)
-	fmt.Printf("\ncurrent offset %d\n", seek)
-	fmt.Printf("err %s\n", err)
 	fmt.Printf("estimated number of lines: %d\n", (int(size) / int(seek)) * i)
 
 	return (int(size) / int(seek)) * i
