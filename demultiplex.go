@@ -379,7 +379,6 @@ func launchAnalysisMultipleFile() {
 	}
 
 	waiting.Wait()
-	return
 
 	_, filenameR1 := pathutils.Split(FASTQ_R1)
 	_, filenameR2 := pathutils.Split(FASTQ_R2)
