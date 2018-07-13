@@ -21,7 +21,7 @@ import (
 
 
 /*VERSION ...*/
-var VERSION  = "0.0.0"
+var VERSION  = "0.0.1"
 /*PRINTVERSION ...*/
 var PRINTVERSION bool
 /*FASTQ_R1 ...*/
