@@ -21,7 +21,7 @@ import (
 
 
 /*VERSION ...*/
-var VERSION  = "0.0.5"
+var VERSION  = "0.1.0"
 /*PRINTVERSION ...*/
 var PRINTVERSION bool
 /*FASTQ_R1 ...*/
@@ -247,7 +247,7 @@ func writeReport() {
 
 		file.WriteString("#<key>\t<value>\n")
 
-		rankedLogs := rankByWordCount(logs)
+		rankedLogs := rankByWordCountAndDeleteOldMap(&logs)
 
 		for _, pair := range rankedLogs {
 			file.WriteString(fmt.Sprintf("%s\t%d\n", pair.Key, pair.Value))
@@ -259,15 +259,17 @@ func writeReport() {
 }
 
 
-func rankByWordCount(wordFrequencies map[string]int) PairList{
-  pl := make(PairList, len(wordFrequencies))
-  i := 0
-  for k, v := range wordFrequencies {
-    pl[i] = Pair{k, v}
-    i++
-  }
-  sort.Sort(sort.Reverse(pl))
-  return pl
+func rankByWordCountAndDeleteOldMap(wordFrequencies * map[string]int) PairList{
+	pl := make(PairList, len(*wordFrequencies))
+	i := 0
+	for k, v := range *wordFrequencies {
+		pl[i] = Pair{k, v}
+		i++
+		delete(*wordFrequencies, k)
+	}
+
+	sort.Sort(sort.Reverse(pl))
+	return pl
 }
 
 /*Pair ...*/
@@ -312,7 +314,7 @@ func writeReportFromMultipleDict(channel * map[string]chan StatsDict, fname stri
 		}
 
 		logs := extractDictFromChan(logChan)
-		rankedLogs := rankByWordCount(logs)
+		rankedLogs := rankByWordCountAndDeleteOldMap(&logs)
 		fp.WriteString(fmt.Sprintf("#### %s\n", dictType))
 
 		for _, pair := range rankedLogs {
@@ -354,7 +356,9 @@ func launchAnalysisMultipleFile() {
 		chunk = (MAX_NB_READS / NB_THREADS)
 	default:
 		nbReads = countLine(FASTQ_I1, COMPRESSION_MODE) / 4
-		chunk = ((nbReads / NB_THREADS) - (nbReads/NB_THREADS)%4)
+		fmt.Printf("estimated number of reads: %d\n", nbReads)
+		chunk = (nbReads / NB_THREADS) - (nbReads / NB_THREADS) % 4
+		fmt.Printf("chunck size: %d\n", chunk)
 	}
 
 	startingRead := 0
@@ -367,15 +371,15 @@ func launchAnalysisMultipleFile() {
 		if i == NB_THREADS-1 && MAX_NB_READS == 0 {
 			chunk = 0
 		}
+
 		go launchAnalysisOneFile(
 			startingRead, chunk,
 			fmt.Sprintf("index_%d.", index),
 			&waiting)
-		startingRead += chunk
-		index++
 	}
 
 	waiting.Wait()
+	return
 
 	_, filenameR1 := pathutils.Split(FASTQ_R1)
 	_, filenameR2 := pathutils.Split(FASTQ_R2)
@@ -488,7 +492,6 @@ func launchAnalysisOneFile(
 	outputR2Repl2 := fmt.Sprintf("%s%s%s%s.demultiplexed.R2.repl2.fastq%s", OUTPUT_PATH, index,
 		strings.TrimSuffix(filenameR2, fmt.Sprintf(".fastq%s", ext)),
 		OUTPUT_TAG_NAME, ext)
-
 
 	scannerI1, fileI1 = utils.ReturnReader(FASTQ_I1, startingRead * 4, USE_BZIP_GO_LIBRARY)
 	scannerI2, fileI2 = utils.ReturnReader(FASTQ_I2, startingRead * 4, USE_BZIP_GO_LIBRARY)
