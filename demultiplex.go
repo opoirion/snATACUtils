@@ -587,7 +587,7 @@ func launchAnalysisOneFile(
 
 				case "return":
 					fmt.Printf("error handling strategy: return at this stage and continue the pipeline\n")
-					return
+					goto endfunc
 				case "raise":
 					err := fmt.Sprintf("#### error handling strategy: raise error #### \n")
 					err += fmt.Sprintf("#### error at read nb: %d\n", count)
@@ -699,7 +699,7 @@ func launchAnalysisOneFile(
 			break mainloop
 		}
 	}
-
+endfunc:
 	for key, value := range logs {
 		LOG_CHAN[key] <- *value
 	}
@@ -711,7 +711,6 @@ func launchAnalysisOneFile(
 	for key, value := range logsIndexRead {
 		LOG_INDEX_READ_CHAN[key] <- *value
 	}
-
 }
 
 
