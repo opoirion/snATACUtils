@@ -353,10 +353,7 @@ func launchAnalysisMultipleFile() {
 	case MAX_NB_READS != 0:
 		chunk = (MAX_NB_READS / NB_THREADS)
 	default:
-		fmt.Printf("computing number of lines...")
 		nbReads = countLine(FASTQ_I1, COMPRESSION_MODE) / 4
-		fmt.Printf("estimated number of reads:%d\n", nbReads)
-
 		chunk = ((nbReads / NB_THREADS) - (nbReads/NB_THREADS)%4)
 	}
 

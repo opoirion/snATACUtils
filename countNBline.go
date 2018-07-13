@@ -8,7 +8,6 @@ import (
 	utils "ATACdemultiplex/ATACdemultiplexUtils"
 	"strings"
 	"path"
-	"io"
 	"fmt"
 )
 
@@ -26,43 +25,36 @@ func countLine(fname string, compressionMode int) int {
 
 	size := fStat.Size()
 
-	nbLines := 4000
+	nbLines := 50000
+	i := 0
 
 	var scanner * bufio.Scanner
 	var fileScanner * os.File
-	var writer io.WriteCloser
-	var factor int
 
 	switch ext {
 	case ".bz2":
 		scanner, fileScanner = utils.ReturnReaderForBzipfile(fname, 0)
-		writer = utils.ReturnWriterForBzipfile(fmt.Sprintf("tmp%s", ext), compressionMode)
-		factor = 1
 	case ".gz":
 		scanner, fileScanner = utils.ReturnReaderForGzipfile(fname, 0)
-		writer = utils.ReturnWriterForGzipFile(fmt.Sprintf("tmp%s", ext))
-		factor = 2
 	default:
 		panic(fmt.Sprintf("%s not a valid extension for %s!", ext, fname))
 	}
 
 
 	defer fileScanner.Close()
-	defer writer.Close()
+	// defer writer.Close()
 
-	for i:=0;i<nbLines;i++ {
-		scanner.Scan()
-		writer.Write([]byte(scanner.Text()))
+	for scanner.Scan() {
+		i++
+		if i>nbLines {break}
 	}
-	writer.Close()
 
-	fStatWriter, err := os.Stat(fmt.Sprintf("tmp%s", ext))
-	Check(err)
+	seek, err := fileScanner.Seek(0, 1)
+	fmt.Printf("\ncurrent offset %d\n", seek)
+	fmt.Printf("err %s\n", err)
+	fmt.Printf("estimated number of lines: %d\n", (int(size) / int(seek)) * i)
 
-	sizeWriter := fStatWriter.Size()
-	utils.ExceCmd(fmt.Sprintf("rm tmp%s", ext))
-
-	return (int(size) / int(sizeWriter)) * int(nbLines) / factor
+	return (int(size) / int(seek)) * i
 
 }
 
