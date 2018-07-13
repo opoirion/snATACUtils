@@ -370,7 +370,7 @@ func launchAnalysisMultipleFile() {
 		if i == NB_THREADS-1 && MAX_NB_READS == 0 {
 			chunk = 0
 		}
-		launchAnalysisOneFile(
+		go launchAnalysisOneFile(
 			startingRead, chunk,
 			fmt.Sprintf("index_%d.", index),
 			&waiting)
