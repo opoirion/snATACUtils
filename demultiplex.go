@@ -376,6 +376,8 @@ func launchAnalysisMultipleFile() {
 			startingRead, chunk,
 			fmt.Sprintf("index_%d.", index),
 			&waiting)
+
+		startingRead += chunk
 	}
 
 	waiting.Wait()
