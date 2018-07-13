@@ -162,9 +162,11 @@ func main() {
 	flag.Parse()
 
 	if PRINTVERSION {
-		fmt.Printf("version: %s\n", VERSION)
+		fmt.Printf("ATACdemultiplex version: %s\n", VERSION)
 		return
 	}
+
+	fmt.Printf("#### current ATACdemultiplex version: %s\n", VERSION)
 
 	if INDEX_REPLICATE_R1 != "" || INDEX_REPLICATE_R2 != "" {
 		if  INDEX_NO_REPLICATE != "" {
