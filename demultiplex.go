@@ -19,6 +19,11 @@ import (
 	"sort"
 )
 
+
+/*VERSION ...*/
+var VERSION  = "0.0.0"
+/*PRINTVERSION ...*/
+var PRINTVERSION bool
 /*FASTQ_R1 ...*/
 var FASTQ_R1 string
 /*FASTQ_R2 ...*/
@@ -129,6 +134,7 @@ func main() {
 	flag.StringVar(&FASTQ_R1, "fastq_R1", "", "fastq read file index paired read 1")
 	flag.StringVar(&FASTQ_R2, "fastq_R2", "", "fastq read file index paired read 2")
 	flag.BoolVar(&DEBUG, "debug", false, "debug wrongly formated reads")
+	flag.BoolVar(&PRINTVERSION, "version", false, "print the current version and return")
 	flag.IntVar(&MAX_NB_MISTAKE, "max_nb_mistake", 2, "Maximum number of mistakes allowed to assign a reference read id (default 2)")
 	flag.StringVar(&OUTPUT_TAG_NAME, "output_tag_name", "", "tag for the output file names (default None)")
 	flag.BoolVar(&USE_BZIP_GO_LIBRARY, "use_bzip2_go_lib", false, "use bzip2 go library instead of native C lib (slower)")
@@ -154,6 +160,11 @@ func main() {
 		"error handling strategy (currently return or raise)." +
 		" if return, the demultiplex returns in case of an error and continue.")
 	flag.Parse()
+
+	if PRINTVERSION {
+		fmt.Printf("version: %s\n", VERSION)
+		return
+	}
 
 	if INDEX_REPLICATE_R1 != "" || INDEX_REPLICATE_R2 != "" {
 		if  INDEX_NO_REPLICATE != "" {
