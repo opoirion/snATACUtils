@@ -16,36 +16,61 @@ import "path"
 import (
 	utils "ATACdemultiplex/ATACdemultiplexUtils"
 	pathutils "path"
+	"sort"
 )
 
+/*FASTQ_R1 ...*/
 var FASTQ_R1 string
+/*FASTQ_R2 ...*/
 var FASTQ_R2 string
+/*FASTQ_I1 ...*/
 var FASTQ_I1 string
+/*FASTQ_I2 ...*/
 var FASTQ_I2 string
+/*NB_THREADS ...*/
 var NB_THREADS int
+/*TAGLENGTH ...*/
 var TAGLENGTH int
+/*MAX_NB_READS ...*/
 var MAX_NB_READS int
+/*COMPRESSION_MODE ...*/
 var COMPRESSION_MODE int
+/*USE_BZIP_GO_LIBRARY ...*/
 var USE_BZIP_GO_LIBRARY bool
+/*WRITE_LOGS ...*/
 var WRITE_LOGS bool
+/*OUTPUT_TAG_NAME ...*/
 var OUTPUT_TAG_NAME string
+/*INDEX_REPLICATE_R1 ...*/
 var INDEX_REPLICATE_R1 string
+/*INDEX_REPLICATE_R2 ...*/
 var INDEX_REPLICATE_R2 string
+/*INDEX_NO_REPLICATE ...*/
 var INDEX_NO_REPLICATE string
+/*OUTPUT_PATH ...*/
 var OUTPUT_PATH string
+/*MAX_NB_MISTAKE ...*/
 var MAX_NB_MISTAKE int
+/*DEBUG ...*/
 var DEBUG bool
+/*ERRORHANDLING ...*/
 var ERRORHANDLING string
 
+/*INDEX_R1_DICT ...*/
 var INDEX_R1_DICT map[string]map[string]bool
+/*INDEX_R2_DICT ...*/
 var INDEX_R2_DICT map[string]map[string]bool
+/*INDEX_NO_DICT ...*/
 var INDEX_NO_DICT map[string]map[string]bool
 
-
+/*LOG_CHAN ...*/
 var LOG_CHAN map[string]chan StatsDict
+/*LOG_INDEX_READ_CHAN ...*/
 var LOG_INDEX_READ_CHAN map[string]chan StatsDict
+/*LOG_INDEX_CELL_CHAN ...*/
 var LOG_INDEX_CELL_CHAN map[string]chan StatsDict
 
+/*LOG_TYPE ...*/
 var LOG_TYPE  = []string {
 	"stats",
 	"success_repl_1",
@@ -53,6 +78,7 @@ var LOG_TYPE  = []string {
 	"fail",
 }
 
+/*LOG_INDEX_TYPE ...*/
 var LOG_INDEX_TYPE  = []string {
 	"success_p5_repl1",
 	"success_p7_repl1",
@@ -192,7 +218,8 @@ func writeReport() {
 	if !WRITE_LOGS{
 		return
 	}
-
+	tStart := time.Now()
+	fmt.Printf("writing reports....\n")
 	writeReportFromMultipleDict(&LOG_INDEX_CELL_CHAN, "index_cell")
 	writeReportFromMultipleDict(&LOG_INDEX_READ_CHAN, "index_read")
 
@@ -207,12 +234,41 @@ func writeReport() {
 
 		file.WriteString("#<key>\t<value>\n")
 
-		for key, value := range logs {
-			file.WriteString(fmt.Sprintf("%s\t%d\n", key, value))
-		}
+		rankedLogs := rankByWordCount(logs)
 
+		for _, pair := range rankedLogs {
+			file.WriteString(fmt.Sprintf("%s\t%d\n", pair.Key, pair.Value))
+		}
 	}
+
+	tDiff := time.Now().Sub(tStart)
+	fmt.Printf("writing report finished in: %f s\n", tDiff.Seconds())
 }
+
+
+func rankByWordCount(wordFrequencies map[string]int) PairList{
+  pl := make(PairList, len(wordFrequencies))
+  i := 0
+  for k, v := range wordFrequencies {
+    pl[i] = Pair{k, v}
+    i++
+  }
+  sort.Sort(sort.Reverse(pl))
+  return pl
+}
+
+/*Pair ...*/
+type Pair struct {
+  Key string
+  Value int
+}
+
+/*PairList ...*/
+type PairList []Pair
+
+func (p PairList) Len() int { return len(p) }
+func (p PairList) Less(i, j int) bool { return p[i].Value < p[j].Value }
+func (p PairList) Swap(i, j int){ p[i], p[j] = p[j], p[i] }
 
 /* */
 func writeReportFromMultipleDict(channel * map[string]chan StatsDict, fname string) {
@@ -243,10 +299,11 @@ func writeReportFromMultipleDict(channel * map[string]chan StatsDict, fname stri
 		}
 
 		logs := extractDictFromChan(logChan)
+		rankedLogs := rankByWordCount(logs)
 		fp.WriteString(fmt.Sprintf("#### %s\n", dictType))
 
-		for key, value := range logs {
-			fp.WriteString(fmt.Sprintf("%s\t%s\t%d\n", dictType, key, value))
+		for _, pair := range rankedLogs {
+			fp.WriteString(fmt.Sprintf("%s\t%s\t%d\n", dictType, pair.Key, pair.Value))
 		}
 		fp.WriteString("\n")
 	}
@@ -518,9 +575,11 @@ func launchAnalysisOneFile(
 				switch ERRORHANDLING {
 
 				case "return":
+					fmt.Printf("error handling strategy: return at this stage and continue the pipeline\n")
 					return
 				case "raise":
-					err := fmt.Sprintf("#### error at read nb: %d\n", count)
+					err := fmt.Sprintf("#### error handling strategy: raise error #### \n")
+					err += fmt.Sprintf("#### error at read nb: %d\n", count)
 					if TAGLENGTH > len(read_I1) {
 						err += fmt.Sprintf("error with id_I1: %s read:%s\n",
 							id_I1, read_I1)
