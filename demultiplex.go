@@ -72,6 +72,8 @@ var LOG_CHAN map[string]chan StatsDict
 var LOG_INDEX_READ_CHAN map[string]chan StatsDict
 /*LOG_INDEX_CELL_CHAN ...*/
 var LOG_INDEX_CELL_CHAN map[string]chan StatsDict
+/*SORT_LOGS ...*/
+var SORT_LOGS bool
 
 /*LOG_TYPE ...*/
 var LOG_TYPE  = []string {
@@ -137,6 +139,7 @@ func main() {
 	flag.StringVar(&OUTPUT_TAG_NAME, "output_tag_name", "", "tag for the output file names (default None)")
 	flag.BoolVar(&USE_BZIP_GO_LIBRARY, "use_bzip2_go_lib", false, "use bzip2 go library instead of native C lib (slower)")
 	flag.BoolVar(&WRITE_LOGS, "write_logs", false, "write logs (might slower the execution time)")
+	flag.BoolVar(&SORT_LOGS, "sort_logs", false, "sort logs (might consume a lot of RAM and provoke failure)")
 
 	flag.IntVar(&COMPRESSION_MODE, "compressionMode", 6, `compressionMode for native bzip2 lib
  (1 faster -> 9 smaller) <default: 6>`)
@@ -245,10 +248,19 @@ func writeReport() {
 
 		file.WriteString("#<key>\t<value>\n")
 
-		rankedLogs := rankByWordCountAndDeleteOldMap(&logs)
+		switch SORT_LOGS {
+		case true:
+			rankedLogs := rankByWordCountAndDeleteOldMap(&logs)
 
-		for _, pair := range rankedLogs {
-			file.WriteString(fmt.Sprintf("%s\t%d\n", pair.Key, pair.Value))
+			for _, pair := range rankedLogs {
+				file.WriteString(fmt.Sprintf("%s\t%d\n", pair.Key, pair.Value))
+			}
+
+		default:
+
+			for k, v := range logs {
+				file.WriteString(fmt.Sprintf("%s\t%d\n", k, v))
+			}
 		}
 	}
 
@@ -312,12 +324,23 @@ func writeReportFromMultipleDict(channel * map[string]chan StatsDict, fname stri
 		}
 
 		logs := extractDictFromChan(logChan)
-		rankedLogs := rankByWordCountAndDeleteOldMap(&logs)
 		fp.WriteString(fmt.Sprintf("#### %s\n", dictType))
 
-		for _, pair := range rankedLogs {
-			fp.WriteString(fmt.Sprintf("%s\t%s\t%d\n", dictType, pair.Key, pair.Value))
+		switch SORT_LOGS {
+		case true:
+			rankedLogs := rankByWordCountAndDeleteOldMap(&logs)
+
+			for _, pair := range rankedLogs {
+				fp.WriteString(fmt.Sprintf("%s\t%s\t%d\n", dictType, pair.Key, pair.Value))
+			}
+
+		default:
+
+			for k, v := range logs {
+				file.WriteString(fmt.Sprintf("%s\t%s\t%d\n", dictType, k, v))
+			}
 		}
+
 		fp.WriteString("\n")
 	}
 }
