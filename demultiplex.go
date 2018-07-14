@@ -356,8 +356,9 @@ func launchAnalysisMultipleFile() {
 		nbReads = countLine(FASTQ_I1, COMPRESSION_MODE) / 4
 		fmt.Printf("estimated number of reads: %d\n", nbReads)
 		chunk = (nbReads / NB_THREADS) - (nbReads / NB_THREADS) % 4
-		fmt.Printf("chunck size: %d\n", chunk)
 	}
+
+	fmt.Printf("chunck size: %d\n", chunk)
 
 	startingRead := 0
 	index := 0
@@ -376,6 +377,7 @@ func launchAnalysisMultipleFile() {
 			&waiting)
 
 		startingRead += chunk
+		index++
 	}
 
 	waiting.Wait()
