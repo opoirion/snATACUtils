@@ -16,7 +16,6 @@ import "path"
 import (
 	utils "ATACdemultiplex/ATACdemultiplexUtils"
 	pathutils "path"
-	"sort"
 )
 
 /*Pair ... */
@@ -254,7 +253,7 @@ func writeReport() {
 
 		switch SORT_LOGS {
 		case true:
-			rankedLogs := rankByWordCountAndDeleteOldMap(&logs)
+			rankedLogs := utils.RankByWordCountAndDeleteOldMap(&logs)
 
 			for _, pair := range rankedLogs {
 				file.WriteString(fmt.Sprintf("%s\t%d\n", pair.Key, pair.Value))
@@ -306,7 +305,7 @@ func writeReportFromMultipleDict(channel * map[string]chan StatsDict, fname stri
 
 		switch SORT_LOGS {
 		case true:
-			rankedLogs := rankByWordCountAndDeleteOldMap(&logs)
+			rankedLogs := utils.RankByWordCountAndDeleteOldMap(&logs)
 
 			for _, pair := range rankedLogs {
 				fp.WriteString(fmt.Sprintf("%s\t%s\t%d\n", dictType, pair.Key, pair.Value))
