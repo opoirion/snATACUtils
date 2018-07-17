@@ -8,6 +8,9 @@ import(
 	"log";
 	"time";
 	"strings";
+	"path";
+	"sort";
+	"strconv";
 	// "github.com/dsnet/compress/bzip2"
 	utils "ATACdemultiplex/ATACdemultiplexUtils"
 	// Cbzip2 "ATACdemultiplex/cbzip2"
@@ -16,37 +19,58 @@ import(
 
 
 
+/*FILENAME ...*/
 var FILENAME string
+/*MAX ...*/
 var MAX int
+/*BZ2 ...*/
 var BZ2 bool
+/*GZ ...*/
 var GZ bool
+/*PRINTLASTLINE ...*/
 var PRINTLASTLINE bool
+/*PRINTLASTLINES ...*/
 var PRINTLASTLINES int
+/*BZ2PUREGO ...*/
 var BZ2PUREGO bool
+/*READTOWRITE ...*/
 var READTOWRITE bool
-var COMPRESSION_MODE int
+/*COMPRESSIONMODE ...*/
+var COMPRESSIONMODE int
+/*GOTOLINE ...*/
 var GOTOLINE int
+/*SEARCHLINE ...*/
 var SEARCHLINE string
+/*SEP ...*/
+var SEP string
+/*SORTLOGS ...*/
+var SORTLOGS bool
+
 
 func main() {
 	flag.StringVar(&FILENAME, "filename", "", "name of the file to count the lines")
-	flag.IntVar(&COMPRESSION_MODE, "compressionMode", 6, "compressionMode for native bzip2 lib (1 faster -> 9 smaller) <default: 6>")
+	flag.IntVar(&COMPRESSIONMODE, "compressionMode", 6, "compressionMode for native bzip2 lib (1 faster -> 9 smaller) <default: 6>")
 	flag.IntVar(&MAX, "max nb lines", 0, "max number of lines")
 	flag.BoolVar(&BZ2, "bz2", false, "is bz2")
 	flag.BoolVar(&GZ, "gz", false, "is gz")
 	flag.IntVar(&GOTOLINE, "gotoline", 0, "go to line")
+	flag.BoolVar(&SORTLOGS, "sortfile", false, "sort files (<key><SEP><value> file")
 	flag.BoolVar(&PRINTLASTLINE, "printlastline", false, "print last line")
 	flag.IntVar(&PRINTLASTLINES, "printlastlines", 0, "print last n lines")
 	flag.BoolVar(&BZ2PUREGO, "bz2PureGo", false, "is bz2 using pureGo")
 	flag.BoolVar(&READTOWRITE, "readtowrite", false, "read to write")
 	flag.StringVar(&SEARCHLINE, "search_in_line", "", "search specific motifs in line")
+	flag.StringVar(&SEP, "delimiter", "\t", "delimiter used to split and sort the log file (default \t)")
 	flag.Parse()
 	fmt.Printf("%s\n", FILENAME)
-	t_start := time.Now()
+	tStart := time.Now()
 
 	var nbLines int
 
 	switch  {
+	case SORTLOGS:
+		sortLogfile(FILENAME, SEP)
+		nbLines = 0
 	case BZ2:
 		nbLines = countLineBz2(FILENAME)
 	case GZ:
@@ -57,13 +81,14 @@ func main() {
 		nbLines = readtowrite(FILENAME)
 	default:
 		nbLines = countLine(FILENAME)
-
 	}
 
-	t_diff := time.Now().Sub(t_start)
+	tDiff := time.Now().Sub(tStart)
 
-	fmt.Printf("number of lines: %d\n", nbLines)
-	fmt.Printf("time: %f s\n", t_diff.Seconds())
+	if nbLines > 0 {
+		fmt.Printf("number of lines: %d\n", nbLines)
+	}
+	fmt.Printf("time: %f s\n", tDiff.Seconds())
 
 }
 
@@ -80,7 +105,7 @@ func countLine(filename string) int {
 func readtowrite(filename string) int  {
 	scanner, file := utils.ReturnReaderForBzipfile(filename, 0)
 	defer file.Close()
-	writer := utils.ReturnWriterForBzipfile("tmp.bz2", COMPRESSION_MODE)
+	writer := utils.ReturnWriterForBzipfile("tmp.bz2", COMPRESSIONMODE)
 
 	nbLines := 0
 
@@ -100,6 +125,55 @@ func readtowrite(filename string) int  {
 
 	return nbLines
 
+}
+
+//  ...
+func sortLogfile(filename string, separator string)  {
+	file, err := os.Open(filename)
+	check(err)
+	scanner := bufio.NewScanner(file)
+
+	ext := path.Ext(filename)
+	outfname := fmt.Sprintf("%s_sorted%s", strings.TrimSuffix(filename, ext), ext)
+	outfile, err := os.Create(outfname)
+	defer outfile.Close()
+	check(err)
+	writer := bufio.NewWriter(outfile)
+
+	pl := utils.PairList{}
+
+	for scanner.Scan() {
+		line := scanner.Text()
+
+		if line[0] == '#' || line[0] == '\n'  {
+			if len(pl) == 0 {
+				continue
+			}
+			sort.Sort(pl)
+
+			for _, el := range pl {
+				writer.WriteString(fmt.Sprintf("%s%s%d\n", el.Key, SEP, el.Value))
+			}
+
+			pl = utils.PairList{}
+			continue
+		}
+
+		split := strings.Split(line, SEP)
+		value, err := strconv.Atoi(split[1])
+		check(err)
+		pl = append(pl, utils.Pair{split[0], value})
+	}
+
+	if len(pl) == 0 {
+		return
+	}
+
+	sort.Sort(pl)
+
+	for _, el := range pl {
+		writer.WriteString(fmt.Sprintf("%s%s%d\n", el.Key, SEP, el.Value))
+	}
 }
 
 func countLineBz2(filename string) int {
