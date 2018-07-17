@@ -130,6 +130,7 @@ func readtowrite(filename string) int  {
 //  ...
 func sortLogfile(filename string, separator string)  {
 	file, err := os.Open(filename)
+	defer file.Close()
 	check(err)
 	scanner := bufio.NewScanner(file)
 
@@ -137,42 +138,45 @@ func sortLogfile(filename string, separator string)  {
 	outfname := fmt.Sprintf("%s_sorted%s", strings.TrimSuffix(filename, ext), ext)
 	outfile, err := os.Create(outfname)
 	defer outfile.Close()
-	check(err)
-	writer := bufio.NewWriter(outfile)
 
+	defer os.Rename(outfname, filename)
+
+	check(err)
 	pl := utils.PairList{}
 
 	for scanner.Scan() {
 		line := scanner.Text()
 
-		if line[0] == '#' || line[0] == '\n'  {
+		if len(line) == 0 || line[0] == '#' || line[0] == '\n'  {
+			outfile.WriteString(fmt.Sprintf("%s\n", line))
 			if len(pl) == 0 {
 				continue
 			}
-			sort.Sort(pl)
+			sort.Sort(sort.Reverse(pl))
 
 			for _, el := range pl {
-				writer.WriteString(fmt.Sprintf("%s%s%d\n", el.Key, SEP, el.Value))
+				outfile.WriteString(fmt.Sprintf("%s%s%d\n", el.Key, SEP, el.Value))
 			}
 
 			pl = utils.PairList{}
 			continue
 		}
-
 		split := strings.Split(line, SEP)
-		value, err := strconv.Atoi(split[1])
+		valueField := split[len(split)-1]
+		key := strings.Join(split[:len(split)-1], SEP)
+		value, err := strconv.Atoi(valueField)
 		check(err)
-		pl = append(pl, utils.Pair{split[0], value})
+		pl = append(pl, utils.Pair{Key:key, Value:value})
 	}
 
 	if len(pl) == 0 {
 		return
 	}
 
-	sort.Sort(pl)
+	sort.Sort(sort.Reverse(pl))
 
 	for _, el := range pl {
-		writer.WriteString(fmt.Sprintf("%s%s%d\n", el.Key, SEP, el.Value))
+		outfile.WriteString(fmt.Sprintf("%s%s%d\n", el.Key, SEP, el.Value))
 	}
 }
 
