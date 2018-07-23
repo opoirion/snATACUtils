@@ -45,6 +45,8 @@ var SEARCHLINE string
 var SEP string
 /*SORTLOGS ...*/
 var SORTLOGS bool
+/*IGNORESORTINGCATEGORY ...*/
+var IGNORESORTINGCATEGORY bool
 
 
 func main() {
@@ -59,6 +61,7 @@ func main() {
 	flag.IntVar(&PRINTLASTLINES, "printlastlines", 0, "print last n lines")
 	flag.BoolVar(&BZ2PUREGO, "bz2PureGo", false, "is bz2 using pureGo")
 	flag.BoolVar(&READTOWRITE, "readtowrite", false, "read to write")
+	flag.BoolVar(&IGNORESORTINGCATEGORY, "ignore_sorting_category", false, "ignore file cateogry (identified by #) when sorting")
 	flag.StringVar(&SEARCHLINE, "search_in_line", "", "search specific motifs in line")
 	flag.StringVar(&SEP, "delimiter", "\t", "delimiter used to split and sort the log file (default \t)")
 	flag.Parse()
@@ -148,8 +151,12 @@ func sortLogfile(filename string, separator string)  {
 		line := scanner.Text()
 
 		if len(line) == 0 || line[0] == '#' || line[0] == '\n'  {
+			if IGNORESORTINGCATEGORY{
+				continue
+			}
+
 			outfile.WriteString(fmt.Sprintf("%s\n", line))
-			if len(pl) == 0 {
+			if len(pl) == 0  {
 				continue
 			}
 			sort.Sort(sort.Reverse(pl))

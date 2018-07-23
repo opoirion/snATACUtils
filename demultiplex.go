@@ -18,11 +18,6 @@ import (
 	pathutils "path"
 )
 
-/*Pair ... */
-type Pair utils.Pair
-/*PairList ... */
-type PairList utils.PairList
-
 /*PRINTVERSION ...*/
 var PRINTVERSION bool
 /*FASTQ_R1 ...*/
@@ -296,12 +291,16 @@ func writeReportFromMultipleDict(channel * map[string]chan StatsDict, fname stri
 		switch{
 		case strings.Contains(dictType, "fail"):
 			fp = fileFail
+
+			if SORT_LOGS {
+				fp.WriteString(fmt.Sprintf("#### %s\n", dictType))
+			}
 		default:
 			fp = file
+			fp.WriteString(fmt.Sprintf("#### %s\n", dictType))
 		}
 
 		logs := extractDictFromChan(logChan)
-		fp.WriteString(fmt.Sprintf("#### %s\n", dictType))
 
 		switch SORT_LOGS {
 		case true:
@@ -314,11 +313,9 @@ func writeReportFromMultipleDict(channel * map[string]chan StatsDict, fname stri
 		default:
 
 			for k, v := range logs {
-				file.WriteString(fmt.Sprintf("%s\t%s\t%d\n", dictType, k, v))
+				fp.WriteString(fmt.Sprintf("%s\t%s\t%d\n", dictType, k, v))
 			}
 		}
-
-		fp.WriteString("\n")
 	}
 }
 
@@ -717,7 +714,7 @@ endfunc:
 }
 
 
-/* */
+/*Check ... */
 func Check(err error) {
 	if err != nil {
 		panic(err)
