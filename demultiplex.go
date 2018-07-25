@@ -73,6 +73,14 @@ var LOG_INDEX_CELL_CHAN map[string]chan StatsDict
 /*SORT_LOGS ...*/
 var SORT_LOGS bool
 
+/*LENGTHDIC length of the different indexes*/
+var LENGTHDIC = map[string]int {
+	"i5":0,
+	"i7":0,
+	"p5":0,
+	"p7":0,
+}
+
 /*LOG_TYPE ...*/
 var LOG_TYPE  = []string {
 	"stats",
@@ -167,7 +175,18 @@ func main() {
 
 	fmt.Printf("#### current ATACdemultiplex version: %s\n", VERSION)
 
-	if INDEX_REPLICATE_R1 != "" || INDEX_REPLICATE_R2 != "" {
+	switch {
+	case INDEX_NO_REPLICATE != "":
+		loadIndexes(INDEX_NO_REPLICATE, &INDEX_NO_DICT)
+
+		if INDEX_REPLICATE_R1 != "" || INDEX_REPLICATE_R2 != "" {
+			log.Fatal("Cannot set up index_no_replicate with either index_replicate_r1 or index_replicate_r2")
+		}
+
+	default:
+		loadIndexes(INDEX_REPLICATE_R1, &INDEX_R1_DICT)
+		loadIndexes(INDEX_REPLICATE_R2, &INDEX_R2_DICT)
+
 		if  INDEX_NO_REPLICATE != "" {
 			log.Fatal("Cannot set up index_no_replicate with either index_replicate_r1 or index_replicate_r2")
 		}
@@ -176,13 +195,12 @@ func main() {
 		}
 	}
 
+	if INDEX_REPLICATE_R1 != "" || INDEX_REPLICATE_R2 != "" {
+	}
+
 	initChan(&LOG_CHAN, LOG_TYPE)
 	initChan(&LOG_INDEX_READ_CHAN, LOG_INDEX_TYPE)
 	initChan(&LOG_INDEX_CELL_CHAN, LOG_INDEX_TYPE)
-
-	loadIndexes(INDEX_NO_REPLICATE, &INDEX_NO_DICT)
-	loadIndexes(INDEX_REPLICATE_R1, &INDEX_R1_DICT)
-	loadIndexes(INDEX_REPLICATE_R2, &INDEX_R2_DICT)
 
 	if len(OUTPUT_TAG_NAME) > 0 {
 		OUTPUT_TAG_NAME = fmt.Sprintf("_%s", OUTPUT_TAG_NAME)
@@ -521,9 +539,19 @@ func launchAnalysisOneFile(
 	var read_I1, read_I2, read_R1, read_R2 string
 	var strand_R1, strand_R2 string
 	var qual_R1, qual_R2 string
-	var index_p7, index_i7, index_p5, index_i5 string
+	var index_p7, index_i7, index_p5, index_i5 = "", "", "", ""
 	var index_1, index_2 string
 	var to_write_R1, to_write_R2 string
+
+	lengthP7 := LENGTHDIC["p7"]
+	lengthP5 := LENGTHDIC["p5"]
+	lengthI5 := LENGTHDIC["i5"]
+	lengthI7 := LENGTHDIC["i7"]
+
+	isP7 := lengthP7 > 0
+	isP5 := lengthP5 > 0
+	isI7 := lengthI7 > 0
+	isI5 := lengthI5 > 0
 
 	count := 0
 
@@ -603,11 +631,18 @@ func launchAnalysisOneFile(
 			}
 		}
 
-
-		index_p7 = read_I1[:TAGLENGTH]
-		index_i7 = read_I1[len(read_I1)-TAGLENGTH:]
-		index_i5 = read_I2[:TAGLENGTH]
-		index_p5 = read_I2[len(read_I2)-TAGLENGTH:]
+		if isP7 {
+			index_p7 = read_I1[:lengthP7]
+		}
+		if isI7 {
+			index_i7 = read_I1[len(read_I1)-lengthI7:]
+		}
+		if isI5 {
+			index_i5 = read_I2[:lengthI5]
+		}
+		if isP5 {
+			index_p5 = read_I2[len(read_I2)-lengthP5:]
+		}
 
 		isValid, Replicate := checkIndexes(&index_p7, &index_i7, &index_p5, &index_i5)
 

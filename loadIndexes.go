@@ -10,7 +10,15 @@ import (
 
 
 func loadIndexes(fname string, dict * map[string]map[string]bool) {
+
 	if fname == "" {
+		fmt.Printf("#### index file not found! setting all tag length to: %d ####\n", TAGLENGTH)
+		LENGTHDIC = map[string] int{
+			"i5":TAGLENGTH,
+			"i7":TAGLENGTH,
+			"p5":TAGLENGTH,
+			"p7":TAGLENGTH,
+		}
 		return
 	}
 
@@ -24,9 +32,6 @@ func loadIndexes(fname string, dict * map[string]map[string]bool) {
 
 	reader := bufio.NewReader(file_open)
 	scanner := bufio.NewScanner(reader)
-
-	first := true
-
 
 	loop:
 	for scanner.Scan() {
@@ -43,24 +48,26 @@ func loadIndexes(fname string, dict * map[string]map[string]bool) {
 			continue loop
 		}
 
-		switch {
-		case first && TAGLENGTH != len(split[1]):
-			fmt.Printf(`taglength: %d different from the length of first library loaded: %s.
- Automaticcaly change the length\n`, TAGLENGTH, split[1])
-		case !first && TAGLENGTH != len(split[1]):
-			log.Fatal(fmt.Sprintf("error! different taglength found!: %s", split[1]))
-		case first:
-			first = false
-		}
-
 		tagid, tagstring := split[0], split[1]
+		length, isInside := LENGTHDIC[tagid]
+
+		switch {
+		case  !isInside:
+			panic(fmt.Sprintf("tag ID %s is not valid (should be i5, p5, i7, p7)!", tagid))
+		case len(tagstring) <= MAX_NB_MISTAKE:
+			panic(fmt.Sprintf("tag string %s not conform!", tagstring))
+		case length == 0:
+			LENGTHDIC[tagid] = len(tagstring)
+		case length > 0 && len(tagstring) != length:
+			panic(fmt.Sprintf("tag string %s for tag id %s has different" +
+				" length than previous tags with similar id!", tagstring, tagid))
+		}
 
 		if _, isInside := (*dict)[tagid]; !isInside {
 			(*dict)[tagid] = make(map[string]bool)
 		}
 
 		(*dict)[tagid][tagstring] = true
-
 	}
 
 }
@@ -115,9 +122,11 @@ func checkIndexes(
 }
 
 
-func checkOneIndex(index string, indexName string) (bool, bool, string, int) {
+func checkOneIndex(index string, indexName string) (success bool, toChange bool, ref string, replicate int) {
 
 	switch{
+	case index == "":
+		return true, false, "", 0
 	case INDEX_NO_REPLICATE != "":
 		_, isInside := INDEX_NO_DICT[indexName][index]
 
