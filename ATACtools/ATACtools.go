@@ -74,10 +74,8 @@ func main() {
 	flag.StringVar(&OUTFILE, "output", "", "file name of the output")
 	flag.StringVar(&SEP, "delimiter", "\t", "delimiter used to split and sort the log file (default \t)")
 	flag.Parse()
-	fmt.Printf("%s\n", FILENAME)
+	fmt.Printf("input file(s): %s\n", FILENAME)
 	tStart := time.Now()
-
-	fmt.Printf("OUTFILE: %s\n", OUTFILE)
 
 	var nbLines int
 
@@ -232,7 +230,7 @@ func splitLine(line string, lineNb int) (key string, value int){
 }
 
 func mergeLogFiles(filenames []string, outfname string) {
-
+	fmt.Printf("output file: %s\n", OUTFILE)
 	if outfname == "" {
 		panic("option -output should be non null!")
 	}
