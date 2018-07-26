@@ -47,6 +47,8 @@ var SEP string
 var SORTLOGS bool
 /*IGNORESORTINGCATEGORY ...*/
 var IGNORESORTINGCATEGORY bool
+/*IGNOREERROR ...*/
+var IGNOREERROR bool
 
 
 func main() {
@@ -61,6 +63,7 @@ func main() {
 	flag.IntVar(&PRINTLASTLINES, "printlastlines", 0, "print last n lines")
 	flag.BoolVar(&BZ2PUREGO, "bz2PureGo", false, "is bz2 using pureGo")
 	flag.BoolVar(&READTOWRITE, "readtowrite", false, "read to write")
+	flag.BoolVar(&IGNOREERROR, "ignoreerror", false, "ignore error and continue")
 	flag.BoolVar(&IGNORESORTINGCATEGORY, "ignore_sorting_category", false, "ignore file cateogry (identified by #) when sorting")
 	flag.StringVar(&SEARCHLINE, "search_in_line", "", "search specific motifs in line")
 	flag.StringVar(&SEP, "delimiter", "\t", "delimiter used to split and sort the log file (default \t)")
@@ -173,7 +176,6 @@ func sortLogfile(filename string, separator string)  {
 					outfile.Sync()
 					buff = 0
 				}
-
 			}
 
 			pl = utils.PairList{}
@@ -187,7 +189,10 @@ func sortLogfile(filename string, separator string)  {
 		if err != nil {
 			fmt.Printf("value field %s from: %s at line %d not conform!\n",
 				valueField, line, lineNb)
-			panic(err)
+
+			if !IGNOREERROR {
+				check(err)
+			}
 		}
 
 		pl = append(pl, utils.Pair{Key:key, Value:value})
