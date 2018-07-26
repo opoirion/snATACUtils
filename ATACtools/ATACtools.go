@@ -147,8 +147,12 @@ func sortLogfile(filename string, separator string)  {
 	check(err)
 	pl := utils.PairList{}
 
+	lineNb := -1
+	buff := 0
+
 	for scanner.Scan() {
 		line := scanner.Text()
+		lineNb += 1
 
 		if len(line) == 0 || line[0] == '#' || line[0] == '\n'  {
 			if IGNORESORTINGCATEGORY{
@@ -163,6 +167,13 @@ func sortLogfile(filename string, separator string)  {
 
 			for _, el := range pl {
 				outfile.WriteString(fmt.Sprintf("%s%s%d\n", el.Key, SEP, el.Value))
+
+				buff += 1
+				if buff > 100000{
+					outfile.Sync()
+					buff = 0
+				}
+
 			}
 
 			pl = utils.PairList{}
@@ -172,7 +183,13 @@ func sortLogfile(filename string, separator string)  {
 		valueField := split[len(split)-1]
 		key := strings.Join(split[:len(split)-1], SEP)
 		value, err := strconv.Atoi(valueField)
-		check(err)
+
+		if err != nil {
+			fmt.Printf("value field %s from: %s at line %d not conform!\n",
+				valueField, line, lineNb)
+			panic(err)
+		}
+
 		pl = append(pl, utils.Pair{Key:key, Value:value})
 	}
 
@@ -184,6 +201,11 @@ func sortLogfile(filename string, separator string)  {
 
 	for _, el := range pl {
 		outfile.WriteString(fmt.Sprintf("%s%s%d\n", el.Key, SEP, el.Value))
+		buff += 1
+		if buff > 100000{
+			outfile.Sync()
+			buff = 0
+		}
 	}
 }
 
