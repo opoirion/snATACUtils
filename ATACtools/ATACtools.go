@@ -49,14 +49,19 @@ var SORTLOGS bool
 var IGNORESORTINGCATEGORY bool
 /*IGNOREERROR ...*/
 var IGNOREERROR bool
+/*OUTFILE ...*/
+var OUTFILE string
+/*MERGE ...*/
+var MERGE bool
 
 
 func main() {
-	flag.StringVar(&FILENAME, "filename", "", "name of the file to count the lines")
+	flag.StringVar(&FILENAME, "filename", "", "name of the file(s) multiple files should be into \"")
 	flag.IntVar(&COMPRESSIONMODE, "compressionMode", 6, "compressionMode for native bzip2 lib (1 faster -> 9 smaller) <default: 6>")
 	flag.IntVar(&MAX, "max nb lines", 0, "max number of lines")
 	flag.BoolVar(&BZ2, "bz2", false, "is bz2")
 	flag.BoolVar(&GZ, "gz", false, "is gz")
+	flag.BoolVar(&MERGE, "merge", false, "merge input log files together")
 	flag.IntVar(&GOTOLINE, "gotoline", 0, "go to line")
 	flag.BoolVar(&SORTLOGS, "sortfile", false, "sort files (<key><SEP><value> file")
 	flag.BoolVar(&PRINTLASTLINE, "printlastline", false, "print last line")
@@ -66,14 +71,19 @@ func main() {
 	flag.BoolVar(&IGNOREERROR, "ignoreerror", false, "ignore error and continue")
 	flag.BoolVar(&IGNORESORTINGCATEGORY, "ignore_sorting_category", false, "ignore file cateogry (identified by #) when sorting")
 	flag.StringVar(&SEARCHLINE, "search_in_line", "", "search specific motifs in line")
+	flag.StringVar(&OUTFILE, "output", "", "file name of the output")
 	flag.StringVar(&SEP, "delimiter", "\t", "delimiter used to split and sort the log file (default \t)")
 	flag.Parse()
 	fmt.Printf("%s\n", FILENAME)
 	tStart := time.Now()
 
+	fmt.Printf("OUTFILE: %s\n", OUTFILE)
+
 	var nbLines int
 
 	switch  {
+	case MERGE:
+		mergeLogFiles(strings.Split(FILENAME, " "), OUTFILE)
 	case SORTLOGS:
 		sortLogfile(FILENAME, SEP)
 		nbLines = 0
@@ -181,20 +191,8 @@ func sortLogfile(filename string, separator string)  {
 			pl = utils.PairList{}
 			continue
 		}
-		split := strings.Split(line, SEP)
-		valueField := split[len(split)-1]
-		key := strings.Join(split[:len(split)-1], SEP)
-		value, err := strconv.Atoi(valueField)
 
-		if err != nil {
-			fmt.Printf("value field %s from: %s at line %d not conform!\n",
-				valueField, line, lineNb)
-
-			if !IGNOREERROR {
-				check(err)
-			}
-		}
-
+		key, value := splitLine(line, lineNb)
 		pl = append(pl, utils.Pair{Key:key, Value:value})
 	}
 
@@ -211,6 +209,85 @@ func sortLogfile(filename string, separator string)  {
 			outfile.Sync()
 			buff = 0
 		}
+	}
+}
+
+
+func splitLine(line string, lineNb int) (key string, value int){
+	split := strings.Split(line, SEP)
+	valueField := split[len(split)-1]
+	key = strings.Join(split[:len(split)-1], SEP)
+	value, err := strconv.Atoi(valueField)
+
+	if err != nil {
+		fmt.Printf("value field %s from: %s at line %d not conform!\n",
+			valueField, line, lineNb)
+
+		if !IGNOREERROR {
+			check(err)
+		}
+	}
+
+	return key, value
+}
+
+func mergeLogFiles(filenames []string, outfname string) {
+
+	if outfname == "" {
+		panic("option -output should be non null!")
+	}
+
+	outfile, err := os.Create(outfname)
+	check(err)
+	defer outfile.Close()
+
+	var key string
+	var value int
+
+	dict := map[string]int{}
+
+	for _, filename := range filenames {
+
+		if filename == "" {
+			continue
+		}
+
+		file, err := os.Open(filename)
+		if err != nil {
+			fmt.Printf("filename: %s presents error: %s continue...\n", filename, err)
+			continue
+		}
+
+		defer file.Close()
+
+		scanner := bufio.NewScanner(file)
+
+		for scanner.Scan() {
+			line := scanner.Text()
+
+			if len(line) == 0 || line[0] == '#' || line[0] == '\n'  {
+				continue
+			}
+			key, value = splitLine(line, 0)
+			dict[key] += value
+		}
+	}
+
+	buff := 0
+
+	for key, value := range dict {
+		outfile.WriteString(fmt.Sprintf("%s%s%d\n", key, SEP, value))
+
+		buff++
+		if buff > 100000{
+			outfile.Sync()
+			buff = 0
+		}
+	}
+
+	if SORTLOGS {
+		outfile.Close()
+		sortLogfile(outfname, SEP)
 	}
 }
 
