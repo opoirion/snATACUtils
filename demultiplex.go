@@ -72,6 +72,8 @@ var LOG_INDEX_READ_CHAN map[string]chan StatsDict
 var LOG_INDEX_CELL_CHAN map[string]chan StatsDict
 /*SORT_LOGS ...*/
 var SORT_LOGS bool
+/*SHIFT_P5 ...*/
+var SHIFT_P5 int
 
 /*LENGTHDIC length of the different indexes*/
 var LENGTHDIC = map[string]int {
@@ -146,6 +148,7 @@ func main() {
 	flag.BoolVar(&USE_BZIP_GO_LIBRARY, "use_bzip2_go_lib", false, "use bzip2 go library instead of native C lib (slower)")
 	flag.BoolVar(&WRITE_LOGS, "write_logs", false, "write logs (might slower the execution time)")
 	flag.BoolVar(&SORT_LOGS, "sort_logs", false, "sort logs (might consume a lot of RAM and provoke failure)")
+	flag.IntVar(&SHIFT_P5, "shift_p5", 0, "shift p5 barcodes toward n nucleotides from the left (default 0)")
 
 	flag.IntVar(&COMPRESSION_MODE, "compressionMode", 6, `compressionMode for native bzip2 lib
  (1 faster -> 9 smaller) <default: 6>`)
@@ -641,7 +644,7 @@ func launchAnalysisOneFile(
 			index_i5 = read_I2[:lengthI5]
 		}
 		if isP5 {
-			index_p5 = read_I2[len(read_I2)-lengthP5:]
+			index_p5 = read_I2[len(read_I2)-lengthP5-SHIFT_P5:len(read_I2)-SHIFT_P5]
 		}
 
 		isValid, Replicate := checkIndexes(&index_p7, &index_i7, &index_p5, &index_i5)
