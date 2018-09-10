@@ -57,8 +57,8 @@ var MERGE bool
 var WRITECOMPL bool
 /*COMPDICT ...*/
 var COMPDICT = map[byte]byte {'A': 'T', 'T': 'A', 'G': 'C', 'C': 'G'}
-/*SPLITBARCODEAFTER ...*/
-var SPLITBARCODEAFTER int
+/*COMPLSTRATEGY ...*/
+var COMPLSTRATEGY string
 /*CREATEBARCODEDICT ...*/
 var CREATEBARCODEDICT bool
 
@@ -82,7 +82,7 @@ func main() {
 	flag.StringVar(&OUTFILE, "output", "", "file name of the output")
 	flag.BoolVar(&WRITECOMPL, "write_compl", false, "write the barcode complement of a fastq files")
 	flag.StringVar(&SEP, "delimiter", "\t", "delimiter used to split and sort the log file (default \t)")
-	flag.IntVar(&SPLITBARCODEAFTER, "splitbarcodeafter", 10, "when writing the complement of a fastq file, split the barcode ID after N nucleotides (default 10)")
+	flag.StringVar(&COMPLSTRATEGY, "compl_strategy", "split_10_compl_first", "Strategy to use when writing the complement of a fastq file (default split_10_compl_first)")
 	flag.BoolVar(&CREATEBARCODEDICT, "create_barcode_dict", false, "create a barcode key / value count file")
 	flag.Parse()
 	fmt.Printf("input file(s): %s\n", FILENAME)
@@ -92,7 +92,7 @@ func main() {
 
 	switch  {
 	case WRITECOMPL:
-		writeComplement(FILENAME, SPLITBARCODEAFTER)
+		writeComplement(FILENAME, COMPLSTRATEGY)
 	case CREATEBARCODEDICT:
 		createIndexCountFile(FILENAME)
 	case MERGE:
@@ -122,7 +122,7 @@ func main() {
 }
 
 
-func writeComplement(filename string, splitBarcodeAfter int) (nbLines int) {
+func writeComplement(filename string, complStrategy string) (nbLines int) {
 
 	ext := path.Ext(filename)
 	ext2 := path.Ext(filename[:len(filename) - len(ext)])
@@ -136,6 +136,8 @@ func writeComplement(filename string, splitBarcodeAfter int) (nbLines int) {
 	defer writer.Close()
 
 	cycle := 0
+
+	var newID string
 
 	for scanner .Scan() {
 		nbLines++
@@ -153,11 +155,16 @@ func writeComplement(filename string, splitBarcodeAfter int) (nbLines int) {
 				panic(fmt.Sprintf("idLine not conform:%s at pos:%d\n", line, nbLines))
 			}
 
-			split1 := barcode[:splitBarcodeAfter]
-			split2 := barcode[splitBarcodeAfter:]
+			switch COMPLSTRATEGY {
+			case "split_10_compl_first":
+				split1 := barcode[:10]
+				split2 := barcode[10:]
 
-			newID := fmt.Sprintf("@%s%s:%s\n",
-				returnComp(split1), returnComp(split2), rest)
+				newID = fmt.Sprintf("@%s%s:%s\n",
+					returnComp(split1), split2, rest)
+			default:
+				panic(fmt.Sprintf("wrong strategy used!: %s\n", COMPLSTRATEGY))
+			}
 
 			writer.Write([]byte(newID))
 		default:
@@ -243,16 +250,17 @@ func createIndexCountFile(filename string) (nbLines int) {
 }
 
 func returnComp(s string) (comp []byte) {
-	comp = []byte(s)
+	length := len(s)
+	comp = make([]byte, length)
 
-	for pos, char := range comp {
-		if _, ok := COMPDICT[char];!ok {
+	for pos, char := range s {
+		if _, ok := COMPDICT[byte(char)];!ok {
 			panic(
 				fmt.Sprintf(
 				"error with substring when finding the complementary: %s elem not in compdict\n", s))
 		}
 
-		comp[pos] = COMPDICT[char]
+		comp[length - pos] = COMPDICT[byte(char)]
 	}
 
 	return comp
