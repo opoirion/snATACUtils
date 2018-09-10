@@ -53,12 +53,20 @@ var IGNOREERROR bool
 var OUTFILE string
 /*MERGE ...*/
 var MERGE bool
+/*WRITECOMPL ...*/
+var WRITECOMPL bool
+/*COMPDICT ...*/
+var COMPDICT = map[byte]byte {'A': 'T', 'T': 'A', 'G': 'C', 'C': 'G'}
+/*SPLITBARCODEAFTER ...*/
+var SPLITBARCODEAFTER int
+/*CREATEBARCODEDICT ...*/
+var CREATEBARCODEDICT bool
 
 
 func main() {
 	flag.StringVar(&FILENAME, "filename", "", "name of the file(s) multiple files should be into \"")
 	flag.IntVar(&COMPRESSIONMODE, "compressionMode", 6, "compressionMode for native bzip2 lib (1 faster -> 9 smaller) <default: 6>")
-	flag.IntVar(&MAX, "max nb lines", 0, "max number of lines")
+	flag.IntVar(&MAX, "max_nb_lines", 0, "max number of lines")
 	flag.BoolVar(&BZ2, "bz2", false, "is bz2")
 	flag.BoolVar(&GZ, "gz", false, "is gz")
 	flag.BoolVar(&MERGE, "merge", false, "merge input log files together")
@@ -72,7 +80,10 @@ func main() {
 	flag.BoolVar(&IGNORESORTINGCATEGORY, "ignore_sorting_category", false, "ignore file cateogry (identified by #) when sorting")
 	flag.StringVar(&SEARCHLINE, "search_in_line", "", "search specific motifs in line")
 	flag.StringVar(&OUTFILE, "output", "", "file name of the output")
+	flag.BoolVar(&WRITECOMPL, "write_compl", false, "write the barcode complement of a fastq files")
 	flag.StringVar(&SEP, "delimiter", "\t", "delimiter used to split and sort the log file (default \t)")
+	flag.IntVar(&SPLITBARCODEAFTER, "splitbarcodeafter", 10, "when writing the complement of a fastq file, split the barcode ID after N nucleotides (default 10)")
+	flag.BoolVar(&CREATEBARCODEDICT, "create_barcode_dict", false, "create a barcode key / value count file")
 	flag.Parse()
 	fmt.Printf("input file(s): %s\n", FILENAME)
 	tStart := time.Now()
@@ -80,6 +91,10 @@ func main() {
 	var nbLines int
 
 	switch  {
+	case WRITECOMPL:
+		writeComplement(FILENAME, SPLITBARCODEAFTER)
+	case CREATEBARCODEDICT:
+		createIndexCountFile(FILENAME)
 	case MERGE:
 		mergeLogFiles(strings.Split(FILENAME, " "), OUTFILE)
 	case SORTLOGS:
@@ -106,6 +121,139 @@ func main() {
 
 }
 
+
+func writeComplement(filename string, splitBarcodeAfter int) (nbLines int) {
+
+	ext := path.Ext(filename)
+	ext2 := path.Ext(filename[:len(filename) - len(ext)])
+
+	outfile := fmt.Sprintf("%s.compl%s%s",
+		filename[:len(filename) - len(ext) -len(ext2)], ext2, ext)
+
+	scanner, file := utils.ReturnReader(filename, 0, false)
+	defer file.Close()
+	writer := utils.ReturnWriter(outfile, COMPRESSIONMODE, false)
+	defer writer.Close()
+
+	cycle := 0
+
+	for scanner .Scan() {
+		nbLines++
+		line := scanner.Text()
+
+		switch cycle {
+		case 0:
+
+			split := strings.SplitN(line, ":", 2)
+
+			barcode := split[0][1:]
+			rest := split[1]
+
+			if split[0][0] != '@' {
+				panic(fmt.Sprintf("idLine not conform:%s at pos:%d\n", line, nbLines))
+			}
+
+			split1 := barcode[:splitBarcodeAfter]
+			split2 := barcode[splitBarcodeAfter:]
+
+			newID := fmt.Sprintf("@%s%s:%s\n",
+				returnComp(split1), returnComp(split2), rest)
+
+			writer.Write([]byte(newID))
+		default:
+			writer.Write([]byte(line + "\n"))
+
+		}
+
+		cycle++
+
+		if cycle == 4 {
+			cycle = 0
+		}
+
+		if (MAX > 0) && (MAX < nbLines) {
+			break
+		}
+
+	}
+
+	fmt.Printf("output file: %s\n", outfile)
+
+	return nbLines
+}
+
+func createIndexCountFile(filename string) (nbLines int) {
+
+	ext := path.Ext(filename)
+	ext2 := path.Ext(filename[:len(filename) - len(ext)])
+
+	outfilename := fmt.Sprintf("%s.barcodeCounts",
+		filename[:len(filename) - len(ext) -len(ext2)])
+
+	scanner, file := utils.ReturnReader(filename, 0, false)
+	defer file.Close()
+	outfile, err := os.Create(outfilename)
+	check(err)
+
+	defer outfile.Close()
+	dict := map[string]int {}
+
+	cycle := 0
+
+	for scanner .Scan() {
+		nbLines++
+		line := scanner.Text()
+
+		switch cycle {
+		case 0:
+
+			split := strings.SplitN(line, ":", 2)
+
+			barcode := split[0][1:]
+
+			dict[barcode]++
+		}
+
+		cycle++
+
+		if cycle == 4 {
+			cycle = 0
+		}
+
+		if (MAX > 0) && (MAX < nbLines) {
+			break
+		}
+	}
+
+	for key, value := range dict {
+		outfile.WriteString(fmt.Sprintf("%s%s%d\n", key, SEP, value))
+	}
+
+	if SORTLOGS {
+		outfile.Close()
+		sortLogfile(outfilename, SEP)
+	}
+
+	fmt.Printf("output file: %s\n", outfilename)
+
+	return nbLines
+}
+
+func returnComp(s string) (comp []byte) {
+	comp = []byte(s)
+
+	for pos, char := range comp {
+		if _, ok := COMPDICT[char];!ok {
+			panic(
+				fmt.Sprintf(
+				"error with substring when finding the complementary: %s elem not in compdict\n", s))
+		}
+
+		comp[pos] = COMPDICT[char]
+	}
+
+	return comp
+}
 
 func countLine(filename string) int {
 	file, err := os.Open(filename)
@@ -218,7 +366,7 @@ func splitLine(line string, lineNb int) (key string, value int){
 	value, err := strconv.Atoi(valueField)
 
 	if err != nil {
-		fmt.Printf("value field %s from: %s at line %d not conform!\n",
+		fmt.Printf("value field %s from: %s at line nb %d not conform!\n",
 			valueField, line, lineNb)
 
 		if !IGNOREERROR {
