@@ -179,6 +179,10 @@ func writeComplement(filename string, splitBarcodeAfter int) (nbLines int) {
 
 	fmt.Printf("output file: %s\n", outfile)
 
+	if CREATEBARCODEDICT {
+		defer createIndexCountFile(outfile)
+	}
+
 	return nbLines
 }
 
@@ -230,8 +234,7 @@ func createIndexCountFile(filename string) (nbLines int) {
 	}
 
 	if SORTLOGS {
-		outfile.Close()
-		sortLogfile(outfilename, SEP)
+		defer sortLogfile(outfilename, SEP)
 	}
 
 	fmt.Printf("output file: %s\n", outfilename)
@@ -432,8 +435,7 @@ func mergeLogFiles(filenames []string, outfname string) {
 	}
 
 	if SORTLOGS {
-		outfile.Close()
-		sortLogfile(outfname, SEP)
+		defer sortLogfile(outfname, SEP)
 	}
 }
 
