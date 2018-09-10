@@ -260,7 +260,7 @@ func returnComp(s string) (comp []byte) {
 				"error with substring when finding the complementary: %s elem not in compdict\n", s))
 		}
 
-		comp[length - pos] = COMPDICT[byte(char)]
+		comp[length - pos - 1] = COMPDICT[byte(char)]
 	}
 
 	return comp
