@@ -82,7 +82,7 @@ func main() {
 	flag.StringVar(&OUTFILE, "output", "", "file name of the output")
 	flag.BoolVar(&WRITECOMPL, "write_compl", false, "write the barcode complement of a fastq files")
 	flag.StringVar(&SEP, "delimiter", "\t", "delimiter used to split and sort the log file (default \t)")
-	flag.StringVar(&COMPLSTRATEGY, "compl_strategy", "split_10_compl_first", "Strategy to use when writing the complement of a fastq file (default split_10_compl_second)")
+	flag.StringVar(&COMPLSTRATEGY, "compl_strategy", "split_10_compl_second", "Strategy to use when writing the complement of a fastq file (default split_10_compl_second)")
 	flag.BoolVar(&CREATEBARCODEDICT, "create_barcode_dict", false, "create a barcode key / value count file")
 	flag.Parse()
 	fmt.Printf("input file(s): %s\n", FILENAME)
