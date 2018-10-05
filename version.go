@@ -1,4 +1,4 @@
 package main
 
 /*VERSION ...*/
-var VERSION  = "0.4.1"
+var VERSION  = "0.5.0"
