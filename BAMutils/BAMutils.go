@@ -62,8 +62,6 @@ func main() {
 
 	if OUTPUTDIR != "" {
 		BAMOUTPUT = fmt.Sprintf("%s/%s", OUTPUTDIR, BAMOUTPUT)
-	} else {
-		OUTPUTDIR = "./"
 	}
 
 	if BAMFILENAME == "" {
@@ -103,9 +101,12 @@ func DivideMultiple() {
 	loadCellIDIndex(NUCLEIINDEX, header)
 	check(err)
 
-	for key, file := range(BAMWRITERDICT) {
+	for _, file := range(WRITERDICT) {
 		defer file.Close()
-		defer WRITERDICT[key].Close()
+	}
+
+	for _, file := range(BAMWRITERDICT) {
+		defer file.Close()
 	}
 
 	count := 0
