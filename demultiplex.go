@@ -64,6 +64,10 @@ var INDEX_R2_DICT map[string]map[string]bool
 /*INDEX_NO_DICT ...*/
 var INDEX_NO_DICT map[string]map[string]bool
 
+
+/*REPLNUMBER ...*/
+var REPLNUMBER int
+
 /*LOG_CHAN ...*/
 var LOG_CHAN map[string]chan StatsDict
 /*LOG_INDEX_READ_CHAN ...*/
@@ -86,23 +90,11 @@ var LENGTHDIC = map[string]int {
 /*LOG_TYPE ...*/
 var LOG_TYPE  = []string {
 	"stats",
-	"success_repl_1",
-	"success_repl_2",
 	"fail",
 }
 
 /*LOG_INDEX_TYPE ...*/
 var LOG_INDEX_TYPE  = []string {
-	"success_p5_repl1",
-	"success_p7_repl1",
-	"success_i5_repl1",
-	"success_i7_repl1",
-
-	"success_p5_repl2",
-	"success_p7_repl2",
-	"success_i5_repl2",
-	"success_i7_repl2",
-
 	"fail_p5",
 	"fail_p7",
 	"fail_i5",
@@ -181,6 +173,7 @@ func main() {
 	switch {
 	case INDEX_NO_REPLICATE != "":
 		loadIndexes(INDEX_NO_REPLICATE, &INDEX_NO_DICT)
+		REPLNUMBER = 1
 
 		if INDEX_REPLICATE_R1 != "" || INDEX_REPLICATE_R2 != "" {
 			log.Fatal("Cannot set up index_no_replicate with either index_replicate_r1 or index_replicate_r2")
@@ -189,6 +182,7 @@ func main() {
 	default:
 		loadIndexes(INDEX_REPLICATE_R1, &INDEX_R1_DICT)
 		loadIndexes(INDEX_REPLICATE_R2, &INDEX_R2_DICT)
+		REPLNUMBER = 2
 
 		if  INDEX_NO_REPLICATE != "" {
 			log.Fatal("Cannot set up index_no_replicate with either index_replicate_r1 or index_replicate_r2")
@@ -198,7 +192,12 @@ func main() {
 		}
 	}
 
-	if INDEX_REPLICATE_R1 != "" || INDEX_REPLICATE_R2 != "" {
+	for repl := 1; repl < REPLNUMBER + 1;repl++ {
+		LOG_INDEX_TYPE = append(LOG_INDEX_TYPE, fmt.Sprintf("success_p5_repl%d", repl))
+		LOG_INDEX_TYPE = append(LOG_INDEX_TYPE, fmt.Sprintf("success_p7_repl%d", repl))
+		LOG_INDEX_TYPE = append(LOG_INDEX_TYPE, fmt.Sprintf("success_i5_repl%d", repl))
+		LOG_INDEX_TYPE = append(LOG_INDEX_TYPE, fmt.Sprintf("success_i7_repl%d", repl))
+		LOG_TYPE = append(LOG_TYPE, fmt.Sprintf("success_repl%d", repl))
 	}
 
 	initChan(&LOG_CHAN, LOG_TYPE)
@@ -405,44 +404,27 @@ func launchAnalysisMultipleFile() {
 
 	ext := path.Ext(filenameR1)
 
-	outputR1 := fmt.Sprintf("%s%s%s.demultiplexed.R1.repl1.fastq%s", OUTPUT_PATH,
-		strings.TrimSuffix(filenameR1, fmt.Sprintf(".fastq%s", ext)),
-		OUTPUT_TAG_NAME, ext)
-	outputR2 := fmt.Sprintf("%s%s%s.demultiplexed.R2.repl1.fastq%s", OUTPUT_PATH,
-		strings.TrimSuffix(filenameR2, fmt.Sprintf(".fastq%s", ext)),
-		OUTPUT_TAG_NAME, ext)
+	for repl := 1;repl < REPLNUMBER +1; repl++ {
 
-	cmd1 := fmt.Sprintf("cat %sindex_*.demultiplexed.R1.repl1.fastq%s > %s",
-		OUTPUT_PATH, ext, outputR1)
-	cmd2 := fmt.Sprintf("cat %sindex_*.demultiplexed.R2.repl1.fastq%s > %s",
-		OUTPUT_PATH, ext, outputR2)
-
-	fmt.Printf("concatenating repl. 1 read 1 files...\n")
-	fmt.Printf("%s\n", cmd1)
-	utils.ExceCmd(cmd1)
-	fmt.Printf("concatenating repl. 1 read 2 files...\n")
-	fmt.Printf("%s\n", cmd2)
-	utils.ExceCmd(cmd2)
-
-	if INDEX_REPLICATE_R2 != "" {
-		outputR1 := fmt.Sprintf("%s%s%s.demultiplexed.R1.repl2.fastq%s", OUTPUT_PATH,
+		outputR1 := fmt.Sprintf("%s%s%s.demultiplexed.R1.repl%d.fastq%s", OUTPUT_PATH,
 			strings.TrimSuffix(filenameR1, fmt.Sprintf(".fastq%s", ext)),
-			OUTPUT_TAG_NAME, ext)
-		outputR2 := fmt.Sprintf("%s%s%s.demultiplexed.R2.repl2.fastq%s", OUTPUT_PATH,
+			OUTPUT_TAG_NAME, repl, ext)
+		outputR2 := fmt.Sprintf("%s%s%s.demultiplexed.R2.repl%d.fastq%s", OUTPUT_PATH,
 			strings.TrimSuffix(filenameR2, fmt.Sprintf(".fastq%s", ext)),
-			OUTPUT_TAG_NAME, ext)
+			OUTPUT_TAG_NAME, repl, ext)
 
-		cmd1 := fmt.Sprintf("cat %sindex_*.demultiplexed.R1.repl2.fastq%s > %s",
-			OUTPUT_PATH, ext, outputR1)
-		cmd2 := fmt.Sprintf("cat %sindex_*.demultiplexed.R2.repl2.fastq%s > %s",
-			OUTPUT_PATH, ext, outputR2)
+		cmd1 := fmt.Sprintf("cat %sindex_*.demultiplexed.R1.repl%d.fastq%s > %s",
+			OUTPUT_PATH, repl, ext, outputR1)
+		cmd2 := fmt.Sprintf("cat %sindex_*.demultiplexed.R2.repl%d.fastq%s > %s",
+			OUTPUT_PATH, repl, ext, outputR2)
 
-		fmt.Printf("concatenating repl. 2 read 1 files...\n")
+		fmt.Printf("concatenating repl. %d read 1 files...\n", repl)
 		fmt.Printf("%s\n", cmd1)
-
 		utils.ExceCmd(cmd1)
-		fmt.Printf("concatenating repl. 2 read 2 files...\n")
+		fmt.Printf("concatenating repl. %d read 2 files...\n", repl)
+		fmt.Printf("%s\n", cmd2)
 		utils.ExceCmd(cmd2)
+
 	}
 
 	cmd := fmt.Sprintf("rm %sindex_*demultiplexed*repl*%s ", OUTPUT_PATH, ext)
@@ -474,6 +456,7 @@ func launchAnalysisOneFile(
 	defer waiting.Done()
 
 	logs := initLog(LOG_TYPE)
+
 	logsIndexRead := initLog(LOG_INDEX_TYPE)
 	logsIndexCell := initLog(LOG_INDEX_TYPE)
 
@@ -481,10 +464,6 @@ func launchAnalysisOneFile(
 	var scannerI2 * bufio.Scanner
 	var scannerR1 * bufio.Scanner
 	var scannerR2 * bufio.Scanner
-	var bzipR1repl1  io.WriteCloser
-	var bzipR2repl1  io.WriteCloser
-	var bzipR1repl2  io.WriteCloser
-	var bzipR2repl2  io.WriteCloser
 
 	var fileI1 * os.File
 	var fileI2 * os.File
@@ -496,47 +475,41 @@ func launchAnalysisOneFile(
 
 	ext := path.Ext(filenameR1)
 
-	outputR1Repl1 := fmt.Sprintf("%s%s%s%s.demultiplexed.R1.repl1.fastq%s",
-		OUTPUT_PATH, index,
-		strings.TrimSuffix(filenameR1, fmt.Sprintf(".fastq%s", ext)),
-		OUTPUT_TAG_NAME, ext)
-	outputR2Repl1 := fmt.Sprintf("%s%s%s%s.demultiplexed.R2.repl1.fastq%s", OUTPUT_PATH, index,
-		strings.TrimSuffix(filenameR2, fmt.Sprintf(".fastq%s", ext)),
-		OUTPUT_TAG_NAME, ext)
-
-	outputR1Repl2 := fmt.Sprintf("%s%s%s%s.demultiplexed.R1.repl2.fastq%s",
-		OUTPUT_PATH, index,
-		strings.TrimSuffix(filenameR1, fmt.Sprintf(".fastq%s", ext)),
-		OUTPUT_TAG_NAME, ext)
-	outputR2Repl2 := fmt.Sprintf("%s%s%s%s.demultiplexed.R2.repl2.fastq%s", OUTPUT_PATH, index,
-		strings.TrimSuffix(filenameR2, fmt.Sprintf(".fastq%s", ext)),
-		OUTPUT_TAG_NAME, ext)
-
 	scannerI1, fileI1 = utils.ReturnReader(FASTQ_I1, startingRead * 4, USE_BZIP_GO_LIBRARY)
 	scannerI2, fileI2 = utils.ReturnReader(FASTQ_I2, startingRead * 4, USE_BZIP_GO_LIBRARY)
 	scannerR1, fileR1 = utils.ReturnReader(FASTQ_R1, startingRead * 4, USE_BZIP_GO_LIBRARY)
 	scannerR2, fileR2 = utils.ReturnReader(FASTQ_R2, startingRead * 4, USE_BZIP_GO_LIBRARY)
 
-	bzipR1repl1 = utils.ReturnWriter(outputR1Repl1, COMPRESSION_MODE,
-		USE_BZIP_GO_LIBRARY)
-	bzipR2repl1 = utils.ReturnWriter(outputR2Repl1, COMPRESSION_MODE,
-		USE_BZIP_GO_LIBRARY)
 
-	if INDEX_REPLICATE_R2 != "" {
-		bzipR1repl2 = utils.ReturnWriter(outputR1Repl2, COMPRESSION_MODE,
+	writerR1DictName := make(map[int]string)
+	writerR2DictName := make(map[int]string)
+
+	writerR1Dict := make(map[string]io.WriteCloser)
+	writerR2Dict := make(map[string]io.WriteCloser)
+
+	for repl := 1 ; repl < REPLNUMBER +1; repl ++ {
+		writerR1DictName[repl] = fmt.Sprintf("%s%s%s%s.demultiplexed.R1.repl%d.fastq%s",
+			OUTPUT_PATH, index,
+			strings.TrimSuffix(filenameR1, fmt.Sprintf(".fastq%s", ext)),
+			OUTPUT_TAG_NAME, repl, ext)
+		writerR2DictName[repl] = fmt.Sprintf("%s%s%s%s.demultiplexed.R2.repl%d.fastq%s", OUTPUT_PATH, index,
+			strings.TrimSuffix(filenameR2, fmt.Sprintf(".fastq%s", ext)),
+			OUTPUT_TAG_NAME, repl, ext)
+		writerR1Dict[writerR1DictName[repl]] = utils.ReturnWriter(
+			writerR1DictName[repl], COMPRESSION_MODE,
 			USE_BZIP_GO_LIBRARY)
-		bzipR2repl2 = utils.ReturnWriter(outputR2Repl2, COMPRESSION_MODE,
+		writerR2Dict[writerR2DictName[repl]] = utils.ReturnWriter(
+			writerR2DictName[repl], COMPRESSION_MODE,
 			USE_BZIP_GO_LIBRARY)
-		defer bzipR1repl2.Close()
-		defer bzipR2repl2.Close()
+
+		defer writerR1Dict[writerR1DictName[repl]].Close()
+		defer writerR2Dict[writerR2DictName[repl]].Close()
 	}
 
 	defer fileI1.Close()
 	defer fileI2.Close()
 	defer fileR1.Close()
 	defer fileR2.Close()
-	defer bzipR1repl1.Close()
-	defer bzipR2repl1.Close()
 
 	var id_I1, id_I2, id_R1, id_R2 string
 	var read_I1, read_I2, read_R1, read_R2 string
@@ -649,45 +622,26 @@ func launchAnalysisOneFile(
 
 		isValid, Replicate := checkIndexes(&index_p7, &index_i7, &index_p5, &index_i5)
 
-		index = fmt.Sprintf("%s%s%s%s", index_p7, index_i7, index_p5, index_i5)
+		index = fmt.Sprintf("%s%s%s%s", index_p7, index_i7, index_i5, index_p5)
 
 		if WRITE_LOGS {
 			switch {
-			case isValid && Replicate == 1:
-				if _, isInside := logs["success_repl_1"].dict[index]; !isInside {
-					logs["stats"].dict["Number of cells repl. 1"]++
+			case isValid:
+				if _, isInside := logs[fmt.Sprintf("success_repl%d", Replicate)].dict[index]; !isInside {
+					logs["stats"].dict[fmt.Sprintf("Number of cells repl. %d", Replicate)]++
 
-					logsIndexCell["success_p5_repl1"].dict[index_p5]++
-					logsIndexCell["success_p7_repl1"].dict[index_p7]++
-					logsIndexCell["success_i5_repl1"].dict[index_i5]++
-					logsIndexCell["success_i7_repl1"].dict[index_i7]++
+					logsIndexCell[fmt.Sprintf("success_p5_repl%d", Replicate)].dict[index_p5]++
+					logsIndexCell[fmt.Sprintf("success_p7_repl%d", Replicate)].dict[index_p7]++
+					logsIndexCell[fmt.Sprintf("success_i5_repl%d", Replicate)].dict[index_i5]++
+					logsIndexCell[fmt.Sprintf("success_i7_repl%d", Replicate)].dict[index_i7]++
 
 				}
-				logs["success_repl_1"].dict[index]++
-				logs["stats"].dict["Number of reads repl. 1"]++
-
-				logsIndexRead["success_p5_repl1"].dict[index_p5]++
-				logsIndexRead["success_p7_repl1"].dict[index_p7]++
-				logsIndexRead["success_i5_repl1"].dict[index_i5]++
-				logsIndexRead["success_i7_repl1"].dict[index_i7]++
-
-			case isValid && Replicate == 2:
-				if _, isInside := logs["success_repl_2"].dict[index]; !isInside {
-					logs["stats"].dict["Number of cells repl. 2"]++
-
-					logsIndexCell["success_p5_repl2"].dict[index_p5]++
-					logsIndexCell["success_p7_repl2"].dict[index_p7]++
-					logsIndexCell["success_i5_repl2"].dict[index_i5]++
-					logsIndexCell["success_i7_repl2"].dict[index_i7]++
-				}
-
-				logs["success_repl_2"].dict[index]++
-				logs["stats"].dict["Number of reads repl. 2"]++
-
-				logsIndexRead["success_p5_repl2"].dict[index_p5]++
-				logsIndexRead["success_p7_repl2"].dict[index_p7]++
-				logsIndexRead["success_i5_repl2"].dict[index_i5]++
-				logsIndexRead["success_i7_repl2"].dict[index_i7]++
+				logs[fmt.Sprintf("success_repl%d", Replicate)].dict[index]++
+				logs["stats"].dict[fmt.Sprintf("Number of reads repl. %d", Replicate)]++
+				logsIndexRead[fmt.Sprintf("success_p5_repl%d", Replicate)].dict[index_p5]++
+				logsIndexRead[fmt.Sprintf("success_p7_repl%d", Replicate)].dict[index_p7]++
+				logsIndexRead[fmt.Sprintf("success_i5_repl%d", Replicate)].dict[index_i5]++
+				logsIndexRead[fmt.Sprintf("success_i7_repl%d", Replicate)].dict[index_i7]++
 
 			default:
 				if _, isInside := logs["fail"].dict[index]; !isInside {
@@ -720,16 +674,8 @@ func launchAnalysisOneFile(
 		to_write_R1 = fmt.Sprintf("%s\n%s\n%s\n%s\n", index_1, read_R1, strand_R1, qual_R1)
 		to_write_R2 = fmt.Sprintf("%s\n%s\n%s\n%s\n", index_2, read_R2, strand_R2, qual_R2)
 
-		switch {
-		case Replicate == 1:
-			bzipR1repl1.Write([]byte(to_write_R1))
-			bzipR2repl1.Write([]byte(to_write_R2))
-		case Replicate == 2:
-			bzipR1repl2.Write([]byte(to_write_R1))
-			bzipR2repl2.Write([]byte(to_write_R2))
-		default:
-			log.Fatal("Error wrong replicate!")
-		}
+		writerR1Dict[writerR1DictName[Replicate]].Write([]byte(to_write_R1))
+		writerR2Dict[writerR2DictName[Replicate]].Write([]byte(to_write_R2))
 
 		endmainloop:
 		count++
