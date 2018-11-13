@@ -19,8 +19,8 @@ import(
 /*BAMFILENAME bam file name (input) */
 var BAMFILENAME string
 
-/*BAMOUTPUT bam file name (output) */
-var BAMOUTPUT string
+/*FILENAMEOUT bam file name (output) */
+var FILENAMEOUT string
 
 /*OUTPUTDIR output directory */
 var OUTPUTDIR string
@@ -49,31 +49,93 @@ var BAMWRITERDICT map[string]*bam.Writer
 /*DIVIDE  dividing the bam file tool */
 var DIVIDE bool
 
+/*CREATECELLINDEX  dividing the bam file tool */
+var CREATECELLINDEX bool
+
 
 func main() {
 	flag.StringVar(&BAMFILENAME, "bam", "", "name of the bam file")
-	flag.StringVar(&BAMOUTPUT, "out", "", "name of the bam file")
+	flag.StringVar(&FILENAMEOUT, "out", "", "name of the output file")
 	flag.StringVar(&NUCLEIFILE, "cellsID", "", "file with cell IDs")
 	flag.StringVar(&OUTPUTDIR, "output_dir", "", "output directory")
+	flag.BoolVar(&CREATECELLINDEX, "create_cell_index", false, "create cell index")
 	flag.StringVar(&NUCLEIINDEX, "cell_index", "", "nuclei <-> output files index")
 	flag.BoolVar(&DIVIDE, "divide", false, "divide the bam file according to barcode file list")
 	flag.IntVar(&THREADNB, "thread", 4, "threads concurrency for reading bam file")
 	flag.Parse()
 
 	if OUTPUTDIR != "" {
-		BAMOUTPUT = fmt.Sprintf("%s/%s", OUTPUTDIR, BAMOUTPUT)
+		FILENAMEOUT = fmt.Sprintf("%s/%s", OUTPUTDIR, FILENAMEOUT)
 	}
 
 	if BAMFILENAME == "" {
 		panic("-bam must be specified!")
 	}
 
+	tStart := time.Now()
+
 	switch {
 	case DIVIDE && NUCLEIINDEX!="":
 		DivideMultiple()
 	case DIVIDE:
 		Divide()
+	case CREATECELLINDEX:
+		CreateCellIndex()
 	}
+
+	tDiff := time.Now().Sub(tStart)
+	fmt.Printf("done in time: %f s \n", tDiff.Seconds())
+}
+
+/*CreateCellIndex create cell index */
+func CreateCellIndex() {
+	var record * sam.Record
+	var read string
+	var readID string
+	var count int
+
+	readIndex := make(map[string]int)
+
+	f, err := os.Open(BAMFILENAME)
+	check(err)
+	defer f.Close()
+	_, err = bgzf.HasEOF(f)
+	check(err)
+
+	fOut, err := os.Create(FILENAMEOUT)
+
+	check(err)
+	defer fOut.Close()
+
+	bamReader, err := bam.NewReader(f, THREADNB)
+	defer bamReader.Close()
+	check(err)
+
+	for {
+		record, err = bamReader.Read()
+
+		switch err {
+		case io.EOF:
+			break
+		case nil:
+		default:
+			fmt.Printf("ERROR: %s\n",err)
+			break
+		}
+
+		if record == nil {
+			break
+		}
+
+		read = record.String()
+		readID = strings.SplitN(read, ":", 2)[0]
+		readIndex[readID]++
+	}
+
+	for readID, count = range(readIndex) {
+		fOut.WriteString(fmt.Sprintf("%s\t%d\n", readID, count))
+	}
+
 }
 
 /*DivideMultiple divide the bam file */
@@ -84,8 +146,6 @@ func DivideMultiple() {
 	var bamWriter *bam.Writer
 	var isInside bool
 	var filename string
-
-	tStart := time.Now()
 
 	f, err := os.Open(BAMFILENAME)
 	check(err)
@@ -143,9 +203,6 @@ func DivideMultiple() {
 			}
 		}
 	}
-
-	tDiff := time.Now().Sub(tStart)
-	fmt.Printf("done in time: %f s for %d reads\n", tDiff.Seconds(), count-1)
 }
 
 
@@ -155,15 +212,13 @@ func Divide() {
 	var read string
 	var readID string
 
-	if BAMOUTPUT == "" {
+	if FILENAMEOUT == "" {
 		panic("-out must be specified!")
 	}
 
 	if NUCLEIFILE == "" {
 		panic("-cellsID must be specified!")
 	}
-
-	tStart := time.Now()
 
 	loadCellIDDict(NUCLEIFILE)
 
@@ -173,7 +228,7 @@ func Divide() {
 	_, err = bgzf.HasEOF(f)
 	check(err)
 
-	fWrite, err := os.Create(BAMOUTPUT)
+	fWrite, err := os.Create(FILENAMEOUT)
 	check(err)
 	defer fWrite.Close()
 
@@ -215,9 +270,6 @@ func Divide() {
 			check(err)
 		}
 	}
-
-	tDiff := time.Now().Sub(tStart)
-	fmt.Printf("done in time: %f s for %d reads\n", tDiff.Seconds(), count-1)
 }
 
 

@@ -52,6 +52,10 @@ var INDEX_NO_REPLICATE string
 var OUTPUT_PATH string
 /*MAX_NB_MISTAKE ...*/
 var MAX_NB_MISTAKE int
+/*MAX_NB_MISTAKE_P5 ...*/
+var MAX_NB_MISTAKE_P5 int
+/*MAX_NB_MISTAKE_DICT ...*/
+var MAX_NB_MISTAKE_DICT map[string]int
 /*DEBUG ...*/
 var DEBUG bool
 /*ERRORHANDLING ...*/
@@ -136,6 +140,7 @@ func main() {
 	flag.BoolVar(&DEBUG, "debug", false, "debug wrongly formated reads")
 	flag.BoolVar(&PRINTVERSION, "version", false, "print the current version and return")
 	flag.IntVar(&MAX_NB_MISTAKE, "max_nb_mistake", 2, "Maximum number of mistakes allowed to assign a reference read id (default 2)")
+	flag.IntVar(&MAX_NB_MISTAKE_P5, "max_nb_mistake_p5", -1, "Maximum number of mistakes allowed for p5 only (default: same as max_nb_mistake)")
 	flag.StringVar(&OUTPUT_TAG_NAME, "output_tag_name", "", "tag for the output file names (default None)")
 	flag.BoolVar(&USE_BZIP_GO_LIBRARY, "use_bzip2_go_lib", false, "use bzip2 go library instead of native C lib (slower)")
 	flag.BoolVar(&WRITE_LOGS, "write_logs", false, "write logs (might slower the execution time)")
@@ -162,6 +167,16 @@ func main() {
 		"error handling strategy (currently return or raise)." +
 		" if return, the demultiplex returns in case of an error and continue.")
 	flag.Parse()
+
+	MAX_NB_MISTAKE_DICT = make(map[string]int)
+
+	for index, _ := range(LENGTHDIC) {
+		MAX_NB_MISTAKE_DICT[index] = MAX_NB_MISTAKE
+	}
+
+	if MAX_NB_MISTAKE_P5 >=0 {
+		MAX_NB_MISTAKE_DICT["p5"] = MAX_NB_MISTAKE_P5
+	}
 
 	if PRINTVERSION {
 		fmt.Printf("ATACdemultiplex version: %s\n", VERSION)

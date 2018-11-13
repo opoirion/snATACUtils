@@ -54,7 +54,7 @@ func loadIndexes(fname string, dict * map[string]map[string]bool) {
 		switch {
 		case  !isInside:
 			panic(fmt.Sprintf("tag ID %s is not valid (should be i5, p5, i7, p7)!", tagid))
-		case len(tagstring) <= MAX_NB_MISTAKE:
+		case len(tagstring) <= MAX_NB_MISTAKE_DICT[tagid]:
 			panic(fmt.Sprintf("tag string %s not conform!", tagstring))
 		case length == 0:
 			LENGTHDIC[tagid] = len(tagstring)
@@ -187,7 +187,7 @@ func getNbMistake (index string, indexName string, dict map[string]map[string]bo
 			}
 		}
 
-		if nbMistake <= MAX_NB_MISTAKE {
+		if nbMistake <= MAX_NB_MISTAKE_DICT[indexName] {
 			return true, indexref
 
 		}
