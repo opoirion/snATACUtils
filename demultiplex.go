@@ -46,8 +46,8 @@ var OUTPUT_TAG_NAME string
 var INDEX_REPLICATE_R1 string
 /*INDEX_REPLICATE_R2 ...*/
 var INDEX_REPLICATE_R2 string
-/*INDEX_NO_REPLICATE ...*/
-var INDEX_NO_REPLICATE string
+/*INDEX_REPLICATE_R2 ...*/
+var INDEX_NO_REPLICATE bool
 /*OUTPUT_PATH ...*/
 var OUTPUT_PATH string
 /*MAX_NB_MISTAKE ...*/
@@ -105,7 +105,27 @@ var LOG_INDEX_TYPE  = []string {
 	"fail_i7",
 }
 
+/*arrayFlags ... */
+type arrayFlags []string
 
+/*String ... */
+func (i *arrayFlags) String() string {
+	var str string;
+	for _, s := range (*i) {
+		str = str + "\t"+  s
+	}
+
+	return str
+}
+
+/*Set ... */
+func (i *arrayFlags) Set(value string) error {
+	*i = append(*i, value)
+	return nil
+}
+
+/*INDEXFILES ... */
+var INDEXFILES arrayFlags
 
 /*StatsDict doc */
 type StatsDict struct {
@@ -159,7 +179,7 @@ func main() {
 		"<OPTIONAL> path toward indexes of R1 replicates (i.e. replicate number 1)")
 	flag.StringVar(&INDEX_REPLICATE_R2, "index_replicate_r2", "",
 		"<OPTIONAL> path toward indexes of R2 replicates (i.e. replicate number 2)")
-	flag.StringVar(&INDEX_NO_REPLICATE, "index_no_replicate", "",
+	flag.Var(&INDEXFILES, "index_no_replicate",
 		"<OPTIONAL> path toward indexes when only 1 replicate is used")
 	flag.StringVar(&OUTPUT_PATH, "output_path", "",
 		"<OPTIONAL> output path being used")
@@ -186,8 +206,9 @@ func main() {
 	fmt.Printf("#### current ATACdemultiplex version: %s\n", VERSION)
 
 	switch {
-	case INDEX_NO_REPLICATE != "":
-		loadIndexes(INDEX_NO_REPLICATE, &INDEX_NO_DICT)
+	case len(INDEXFILES) != 0:
+		INDEX_NO_REPLICATE = true
+		loadIndexes(INDEXFILES, &INDEX_NO_DICT)
 		REPLNUMBER = 1
 
 		if INDEX_REPLICATE_R1 != "" || INDEX_REPLICATE_R2 != "" {
@@ -195,11 +216,12 @@ func main() {
 		}
 
 	default:
-		loadIndexes(INDEX_REPLICATE_R1, &INDEX_R1_DICT)
-		loadIndexes(INDEX_REPLICATE_R2, &INDEX_R2_DICT)
+		INDEX_NO_REPLICATE = false
+		loadIndexes([]string{INDEX_REPLICATE_R1}, &INDEX_R1_DICT)
+		loadIndexes([]string{INDEX_REPLICATE_R2}, &INDEX_R2_DICT)
 		REPLNUMBER = 2
 
-		if  INDEX_NO_REPLICATE != "" {
+		if  len(INDEXFILES) != 0 {
 			log.Fatal("Cannot set up index_no_replicate with either index_replicate_r1 or index_replicate_r2")
 		}
 		if INDEX_REPLICATE_R1 == "" || INDEX_REPLICATE_R2 == "" {

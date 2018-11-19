@@ -9,9 +9,11 @@ import (
 )
 
 
-func loadIndexes(fname string, dict * map[string]map[string]bool) {
+func loadIndexes(fnameList []string, dict * map[string]map[string]bool) {
 
-	if fname == "" {
+	(*dict) = make(map[string]map[string]bool)
+
+	if len(fnameList) == 0 {
 		fmt.Printf("#### index file not found! setting all tag length to: %d ####\n", TAGLENGTH)
 		LENGTHDIC = map[string] int{
 			"i5":TAGLENGTH,
@@ -22,52 +24,53 @@ func loadIndexes(fname string, dict * map[string]map[string]bool) {
 		return
 	}
 
-	(*dict) = make(map[string]map[string]bool)
+	for _, fname := range(fnameList){
 
-	file_open, err := os.OpenFile(fname, 0, 0)
+		file_open, err := os.OpenFile(fname, 0, 0)
 
-	if err != nil {
-		log.Fatal(err)
-	}
+		if err != nil {
+			log.Fatal(err)
+		}
 
-	reader := bufio.NewReader(file_open)
-	scanner := bufio.NewScanner(reader)
+		reader := bufio.NewReader(file_open)
+		scanner := bufio.NewScanner(reader)
 
 	loop:
-	for scanner.Scan() {
-		line := scanner.Text()
-		line = strings.Trim(line, "\n")
-		split := strings.Split(line, "\t")
+		for scanner.Scan() {
+			line := scanner.Text()
+			line = strings.Trim(line, "\n")
+			split := strings.Split(line, "\t")
 
-		if len(split) != 2 {
-			panic(fmt.Sprintf("line %s in index: %s not conform!", line, fname))
+			if len(split) != 2 {
+				panic(fmt.Sprintf("line %s in index: %s not conform!", line, fname))
+			}
+
+			if split[0] != "i5" && split[0] != "i7" &&  split[0] != "p5" && split[0] != "p7" {
+				fmt.Printf("header not recognised in line %s skipping\n", split[0])
+				continue loop
+			}
+
+			tagid, tagstring := split[0], split[1]
+			length, isInside := LENGTHDIC[tagid]
+
+			switch {
+			case  !isInside:
+				panic(fmt.Sprintf("tag ID %s is not valid (should be i5, p5, i7, p7)!", tagid))
+			case len(tagstring) <= MAX_NB_MISTAKE_DICT[tagid]:
+				panic(fmt.Sprintf("tag string %s not conform!", tagstring))
+			case length == 0:
+				LENGTHDIC[tagid] = len(tagstring)
+			case length > 0 && len(tagstring) != length:
+				panic(fmt.Sprintf("tag string %s for tag id %s has different" +
+					" length than previous tags with similar id!", tagstring, tagid))
+			}
+
+			if _, isInside := (*dict)[tagid]; !isInside {
+				(*dict)[tagid] = make(map[string]bool)
+			}
+
+			(*dict)[tagid][tagstring] = true
 		}
-
-		if split[0] != "i5" && split[0] != "i7" &&  split[0] != "p5" && split[0] != "p7" {
-			fmt.Printf("header not recognised in line %s skipping\n", split[0])
-			continue loop
-		}
-
-		tagid, tagstring := split[0], split[1]
-		length, isInside := LENGTHDIC[tagid]
-
-		switch {
-		case  !isInside:
-			panic(fmt.Sprintf("tag ID %s is not valid (should be i5, p5, i7, p7)!", tagid))
-		case len(tagstring) <= MAX_NB_MISTAKE_DICT[tagid]:
-			panic(fmt.Sprintf("tag string %s not conform!", tagstring))
-		case length == 0:
-			LENGTHDIC[tagid] = len(tagstring)
-		case length > 0 && len(tagstring) != length:
-			panic(fmt.Sprintf("tag string %s for tag id %s has different" +
-				" length than previous tags with similar id!", tagstring, tagid))
-		}
-
-		if _, isInside := (*dict)[tagid]; !isInside {
-			(*dict)[tagid] = make(map[string]bool)
-		}
-
-		(*dict)[tagid][tagstring] = true
 	}
 
 }
@@ -77,7 +80,7 @@ func checkIndexes(
 	index_i7 * string,
 	index_p5 * string,
 	index_i5 * string) (bool, int) {
-	if INDEX_REPLICATE_R1 == "" && INDEX_NO_REPLICATE == ""{
+	if INDEX_REPLICATE_R1 == "" && INDEX_REPLICATE_R2 == ""{
 		return true, 1
 	}
 
@@ -127,7 +130,7 @@ func checkOneIndex(index string, indexName string) (success bool, toChange bool,
 	switch{
 	case index == "":
 		return true, false, "", 0
-	case INDEX_NO_REPLICATE != "":
+		case INDEX_NO_REPLICATE:
 		_, isInside := INDEX_NO_DICT[indexName][index]
 
 		if isInside {
