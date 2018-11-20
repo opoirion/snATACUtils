@@ -82,6 +82,8 @@ var LOG_INDEX_CELL_CHAN map[string]chan StatsDict
 var SORT_LOGS bool
 /*SHIFT_P5 ...*/
 var SHIFT_P5 int
+/*USENOINDEX ...*/
+var USENOINDEX bool
 
 /*LENGTHDIC length of the different indexes*/
 var LENGTHDIC = map[string]int {
@@ -158,6 +160,7 @@ func main() {
 	flag.StringVar(&FASTQ_R1, "fastq_R1", "", "fastq read file index paired read 1")
 	flag.StringVar(&FASTQ_R2, "fastq_R2", "", "fastq read file index paired read 2")
 	flag.BoolVar(&DEBUG, "debug", false, "debug wrongly formated reads")
+	flag.BoolVar(&USENOINDEX, "use_no_index", false, "use no input index file")
 	flag.BoolVar(&PRINTVERSION, "version", false, "print the current version and return")
 	flag.IntVar(&MAX_NB_MISTAKE, "max_nb_mistake", 2, "Maximum number of mistakes allowed to assign a reference read id (default 2)")
 	flag.IntVar(&MAX_NB_MISTAKE_P5, "max_nb_mistake_p5", -1, "Maximum number of mistakes allowed for p5 only (default: same as max_nb_mistake)")

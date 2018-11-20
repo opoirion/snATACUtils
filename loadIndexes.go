@@ -80,7 +80,8 @@ func checkIndexes(
 	index_i7 * string,
 	index_p5 * string,
 	index_i5 * string) (bool, int) {
-	if INDEX_REPLICATE_R1 == "" && INDEX_REPLICATE_R2 == ""{
+
+	if USENOINDEX{
 		return true, 1
 	}
 
