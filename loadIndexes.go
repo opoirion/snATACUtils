@@ -5,11 +5,14 @@ import (
 	"os";
 	"log";
 	"strings";
-	"fmt"
+	"fmt";
+	"strconv"
+
 )
 
 
 func loadIndexes(fnameList []string, dict * map[string]map[string]bool) {
+	countdict := make(map[string]int)
 
 	(*dict) = make(map[string]map[string]bool)
 
@@ -69,10 +72,74 @@ func loadIndexes(fnameList []string, dict * map[string]map[string]bool) {
 				(*dict)[tagid] = make(map[string]bool)
 			}
 
-			(*dict)[tagid][tagstring] = true
+			countdict[tagid]++
+
+			if len(INDEXESRANGE[tagid]) > 0 {
+				if INDEXESRANGE[tagid][countdict[tagid]] {
+					(*dict)[tagid][tagstring] = true
+				}
+
+			} else {
+				(*dict)[tagid][tagstring] = true
+			}
 		}
 	}
 
+}
+
+
+func LoadIndexRange() {
+	INDEXESRANGE = make(map[string]map[int]bool)
+
+	switch{
+	case I5PLATES != "" && I5RANGE != "":
+		log.Fatal("error I5_plates and I5_range both defined!")
+	case I5PLATES != "":
+		loadIndexRangeFrom("i5", I5PLATES, PLATESIZE)
+	case I5RANGE != "":
+		loadIndexRangeFrom("i5", I5RANGE, 1)
+	}
+
+	switch{
+	case P7PLATES != "" && P7RANGE != "":
+		log.Fatal("error P7_plates and P7_range both defined!")
+	case P7PLATES != "":
+		loadIndexRangeFrom("p7", P7PLATES, PLATESIZE)
+	case P7RANGE != "":
+		loadIndexRangeFrom("p7", P7RANGE, 1)
+	}
+}
+
+func loadIndexRangeFrom(indexType string, str string, platesize int) {
+	splitc := strings.Split(str, ",")
+	INDEXESRANGE[indexType] = make(map[int]bool)
+
+	for _ ,s := range splitc {
+		if strings.Contains(s, "-") {
+			ranges := strings.Split(s, "-")
+
+			if len(ranges) != 2 {
+				log.Fatal("Error i5_plates range wrong format!")
+			}
+
+			begin, err := strconv.Atoi(ranges[0])
+			Check(err)
+			end, err := strconv.Atoi(ranges[1])
+			Check(err)
+
+			for i:= begin; i <= end; i++ {
+				for j := (i-1) * platesize; j < i * platesize; j++ {
+					INDEXESRANGE[indexType][j+1] = true
+				}
+			}
+		} else {
+			index, err := strconv.Atoi(s)
+			Check(err)
+			for j := (index-1) * platesize; j < index * platesize; j++ {
+				INDEXESRANGE[indexType][j+1] = true
+			}
+		}
+	}
 }
 
 func checkIndexes(

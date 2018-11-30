@@ -54,6 +54,19 @@ var OUTPUT_PATH string
 var MAX_NB_MISTAKE int
 /*MAX_NB_MISTAKE_P5 ...*/
 var MAX_NB_MISTAKE_P5 int
+/*BLOCKSIZE ...*/
+var PLATESIZE int
+/*I5PLATES ...*/
+var I5PLATES string
+/*P7PLATES ...*/
+var P7PLATES string
+/*I1RANGE ...*/
+var I5RANGE string
+/*I2RANGE ...*/
+var P7RANGE string
+/*INDEXESRANGE ...*/
+var INDEXESRANGE map[string]map[int]bool
+
 /*MAX_NB_MISTAKE_DICT ...*/
 var MAX_NB_MISTAKE_DICT map[string]int
 /*DEBUG ...*/
@@ -170,6 +183,14 @@ func main() {
 	flag.BoolVar(&SORT_LOGS, "sort_logs", false, "sort logs (might consume a lot of RAM and provoke failure)")
 	flag.IntVar(&SHIFT_P5, "shift_p5", 0, "shift p5 barcodes toward n nucleotides from the left (default 0)")
 
+	flag.StringVar(&I5PLATES, "i5_plates", "", "(OPTIONNAL) plates used to define the used i5 indexes")
+	flag.StringVar(&P7PLATES, "p7_plates", "", "(OPTIONNAL) plates used to define the used p7 indexes")
+
+	flag.StringVar(&I5RANGE, "i5_ranges", "", "(OPTIONNAL) plates used to define the used i5 indexes")
+	flag.StringVar(&P7RANGE, "p7_ranges", "", "(OPTIONNAL) plates used to define the used p7 indexes")
+
+	flag.IntVar(&PLATESIZE, "plate_size", 96, "sized of the plated used for the *_plates option (default 96)")
+
 	flag.IntVar(&COMPRESSION_MODE, "compressionMode", 6, `compressionMode for native bzip2 lib
  (1 faster -> 9 smaller) <default: 6>`)
 	flag.IntVar(&NB_THREADS, "nbThreads", 1, "number of threads to use")
@@ -200,6 +221,8 @@ func main() {
 	if MAX_NB_MISTAKE_P5 >=0 {
 		MAX_NB_MISTAKE_DICT["p5"] = MAX_NB_MISTAKE_P5
 	}
+
+	LoadIndexRange()
 
 	if PRINTVERSION {
 		fmt.Printf("ATACdemultiplex version: %s\n", VERSION)
