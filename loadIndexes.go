@@ -38,6 +38,9 @@ func loadIndexes(fnameList []string, dict * map[string]map[string]bool) {
 		reader := bufio.NewReader(file_open)
 		scanner := bufio.NewScanner(reader)
 
+		usedreadsf, err := os.Create(fmt.Sprintf("%sused_barcodes.txt", OUTPUT_PATH))
+		Check(err)
+
 	loop:
 		for scanner.Scan() {
 			line := scanner.Text()
@@ -77,10 +80,12 @@ func loadIndexes(fnameList []string, dict * map[string]map[string]bool) {
 			if len(INDEXESRANGE[tagid]) > 0 {
 				if INDEXESRANGE[tagid][countdict[tagid]] {
 					(*dict)[tagid][tagstring] = true
+					usedreadsf.WriteString(fmt.Sprintf("%s\t%s\t%d\n", tagid, tagstring, countdict[tagid]))
 				}
 
 			} else {
 				(*dict)[tagid][tagstring] = true
+				usedreadsf.WriteString(fmt.Sprintf("%s\t%s\t%d\n", tagid, tagstring, countdict[tagid]))
 			}
 		}
 	}
@@ -128,12 +133,15 @@ func loadIndexRangeFrom(indexType string, str string, platesize int) {
 			Check(err)
 
 			for i:= begin; i <= end; i++ {
+				fmt.Printf("# block: %d\n", i)
 				for j := (i-1) * platesize; j < i * platesize; j++ {
 					INDEXESRANGE[indexType][j+1] = true
 				}
 			}
 		} else {
+
 			index, err := strconv.Atoi(s)
+			fmt.Printf("block: %d\n", index)
 			Check(err)
 			for j := (index-1) * platesize; j < index * platesize; j++ {
 				INDEXESRANGE[indexType][j+1] = true
