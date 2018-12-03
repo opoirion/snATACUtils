@@ -11,7 +11,7 @@ import (
 )
 
 
-func loadIndexes(fnameList []string, dict * map[string]map[string]bool) {
+func loadIndexes(fnameList []string, dict * map[string]map[string]bool, reportName string) {
 	countdict := make(map[string]int)
 
 	(*dict) = make(map[string]map[string]bool)
@@ -38,7 +38,7 @@ func loadIndexes(fnameList []string, dict * map[string]map[string]bool) {
 		reader := bufio.NewReader(file_open)
 		scanner := bufio.NewScanner(reader)
 
-		usedreadsf, err := os.Create(fmt.Sprintf("%s/used_barcodes.txt", OUTPUT_PATH))
+		usedreadsf, err := os.Create(fmt.Sprintf("%s/used_barcodes%s.txt", OUTPUT_PATH, reportName))
 		Check(err)
 
 	loop:

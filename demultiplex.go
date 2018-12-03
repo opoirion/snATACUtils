@@ -244,7 +244,7 @@ func main() {
 	switch {
 	case len(INDEXFILES) != 0:
 		INDEX_NO_REPLICATE = true
-		loadIndexes(INDEXFILES, &INDEX_NO_DICT)
+		loadIndexes(INDEXFILES, &INDEX_NO_DICT, "")
 		REPLNUMBER = 1
 
 		if INDEX_REPLICATE_R1 != "" || INDEX_REPLICATE_R2 != "" {
@@ -253,8 +253,8 @@ func main() {
 
 	default:
 		INDEX_NO_REPLICATE = false
-		loadIndexes([]string{INDEX_REPLICATE_R1}, &INDEX_R1_DICT)
-		loadIndexes([]string{INDEX_REPLICATE_R2}, &INDEX_R2_DICT)
+		loadIndexes([]string{INDEX_REPLICATE_R1}, &INDEX_R1_DICT, "repl1")
+		loadIndexes([]string{INDEX_REPLICATE_R2}, &INDEX_R2_DICT, "repl2")
 		REPLNUMBER = 2
 
 		if  len(INDEXFILES) != 0 {
