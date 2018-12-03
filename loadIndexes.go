@@ -38,7 +38,7 @@ func loadIndexes(fnameList []string, dict * map[string]map[string]bool) {
 		reader := bufio.NewReader(file_open)
 		scanner := bufio.NewScanner(reader)
 
-		usedreadsf, err := os.Create(fmt.Sprintf("%sused_barcodes.txt", OUTPUT_PATH))
+		usedreadsf, err := os.Create(fmt.Sprintf("%s/used_barcodes.txt", OUTPUT_PATH))
 		Check(err)
 
 	loop:
