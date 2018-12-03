@@ -133,7 +133,6 @@ func loadIndexRangeFrom(indexType string, str string, platesize int) {
 			Check(err)
 
 			for i:= begin; i <= end; i++ {
-				fmt.Printf("# block: %d\n", i)
 				for j := (i-1) * platesize; j < i * platesize; j++ {
 					INDEXESRANGE[indexType][j+1] = true
 				}
@@ -141,7 +140,6 @@ func loadIndexRangeFrom(indexType string, str string, platesize int) {
 		} else {
 
 			index, err := strconv.Atoi(s)
-			fmt.Printf("block: %d\n", index)
 			Check(err)
 			for j := (index-1) * platesize; j < index * platesize; j++ {
 				INDEXESRANGE[indexType][j+1] = true
