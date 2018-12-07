@@ -75,7 +75,7 @@ func main() {
 	flag.BoolVar(&DIVIDE, "divide", false, "divide the bam file according to barcode file list")
 	flag.BoolVar(&DIVIDEPARALLEL, "divide_parallel", false, "divide the bam file according to barcode file list usng a parallel version")
 	flag.BoolVar(&ADDRG, "add_rg", false, "add cell ID as RG group to bam file")
-	flag.IntVar(&THREADNB, "thread", 1, "threads concurrency for reading bam file")
+	flag.IntVar(&THREADNB, "threads", 1, "threads concurrency for reading bam file")
 	flag.Parse()
 
 	if OUTPUTDIR != "" {
