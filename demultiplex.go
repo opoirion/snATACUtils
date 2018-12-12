@@ -649,8 +649,8 @@ func launchAnalysisOneFile(
 		qual_R1 = scannerR1.Text()
 		qual_R2 = scannerR2.Text()
 
-		if TAGLENGTH > len(read_I1) || TAGLENGTH > len(read_I2) {
-			fmt.Printf("#### error at read nb: %d\n", count)
+		if lengthP7 > len(read_I1) || lengthI5 > len(read_I2) || lengthI7 > len(read_I1) || lengthP5 > len(read_I2) {
+			fmt.Printf("#### error at read nb: %d Incorrect size\n", count)
 			fmt.Printf("## error! ID I1: %s\n", id_I1)
 			fmt.Printf("## error! ID I2: %s\n", id_I2)
 			fmt.Printf("## error! ID I1: %s\n", id_R1)
