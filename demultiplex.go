@@ -142,6 +142,12 @@ func (i *arrayFlags) Set(value string) error {
 /*INDEXFILES ... */
 var INDEXFILES arrayFlags
 
+/*ALLBARCODES ... */
+var ALLBARCODES arrayFlags
+
+/*USEALLBARCODES ... */
+var USEALLBARCODES = make(map[string]bool)
+
 /*StatsDict doc */
 type StatsDict struct {
 	dict map[string]int
@@ -196,7 +202,7 @@ func main() {
 	flag.IntVar(&NB_THREADS, "nbThreads", 1, "number of threads to use")
 	flag.IntVar(&TAGLENGTH, "taglength", 8,
 		`<OPTIONAL> number of nucleotides to consider at the end
- and begining (default 8)`)
+ and begining if no barcode file is provided or if -all_barcodes option is used for some index types (default 8)`)
 	flag.IntVar(&MAX_NB_READS, "max_nb_reads", 0,
 		"<OPTIONAL> max number of reads to process (default 0 => None)")
 	flag.StringVar(&INDEX_REPLICATE_R1, "index_replicate_r1", "",
@@ -205,6 +211,8 @@ func main() {
 		"<OPTIONAL> path toward indexes of R2 replicates (i.e. replicate number 2)")
 	flag.Var(&INDEXFILES, "index_no_replicate",
 		"<OPTIONAL> path toward indexes when only 1 replicate is used")
+	flag.Var(&ALLBARCODES, "all_barcodes",
+		"use all barcodes for the given barcode indexes")
 	flag.StringVar(&OUTPUT_PATH, "output_path", "",
 		"<OPTIONAL> output path being used")
 	flag.StringVar(&ERRORHANDLING, "error_handling", "return",
@@ -220,6 +228,11 @@ func main() {
 
 	if MAX_NB_MISTAKE_P5 >=0 {
 		MAX_NB_MISTAKE_DICT["p5"] = MAX_NB_MISTAKE_P5
+	}
+
+	for _, indexType := range(ALLBARCODES) {
+		LENGTHDIC[indexType] = TAGLENGTH
+		USEALLBARCODES[indexType] = true
 	}
 
 	LoadIndexRange()

@@ -204,7 +204,15 @@ func checkOneIndex(index string, indexName string) (success bool, toChange bool,
 	switch{
 	case index == "":
 		return true, false, "", 0
-		case INDEX_NO_REPLICATE:
+	case USEALLBARCODES[indexName]:
+		switch strings.Count(index, "N") {
+		case 0:
+			return true, false, "", 0
+		default:
+			goto fail
+		}
+
+	case INDEX_NO_REPLICATE:
 		_, isInside := INDEX_NO_DICT[indexName][index]
 
 		if isInside {
