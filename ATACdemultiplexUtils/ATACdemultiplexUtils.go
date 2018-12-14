@@ -33,6 +33,25 @@ func (p PairList) Len() int { return len(p) }
 func (p PairList) Less(i, j int) bool { return p[i].Value < p[j].Value }
 func (p PairList) Swap(i, j int){ p[i], p[j] = p[j], p[i] }
 
+/*ArrayFlags ... */
+type ArrayFlags []string
+
+/*String ... */
+func (i *ArrayFlags) String() string {
+	var str string;
+	for _, s := range (*i) {
+		str = str + "\t"+  s
+	}
+
+	return str
+}
+
+/*Set ... */
+func (i *ArrayFlags) Set(value string) error {
+	*i = append(*i, value)
+	return nil
+}
+
 
 func RankByWordCountAndDeleteOldMap(wordFrequencies * map[string]int) PairList{
 	pl := make(PairList, len(*wordFrequencies))

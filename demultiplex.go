@@ -120,30 +120,12 @@ var LOG_INDEX_TYPE  = []string {
 	"fail_i7",
 }
 
-/*arrayFlags ... */
-type arrayFlags []string
-
-/*String ... */
-func (i *arrayFlags) String() string {
-	var str string;
-	for _, s := range (*i) {
-		str = str + "\t"+  s
-	}
-
-	return str
-}
-
-/*Set ... */
-func (i *arrayFlags) Set(value string) error {
-	*i = append(*i, value)
-	return nil
-}
 
 /*INDEXFILES ... */
-var INDEXFILES arrayFlags
+var INDEXFILES utils.ArrayFlags
 
 /*ALLBARCODES ... */
-var ALLBARCODES arrayFlags
+var ALLBARCODES utils.ArrayFlags
 
 /*USEALLBARCODES ... */
 var USEALLBARCODES = make(map[string]bool)

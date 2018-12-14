@@ -17,8 +17,6 @@ import(
 )
 
 
-
-
 /*FILENAME ...*/
 var FILENAME string
 /*MAX ...*/
@@ -41,6 +39,10 @@ var COMPRESSIONMODE int
 var GOTOLINE int
 /*SEARCHLINE ...*/
 var SEARCHLINE string
+/*CREATEREFFASTQ ...*/
+var CREATEREFFASTQ bool
+/*REFBARCODELIST ...*/
+var REFBARCODELIST string
 /*SEP ...*/
 var SEP string
 /*SORTLOGS ...*/
@@ -61,14 +63,19 @@ var COMPDICT = map[byte]byte {'A': 'T', 'T': 'A', 'G': 'C', 'C': 'G'}
 var COMPLSTRATEGY string
 /*CREATEBARCODEDICT ...*/
 var CREATEBARCODEDICT bool
+/*FILENAMES ...*/
+var FILENAMES utils.ArrayFlags
 
 
 func main() {
 	flag.StringVar(&FILENAME, "filename", "", "name of the file(s) multiple files should be into \"")
+	flag.Var(&FILENAMES, "filenames", "name of the files to use")
 	flag.IntVar(&COMPRESSIONMODE, "compressionMode", 6, "compressionMode for native bzip2 lib (1 faster -> 9 smaller) <default: 6>")
 	flag.IntVar(&MAX, "max_nb_lines", 0, "max number of lines")
 	flag.BoolVar(&BZ2, "bz2", false, "is bz2")
 	flag.BoolVar(&GZ, "gz", false, "is gz")
+	flag.BoolVar(&CREATEREFFASTQ, "create_ref_fastq", false, "create a ref FASTQ file using a reference barcode list")
+	flag.StringVar(&REFBARCODELIST, "ref_barcode_list", "", "file containing the reference barcodes (one per line)")
 	flag.BoolVar(&MERGE, "merge", false, "merge input log files together")
 	flag.IntVar(&GOTOLINE, "gotoline", 0, "go to line")
 	flag.BoolVar(&SORTLOGS, "sortfile", false, "sort files (<key><SEP><value> file")
@@ -93,6 +100,13 @@ func main() {
 	switch  {
 	case WRITECOMPL:
 		writeComplement(FILENAME, COMPLSTRATEGY)
+	case CREATEREFFASTQ && len(FILENAMES) > 0:
+		for _, filename := range(FILENAMES){
+			extractFASTQreadsPerBarcodes(filename, REFBARCODELIST)
+		}
+
+	case CREATEREFFASTQ:
+		extractFASTQreadsPerBarcodes(FILENAME, REFBARCODELIST)
 	case CREATEBARCODEDICT:
 		createIndexCountFile(FILENAME)
 	case MERGE:
@@ -121,6 +135,63 @@ func main() {
 
 }
 
+/*extractFASTQreadsPerBarcodes create a new FASTQ file using a barcode name */
+func extractFASTQreadsPerBarcodes(filename string, barcodefilename string) {
+	var barcode string
+	var refbarcodes = make(map[string]bool)
+
+	ext := path.Ext(filename)
+	ext2 := path.Ext(filename[:len(filename) - len(ext)])
+
+	outfile := fmt.Sprintf("%s.reference%s%s",
+		filename[:len(filename) - len(ext) -len(ext2)], ext2, ext)
+
+	scanner, file := utils.ReturnReader(filename, 0, false)
+	defer file.Close()
+	writer := utils.ReturnWriter(outfile, COMPRESSIONMODE, false)
+	defer writer.Close()
+
+	barcodefile, err := os.Open(barcodefilename)
+	check(err)
+	defer barcodefile.Close()
+	bscanner := bufio.NewScanner(barcodefile)
+
+	for bscanner.Scan() {
+		line := bscanner.Text()
+		refbarcodes[line] = true
+	}
+
+	isfour := 0
+	nbLine := 0
+	tocopy := false
+
+	for scanner.Scan() {
+		line := scanner.Text()
+		nbLine++
+
+		if (isfour == 0) {
+			barcode = strings.SplitN(line, ":", 2)[0][1:]
+			if refbarcodes[barcode] {
+				tocopy = true
+				nbLine++
+			}
+		}
+
+		if tocopy {
+			writer.Write([]byte(fmt.Sprintf("%s\n", line)))
+		}
+
+		isfour++
+
+		if isfour == 4 {
+			tocopy = false
+			isfour = 0
+		}
+	}
+	fmt.Printf("nb barcodes extracted: %d\n", nbLine)
+	fmt.Printf("file created: %s\n", outfile)
+}
+
 
 func writeComplement(filename string, complStrategy string) (nbLines int) {
 
@@ -139,7 +210,7 @@ func writeComplement(filename string, complStrategy string) (nbLines int) {
 
 	var newID string
 
-	for scanner .Scan() {
+	for scanner.Scan() {
 		nbLines++
 		line := scanner.Text()
 
