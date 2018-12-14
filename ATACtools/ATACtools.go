@@ -65,6 +65,8 @@ var COMPLSTRATEGY string
 var CREATEBARCODEDICT bool
 /*FILENAMES ...*/
 var FILENAMES utils.ArrayFlags
+/*TAG ...*/
+var TAG string
 
 
 func main() {
@@ -89,6 +91,7 @@ func main() {
 	flag.StringVar(&OUTFILE, "output", "", "file name of the output")
 	flag.BoolVar(&WRITECOMPL, "write_compl", false, "write the barcode complement of a fastq files")
 	flag.StringVar(&SEP, "delimiter", "\t", "delimiter used to split and sort the log file (default \t)")
+	flag.StringVar(&TAG, "tag", "", "tag used when creating a reference fastq file to tag all the reads (default \"\")")
 	flag.StringVar(&COMPLSTRATEGY, "compl_strategy", "split_10_compl_second", "Strategy to use when writing the complement of a fastq file (default split_10_compl_second)")
 	flag.BoolVar(&CREATEBARCODEDICT, "create_barcode_dict", false, "create a barcode key / value count file")
 	flag.Parse()
@@ -139,6 +142,7 @@ func main() {
 func extractFASTQreadsPerBarcodes(filename string, barcodefilename string) {
 	var barcode string
 	var refbarcodes = make(map[string]bool)
+	var readHeader = make([]string, 2, 2)
 
 	ext := path.Ext(filename)
 	ext2 := path.Ext(filename[:len(filename) - len(ext)])
@@ -170,7 +174,8 @@ func extractFASTQreadsPerBarcodes(filename string, barcodefilename string) {
 		nbLine++
 
 		if (isfour == 0) {
-			barcode = strings.SplitN(line, ":", 2)[0][1:]
+			readHeader = strings.SplitN(line, ":", 2)
+			barcode = readHeader[0][1:]
 			if refbarcodes[barcode] {
 				tocopy = true
 				nbLine++
@@ -178,7 +183,11 @@ func extractFASTQreadsPerBarcodes(filename string, barcodefilename string) {
 		}
 
 		if tocopy {
-			writer.Write([]byte(fmt.Sprintf("%s\n", line)))
+			if (isfour == 0) && (len(TAG) > 0) {
+				writer.Write([]byte(fmt.Sprintf("@%s%s:%s\n", barcode, TAG, readHeader[1])))
+			} else {
+				writer.Write([]byte(fmt.Sprintf("%s\n", line)))
+			}
 		}
 
 		isfour++
