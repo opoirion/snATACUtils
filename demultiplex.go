@@ -523,6 +523,8 @@ func launchAnalysisOneFile(
 	var scannerR1 * bufio.Scanner
 	var scannerR2 * bufio.Scanner
 
+	var errorNbReads = false
+
 	var fileI1 * os.File
 	var fileI2 * os.File
 	var fileR1 * os.File
@@ -600,6 +602,11 @@ func launchAnalysisOneFile(
 		id_R1 = scannerR1.Text()
 		id_R2 = scannerR2.Text()
 
+		if len(id_I1) == 0 || len(id_I2) == 0 || len(id_R1) == 0 || len(id_R2) == 0 {
+			errorNbReads = true
+			goto errorRead
+		}
+
 		if id_I1[0] != byte('@') || id_I2[0] != byte('@') ||
 			id_R1[0] != byte('@') || id_R2[0] != byte('@') {
 			continue mainloop
@@ -631,8 +638,14 @@ func launchAnalysisOneFile(
 		qual_R1 = scannerR1.Text()
 		qual_R2 = scannerR2.Text()
 
-		if lengthP7 > len(read_I1) || lengthI5 > len(read_I2) || lengthI7 > len(read_I1) || lengthP5 > len(read_I2) {
-			fmt.Printf("#### error at read nb: %d Incorrect size\n", count)
+	errorRead:
+		if lengthP7 > len(read_I1) || lengthI5 > len(read_I2) || lengthI7 > len(read_I1) || lengthP5 > len(read_I2) || errorNbReads {
+			if errorNbReads {
+				fmt.Printf("#### error at read nb: %d one of the reads ID is null\n", count)
+			} else {
+				fmt.Printf("#### error at read nb: %d Incorrect size\n", count)
+			}
+
 			fmt.Printf("## error! ID I1: %s\n", id_I1)
 			fmt.Printf("## error! ID I2: %s\n", id_I2)
 			fmt.Printf("## error! ID I1: %s\n", id_R1)
