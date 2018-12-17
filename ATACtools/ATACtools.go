@@ -10,6 +10,7 @@ import(
 	"strings";
 	"path";
 	"sort";
+	"sync";
 	"strconv";
 	// "github.com/dsnet/compress/bzip2"
 	utils "ATACdemultiplex/ATACdemultiplexUtils"
@@ -104,12 +105,17 @@ func main() {
 	case WRITECOMPL:
 		writeComplement(FILENAME, COMPLSTRATEGY)
 	case CREATEREFFASTQ && len(FILENAMES) > 0:
+		var waiting sync.WaitGroup
+		waiting.Add(len(FILENAMES))
+
 		for _, filename := range(FILENAMES){
-			extractFASTQreadsPerBarcodes(filename, REFBARCODELIST)
+			go extractFASTQreadsPerBarcodes(filename, REFBARCODELIST, &waiting)
 		}
+		waiting.Wait()
 
 	case CREATEREFFASTQ:
-		extractFASTQreadsPerBarcodes(FILENAME, REFBARCODELIST)
+		var waiting sync.WaitGroup
+		extractFASTQreadsPerBarcodes(FILENAME, REFBARCODELIST, &waiting)
 	case CREATEBARCODEDICT:
 		createIndexCountFile(FILENAME)
 	case MERGE:
@@ -139,10 +145,12 @@ func main() {
 }
 
 /*extractFASTQreadsPerBarcodes create a new FASTQ file using a barcode name */
-func extractFASTQreadsPerBarcodes(filename string, barcodefilename string) {
+func extractFASTQreadsPerBarcodes(filename string, barcodefilename string, waiting *sync.WaitGroup) {
+
 	var barcode string
 	var refbarcodes = make(map[string]bool)
 	var readHeader = make([]string, 2, 2)
+	defer waiting.Done()
 
 	ext := path.Ext(filename)
 	ext2 := path.Ext(filename[:len(filename) - len(ext)])
