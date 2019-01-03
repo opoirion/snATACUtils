@@ -42,6 +42,8 @@ var GOTOLINE int
 var SEARCHLINE string
 /*CREATEREFFASTQ ...*/
 var CREATEREFFASTQ bool
+/*CREATEREFBEDFILE ...*/
+var CREATEREFBEDFILE bool
 /*REFBARCODELIST ...*/
 var REFBARCODELIST string
 /*SEP ...*/
@@ -78,6 +80,7 @@ func main() {
 	flag.BoolVar(&BZ2, "bz2", false, "is bz2")
 	flag.BoolVar(&GZ, "gz", false, "is gz")
 	flag.BoolVar(&CREATEREFFASTQ, "create_ref_fastq", false, "create a ref FASTQ file using a reference barcode list")
+	flag.BoolVar(&CREATEREFBEDFILE, "create_ref_bed", false, "create a ref bed file using a reference barcode list")
 	flag.StringVar(&REFBARCODELIST, "ref_barcode_list", "", "file containing the reference barcodes (one per line)")
 	flag.BoolVar(&MERGE, "merge", false, "merge input log files together")
 	flag.IntVar(&GOTOLINE, "gotoline", 0, "go to line")
@@ -104,6 +107,10 @@ func main() {
 	switch  {
 	case WRITECOMPL:
 		writeComplement(FILENAME, COMPLSTRATEGY)
+
+	case CREATEREFBEDFILE:
+		extractBEDreadsPerBarcodes(FILENAME, REFBARCODELIST)
+
 	case CREATEREFFASTQ && len(FILENAMES) > 0:
 		var waiting sync.WaitGroup
 		waiting.Add(len(FILENAMES))
@@ -142,6 +149,58 @@ func main() {
 	}
 	fmt.Printf("time: %f s\n", tDiff.Seconds())
 
+}
+
+/*extractBEDreadsPerBarcodes create a new FASTQ file using a barcode name */
+func extractBEDreadsPerBarcodes(filename string, barcodefilename string) {
+
+	var barcode string
+	var refbarcodes = make(map[string]bool)
+	var split = make([]string, 4, 4)
+
+	ext := path.Ext(filename)
+	ext2 := path.Ext(filename[:len(filename) - len(ext)])
+
+	outfile := fmt.Sprintf("%s.reference%s%s",
+		filename[:len(filename) - len(ext) -len(ext2)], ext2, ext)
+
+	scanner, file := utils.ReturnReader(filename, 0, false)
+	defer file.Close()
+	writer := utils.ReturnWriter(outfile, COMPRESSIONMODE, false)
+	defer writer.Close()
+
+	barcodefile, err := os.Open(barcodefilename)
+	check(err)
+	defer barcodefile.Close()
+	bscanner := bufio.NewScanner(barcodefile)
+
+	for bscanner.Scan() {
+		line := bscanner.Text()
+		refbarcodes[line] = true
+	}
+
+	nbLine := 0
+
+	for scanner.Scan() {
+		line := scanner.Text()
+		nbLine++
+
+		split = strings.Split(line, "\t")
+		barcode = split[3]
+
+
+		if refbarcodes[barcode] {
+
+			if (len(TAG) > 0) {
+				writer.Write([]byte(fmt.Sprintf("%s\t%s\t%s\t%s%s\n", split[0], split[1], split[2], barcode, TAG)))
+			} else {
+				writer.Write([]byte(fmt.Sprintf("%s\n", line)))
+			}
+
+		}
+	}
+	fmt.Printf("nb barcodes extracted: %d\n", nbLine)
+	fmt.Printf("file created: %s\n", outfile)
 }
 
 /*extractFASTQreadsPerBarcodes create a new FASTQ file using a barcode name */
