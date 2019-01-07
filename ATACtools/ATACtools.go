@@ -157,6 +157,7 @@ func extractBEDreadsPerBarcodes(filename string, barcodefilename string) {
 	var barcode string
 	var refbarcodes = make(map[string]bool)
 	var split = make([]string, 4, 4)
+	var notCheckBarcode = true
 
 	ext := path.Ext(filename)
 	ext2 := path.Ext(filename[:len(filename) - len(ext)])
@@ -169,14 +170,17 @@ func extractBEDreadsPerBarcodes(filename string, barcodefilename string) {
 	writer := utils.ReturnWriter(outfile, COMPRESSIONMODE, false)
 	defer writer.Close()
 
-	barcodefile, err := os.Open(barcodefilename)
-	check(err)
-	defer barcodefile.Close()
-	bscanner := bufio.NewScanner(barcodefile)
+	if barcodefilename != "" {
+		notCheckBarcode = false
+		barcodefile, err := os.Open(barcodefilename)
+		check(err)
+		defer barcodefile.Close()
+		bscanner := bufio.NewScanner(barcodefile)
 
-	for bscanner.Scan() {
-		line := bscanner.Text()
-		refbarcodes[line] = true
+		for bscanner.Scan() {
+			line := bscanner.Text()
+			refbarcodes[line] = true
+		}
 	}
 
 	nbLine := 0
@@ -189,7 +193,7 @@ func extractBEDreadsPerBarcodes(filename string, barcodefilename string) {
 		barcode = split[3]
 
 
-		if refbarcodes[barcode] {
+		if refbarcodes[barcode] || notCheckBarcode {
 
 			if (len(TAG) > 0) {
 				writer.Write([]byte(fmt.Sprintf("%s\t%s\t%s\t%s%s\n", split[0], split[1], split[2], barcode, TAG)))
