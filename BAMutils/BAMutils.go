@@ -14,11 +14,15 @@ import(
 	"time"
 	"path"
 	"sync"
+	utils "ATACdemultiplex/ATACdemultiplexUtils"
 )
 
 
 /*BAMFILENAME bam file name (input) */
 var BAMFILENAME string
+
+/*BEDFILENAME bam file name (input) */
+var BEDFILENAME string
 
 /*FILENAMEOUT bam file name (output) */
 var FILENAMEOUT string
@@ -39,19 +43,22 @@ var NUCLEIINDEX string
 var CELLIDDICT map[string]bool
 
 /*CELLIDDINDEX cell ID<->dict */
-var BAMFNAMEINDEX map[string]int
+var INPUTFNAMEINDEX map[string]int
 
 /*CELLIDDICTMULTIPLE cell ID<->dict */
 var CELLIDDICTMULTIPLE map[string]map[string]bool
 
-/*OUTBAMFILENAMELIST bam filename<->bool */
-var OUTBAMFILENAMELIST map[string]bool
+/*OUTFILENAMELIST bam filename<->bool */
+var OUTFILENAMELIST map[string]bool
 
 /*WRITERDICT filename<->dict */
 var WRITERDICT map[string]*os.File
 
 /*BAMWRITERDICT filename<->dict */
 var BAMWRITERDICT map[string]*bam.Writer
+
+/*BEDWRITERDICT filename<->dict */
+var BEDWRITERDICT map[string]io.WriteCloser
 
 /*DIVIDE  dividing the bam file tool */
 var DIVIDE bool
@@ -66,6 +73,7 @@ var ADDRG bool
 var CREATECELLINDEX bool
 
 func main() {
+	flag.StringVar(&BEDFILENAME, "bed", "", "name of the bed file")
 	flag.StringVar(&BAMFILENAME, "bam", "", "name of the bam file")
 	flag.StringVar(&FILENAMEOUT, "out", "", "name of the output file")
 	flag.StringVar(&NUCLEIFILE, "cellsID", "", "file with cell IDs")
@@ -82,8 +90,8 @@ func main() {
 		FILENAMEOUT = fmt.Sprintf("%s/%s", OUTPUTDIR, FILENAMEOUT)
 	}
 
-	if BAMFILENAME == "" {
-		panic("-bam must be specified!")
+	if BAMFILENAME == "" && BEDFILENAME == "" {
+		panic("-bam or -bed must be specified!")
 	}
 
 	tStart := time.Now()
@@ -92,14 +100,18 @@ func main() {
 	case ADDRG:
 		InsertRGTagToBamFile()
 	case (DIVIDE || DIVIDEPARALLEL) && NUCLEIINDEX!="":
-		switch DIVIDEPARALLEL {
-		case true:
-			DivideMultipleParallel()
+		switch {
+		case BEDFILENAME != "" && DIVIDEPARALLEL:
+			DivideMultipleBedFileParallel()
+		case BEDFILENAME != "":
+			DivideMultipleBedFile()
+		case DIVIDEPARALLEL:
+			DivideMultipleBamFileParallel()
 		default:
-			DivideMultiple()
+			DivideMultipleBamFile()
 		}
 
-		for filename, _ := range(OUTBAMFILENAMELIST) {
+		for filename, _ := range(OUTFILENAMELIST) {
 			fmt.Printf("output bam file: %s written\n", filename)
 		}
 
@@ -220,8 +232,40 @@ func InsertRGTagToBamFile() {
 
 }
 
-/*DivideMultipleParallel divide the bam file */
-func DivideMultipleParallel() {
+
+/*DivideMultipleBedFileParallel divide one bed file into multiple bed files in parallel */
+func DivideMultipleBedFileParallel() {
+	loadCellIDIndexAndBEDWriter(NUCLEIINDEX)
+
+	for _, file := range(WRITERDICT) {
+		defer file.Close()
+	}
+
+	for _, file := range(BEDWRITERDICT) {
+		defer file.Close()
+	}
+
+	index:= 0
+
+	INPUTFNAMEINDEX = make(map[string]int)
+
+	for filename, _ := range(OUTFILENAMELIST) {
+		INPUTFNAMEINDEX[filename] = index
+		index++
+	}
+
+	var waiting sync.WaitGroup
+	waiting.Add(THREADNB)
+
+	for i := 0; i < THREADNB;i++ {
+		go divideMultipleBedFileOneThread(i, &waiting)
+	}
+
+	waiting.Wait()
+}
+
+/*DivideMultipleBamFileParallel divide a bam file into multiple bam files in parallel */
+func DivideMultipleBamFileParallel() {
 	f, err := os.Open(BAMFILENAME)
 	check(err)
 	defer f.Close()
@@ -233,7 +277,7 @@ func DivideMultipleParallel() {
 	check(err)
 
 	header := bamReader.Header()
-	loadCellIDIndex(NUCLEIINDEX, header)
+	loadCellIDIndexAndBAMWriter(NUCLEIINDEX, header)
 	check(err)
 
 	for _, file := range(WRITERDICT) {
@@ -246,10 +290,10 @@ func DivideMultipleParallel() {
 
 	index:= 0
 
-	BAMFNAMEINDEX = make(map[string]int)
+	INPUTFNAMEINDEX = make(map[string]int)
 
-	for filename, _ := range(OUTBAMFILENAMELIST) {
-		BAMFNAMEINDEX[filename] = index
+	for filename, _ := range(OUTFILENAMELIST) {
+		INPUTFNAMEINDEX[filename] = index
 		index++
 	}
 
@@ -257,13 +301,13 @@ func DivideMultipleParallel() {
 	waiting.Add(THREADNB)
 
 	for i := 0; i < THREADNB;i++ {
-		go divideMultipleOneThread(i, &waiting)
+		go divideMultipleBamFileOneThread(i, &waiting)
 	}
 
 	waiting.Wait()
 }
 
-func divideMultipleOneThread(threadID int, waiting *sync.WaitGroup){
+func divideMultipleBamFileOneThread(threadID int, waiting *sync.WaitGroup){
 	defer waiting.Done()
 
 	var record * sam.Record
@@ -309,7 +353,7 @@ func divideMultipleOneThread(threadID int, waiting *sync.WaitGroup){
 		if  _, isInside = CELLIDDICTMULTIPLE[readID];isInside {
 
 			for filename = range(CELLIDDICTMULTIPLE[readID]) {
-				if !((startIndex <= BAMFNAMEINDEX[filename]) && (BAMFNAMEINDEX[filename]  < endIndex)) {
+				if !((startIndex <= INPUTFNAMEINDEX[filename]) && (INPUTFNAMEINDEX[filename]  < endIndex)) {
 					continue
 				}
 
@@ -324,8 +368,81 @@ func divideMultipleOneThread(threadID int, waiting *sync.WaitGroup){
 	}
 }
 
-/*DivideMultiple divide the bam file */
-func DivideMultiple() {
+func divideMultipleBedFileOneThread(threadID int, waiting *sync.WaitGroup){
+	defer waiting.Done()
+
+	var readID string
+	var isInside bool
+	var filename string
+	var line string
+
+	bedReader, file := utils.ReturnReader(BEDFILENAME, 0, false)
+	defer file.Close()
+
+	count := 0
+	chunkSize := len(CELLIDDICTMULTIPLE) / (THREADNB - 1)
+	startIndex := chunkSize * threadID
+	endIndex := chunkSize * (threadID + 1)
+
+	for bedReader.Scan() {
+		line = bedReader.Text()
+		count++
+
+		readID = strings.Split(line, "\t")[3]
+
+		if  _, isInside = CELLIDDICTMULTIPLE[readID];isInside {
+
+			for filename = range(CELLIDDICTMULTIPLE[readID]) {
+				if !((startIndex <= INPUTFNAMEINDEX[filename]) && (INPUTFNAMEINDEX[filename]  < endIndex)) {
+					continue
+				}
+				BEDWRITERDICT[filename].Write([]byte(fmt.Sprintf("%s\n", line)))
+			}
+		}
+	}
+}
+
+
+/*DivideMultipleBedFile divide the bam file */
+func DivideMultipleBedFile() {
+	var line string
+	var readID string
+	var isInside bool
+	var filename string
+
+	bedReader, file := utils.ReturnReader(BEDFILENAME, 0, false)
+	defer file.Close()
+
+	loadCellIDIndexAndBEDWriter(NUCLEIINDEX)
+
+	for _, file := range(WRITERDICT) {
+		defer file.Close()
+	}
+
+	for _, file := range(BEDWRITERDICT) {
+		defer file.Close()
+	}
+
+
+	count := 0
+
+	for bedReader.Scan() {
+		line = bedReader.Text()
+		count++
+
+		readID = strings.Split(line, "\t")[3]
+
+		if  _, isInside = CELLIDDICTMULTIPLE[readID];isInside {
+
+			for filename = range(CELLIDDICTMULTIPLE[readID]) {
+				BEDWRITERDICT[filename].Write([]byte(fmt.Sprintf("%s\n", line)))
+			}
+		}
+	}
+}
+
+/*DivideMultipleBamFile divide the bam file */
+func DivideMultipleBamFile() {
 	var record * sam.Record
 	var read string
 	var readID string
@@ -344,8 +461,7 @@ func DivideMultiple() {
 	check(err)
 
 	header := bamReader.Header()
-	loadCellIDIndex(NUCLEIINDEX, header)
-	check(err)
+	loadCellIDIndexAndBAMWriter(NUCLEIINDEX, header)
 
 	for _, file := range(WRITERDICT) {
 		defer file.Close()
@@ -474,7 +590,7 @@ func loadCellIDDict(fname string) {
 	}
 }
 
-func loadCellIDIndex(fname string, header *sam.Header) {
+func loadCellIDIndexAndBAMWriter(fname string, header *sam.Header) {
 	f, err := os.Open(fname)
 	check(err)
 	defer f.Close()
@@ -484,7 +600,7 @@ func loadCellIDIndex(fname string, header *sam.Header) {
 	CELLIDDICTMULTIPLE = make(map[string]map[string]bool)
 	WRITERDICT = make(map[string]*os.File)
 	BAMWRITERDICT = make(map[string]*bam.Writer)
-	OUTBAMFILENAMELIST = make(map[string]bool)
+	OUTFILENAMELIST = make(map[string]bool)
 
 	for scanner.Scan() {
 		line := scanner.Text()
@@ -506,7 +622,47 @@ func loadCellIDIndex(fname string, header *sam.Header) {
 
 			BAMWRITERDICT[filename], err = bam.NewWriter(WRITERDICT[filename], header, THREADNB)
 			check(err)
-			OUTBAMFILENAMELIST[filename] = true
+			OUTFILENAMELIST[filename] = true
+		}
+
+		if _, isInside := CELLIDDICTMULTIPLE[cellid]; !isInside {
+			CELLIDDICTMULTIPLE[cellid] = make(map[string]bool)
+		}
+
+		CELLIDDICTMULTIPLE[cellid][filename] = true
+	}
+}
+
+
+func loadCellIDIndexAndBEDWriter(fname string) {
+	var filePath string
+	f, err := os.Open(fname)
+	check(err)
+	defer f.Close()
+	scanner := bufio.NewScanner(f)
+
+	CELLIDDICTMULTIPLE = make(map[string]map[string]bool)
+	BEDWRITERDICT = make(map[string]io.WriteCloser)
+	OUTFILENAMELIST = make(map[string]bool)
+
+	for scanner.Scan() {
+		line := scanner.Text()
+		split := strings.Split(line, "\t")
+		cellid := split[0]
+		filename := split[1]
+
+		ext := filename[len(filename)-7:len(filename)]
+
+		if ext != ".bed.gz" {
+			filePath = fmt.Sprintf("%s/%s.bed.gz", OUTPUTDIR, filename)
+		} else {
+			filePath = fmt.Sprintf("%s/%s", OUTPUTDIR, filename)
+		}
+
+		if _, isInside := BEDWRITERDICT[filename]; !isInside {
+			BEDWRITERDICT[filename] = utils.ReturnWriter(filePath, 6, false)
+			check(err)
+			OUTFILENAMELIST[filename] = true
 		}
 
 		if _, isInside := CELLIDDICTMULTIPLE[cellid]; !isInside {
