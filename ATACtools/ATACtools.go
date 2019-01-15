@@ -56,6 +56,8 @@ var IGNORESORTINGCATEGORY bool
 var IGNOREERROR bool
 /*OUTFILE ...*/
 var OUTFILE string
+/*OUTTAG ...*/
+var OUTTAG string
 /*MERGE ...*/
 var MERGE bool
 /*WRITECOMPL ...*/
@@ -93,6 +95,7 @@ func main() {
 	flag.BoolVar(&IGNORESORTINGCATEGORY, "ignore_sorting_category", false, "ignore file cateogry (identified by #) when sorting")
 	flag.StringVar(&SEARCHLINE, "search_in_line", "", "search specific motifs in line")
 	flag.StringVar(&OUTFILE, "output", "", "file name of the output")
+	flag.StringVar(&OUTTAG, "output_tag", "reference", "particule to annotate the output file name")
 	flag.BoolVar(&WRITECOMPL, "write_compl", false, "write the barcode complement of a fastq files")
 	flag.StringVar(&SEP, "delimiter", "\t", "delimiter used to split and sort the log file (default \t)")
 	flag.StringVar(&TAG, "tag", "", "tag used when creating a reference fastq file to tag all the reads (default \"\")")
@@ -162,8 +165,8 @@ func extractBEDreadsPerBarcodes(filename string, barcodefilename string) {
 	ext := path.Ext(filename)
 	ext2 := path.Ext(filename[:len(filename) - len(ext)])
 
-	outfile := fmt.Sprintf("%s.reference%s%s",
-		filename[:len(filename) - len(ext) -len(ext2)], ext2, ext)
+	outfile := fmt.Sprintf("%s.%s%s%s",
+		filename[:len(filename) - len(ext) -len(ext2)], OUTTAG, ext2, ext)
 
 	scanner, file := utils.ReturnReader(filename, 0, false)
 	defer file.Close()
@@ -218,8 +221,8 @@ func extractFASTQreadsPerBarcodes(filename string, barcodefilename string, waiti
 	ext := path.Ext(filename)
 	ext2 := path.Ext(filename[:len(filename) - len(ext)])
 
-	outfile := fmt.Sprintf("%s.reference%s%s",
-		filename[:len(filename) - len(ext) -len(ext2)], ext2, ext)
+	outfile := fmt.Sprintf("%s.%s%s%s",
+		filename[:len(filename) - len(ext) -len(ext2)], OUTTAG, ext2, ext)
 
 	scanner, file := utils.ReturnReader(filename, 0, false)
 	defer file.Close()
