@@ -98,16 +98,21 @@ func main() {
 
 	switch {
 	case ADDRG:
+		fmt.Printf("launching InsertRGTagToBamFile...\n")
 		InsertRGTagToBamFile()
 	case (DIVIDE || DIVIDEPARALLEL) && NUCLEIINDEX!="":
 		switch {
 		case BEDFILENAME != "" && DIVIDEPARALLEL:
+			fmt.Printf("launching DivideMultipleBedFileParallel...\n")
 			DivideMultipleBedFileParallel()
 		case BEDFILENAME != "":
+			fmt.Printf("launching DivideMultipleBedFile...\n")
 			DivideMultipleBedFile()
 		case DIVIDEPARALLEL:
+			fmt.Printf("launching DivideMultipleBamFileParallel...\n")
 			DivideMultipleBamFileParallel()
 		default:
+			fmt.Printf("launching DivideMultipleBamFile...\n")
 			DivideMultipleBamFile()
 		}
 
@@ -115,9 +120,14 @@ func main() {
 			fmt.Printf("output bam file: %s written\n", filename)
 		}
 
+	case DIVIDE && BEDFILENAME != "":
+		fmt.Printf("launching DivideBed...\n")
+		DivideBed()
 	case DIVIDE:
-		Divide()
+		fmt.Printf("launching DivideBam...\n")
+		DivideBam()
 	case CREATECELLINDEX:
+		fmt.Printf("launching CreateCellIndex...\n")
 		CreateCellIndex()
 	}
 
@@ -507,9 +517,48 @@ func DivideMultipleBamFile() {
 	}
 }
 
+/*DivideBam divide a bed file */
+func DivideBed() {
+	var readID string
+	var line string
 
-/*Divide divide the bam file */
-func Divide() {
+	if FILENAMEOUT == "" {
+		panic("-out must be specified!")
+	}
+
+	if NUCLEIFILE == "" {
+		panic("-cellsID must be specified!")
+	}
+
+	loadCellIDDict(NUCLEIFILE)
+
+	bedReader, file := utils.ReturnReader(BEDFILENAME, 0, false)
+	bedWriter := utils.ReturnWriter(FILENAMEOUT, 6, false)
+
+	defer file.Close()
+	defer bedWriter.Close()
+
+	fWrite, err := os.Create(FILENAMEOUT)
+	check(err)
+	defer fWrite.Close()
+
+	count := 0
+
+	for bedReader.Scan() {
+		line = bedReader.Text()
+		count++
+
+		readID = strings.Split(line, "\t")[3]
+
+		if value := CELLIDDICT[readID];value {
+			bedWriter.Write([]byte(fmt.Sprintf("%s\n", line)))
+		}
+	}
+}
+
+
+/*DivideBam divide the bam file */
+func DivideBam() {
 	var record * sam.Record
 	var read string
 	var readID string
