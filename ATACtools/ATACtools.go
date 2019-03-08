@@ -439,7 +439,7 @@ func countLine(filename string) int {
 func readtowrite(filename string) int  {
 	scanner, file := utils.ReturnReaderForBzipfile(filename, 0)
 	defer file.Close()
-	writer := utils.ReturnWriterForBzipfile("tmp.bz2", COMPRESSIONMODE)
+	writer := utils.ReturnWriterForBzipfile("tmp.bz2")
 
 	nbLines := 0
 

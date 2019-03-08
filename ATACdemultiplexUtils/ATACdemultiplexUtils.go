@@ -14,7 +14,6 @@ import "sort"
 
 import (
 	originalbzip2  "compress/bzip2"
-	Cbzip2 "ATACdemultiplex/cbzip2"
 )
 
 
@@ -81,16 +80,6 @@ func ExceCmd(cmd string) {
 	Check(err)
 }
 
-/*ReturnWriterForBzipfile ... */
-func ReturnWriterForBzipfile(fname string, compressionMode int) (io.WriteCloser) {
-	outputFile, err := os.Create(fname)
-	Check(err)
-	bzipFile := Cbzip2.NewWriter(outputFile, compressionMode)
-	Check(err)
-
-	return bzipFile
-}
-
 /*ReturnWriter ... */
 func ReturnWriter(fname string, compressionMode int, pureGo bool) (io.WriteCloser) {
 
@@ -99,12 +88,8 @@ func ReturnWriter(fname string, compressionMode int, pureGo bool) (io.WriteClose
 
 	switch ext {
 	case  ".bz2":
-		switch pureGo {
-		case true:
-			bzipFile = ReturnWriterForBzipfilePureGo(fname)
-		default:
-			bzipFile = ReturnWriterForBzipfile(fname, compressionMode)
-		}
+		bzipFile = ReturnWriterForBzipfile(fname)
+
 	case ".gz":
 		bzipFile = ReturnWriterForGzipFile(fname)
 	default:
@@ -126,8 +111,8 @@ func ReturnWriterForGzipFile(fname string) (io.WriteCloser) {
 	return bzipFile
 }
 
-/*ReturnWriterForBzipfilePureGo ... */
-func ReturnWriterForBzipfilePureGo(fname string) (*bzip2.Writer) {
+/*ReturnWriterForBzipfile ... */
+func ReturnWriterForBzipfile(fname string) (*bzip2.Writer) {
 	outputFile, err := os.Create(fname)
 	Check(err)
 	bzipFile, err := bzip2.NewWriter(outputFile, new(bzip2.WriterConfig))
@@ -249,7 +234,7 @@ func ReturnReaderForBzipfile(fname string, startingLine int) (*bufio.Scanner, *o
 
 	buffer := make([]byte, BUFFERSIZE, BUFFERSIZE)
 
-	readerBzip, fileOpen := returnCbzipReader(fname)
+	readerBzip, fileOpen := returnBzipReader(fname)
 
 	if startingLine == 0 {
 		bzipScanner = bufio.NewScanner(readerBzip)
@@ -265,7 +250,7 @@ loop:
 	for {
 		switch {
 		case nbLines > startingLine:
-			readerBzip, fileOpen = returnCbzipReader(fname)
+			readerBzip, fileOpen = returnBzipReader(fname)
 			bzipScanner = bufio.NewScanner(readerBzip)
 			scanUntilStartingLine(bzipScanner, startingLine)
 			break loop
@@ -293,8 +278,8 @@ func scanUntilStartingLine(scanner * bufio.Scanner, nbLine int) {
 }
 
 
-/*returnCbzipReader ... */
-func returnCbzipReader(fname string) (io.ReadCloser, *os.File) {
+/*returnBzipReader ... */
+func returnBzipReader(fname string) (io.Reader, *os.File) {
 	fileOpen, err := os.OpenFile(fname, 0, 0)
 
 	if err != nil {
@@ -302,7 +287,7 @@ func returnCbzipReader(fname string) (io.ReadCloser, *os.File) {
 	}
 
 	readerOs := bufio.NewReader(fileOpen)
-	readerBzip := Cbzip2.NewReader(readerOs)
+	readerBzip := originalbzip2.NewReader(readerOs)
 
 	return readerBzip, fileOpen
 }
