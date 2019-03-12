@@ -1,19 +1,18 @@
 package main
 
-import "fmt"
-import "flag"
-import "os"
-import "log"
-import "bufio"
-import "strings"
-import "time"
-import "errors"
-import "sync"
-import "io"
-import "path"
-
-
 import (
+	"fmt"
+	"flag"
+	"os"
+	"log"
+	"bufio"
+	"strings"
+	"time"
+	"errors"
+	"sync"
+	"io"
+	"path"
+	"bytes"
 	utils "ATACdemultiplex/ATACdemultiplexUtils"
 	pathutils "path"
 )
@@ -155,7 +154,6 @@ func initChan(logChan * map[string]chan StatsDict, logType []string) {
 
 /* */
 func main() {
-	// counter := make(map[string]int)
 	flag.StringVar(&FASTQ_I1, "fastq_I1", "", "fastq index file index paired read 1")
 	flag.StringVar(&FASTQ_I2, "fastq_I2", "", "fastq index file index paired read 2")
 	flag.StringVar(&FASTQ_R1, "fastq_R1", "", "fastq read file index paired read 1")
@@ -540,6 +538,10 @@ func launchAnalysisOneFile(
 	scannerR1, fileR1 = utils.ReturnReader(FASTQ_R1, startingRead * 4, USE_BZIP_GO_LIBRARY)
 	scannerR2, fileR2 = utils.ReturnReader(FASTQ_R2, startingRead * 4, USE_BZIP_GO_LIBRARY)
 
+	var barcodeBuffer bytes.Buffer
+	var R1Buffer bytes.Buffer
+	var R2Buffer bytes.Buffer
+	var barcode string
 
 	writerR1DictName := make(map[int]string)
 	writerR2DictName := make(map[int]string)
@@ -576,8 +578,8 @@ func launchAnalysisOneFile(
 	var strand_R1, strand_R2 string
 	var qual_R1, qual_R2 string
 	var index_p7, index_i7, index_p5, index_i5 = "", "", "", ""
-	var index_1, index_2 string
-	var to_write_R1, to_write_R2 string
+	var isValid bool
+	var  Replicate int
 
 	lengthP7 := LENGTHDIC["p7"]
 	lengthP5 := LENGTHDIC["p5"]
@@ -639,7 +641,8 @@ func launchAnalysisOneFile(
 		qual_R2 = scannerR2.Text()
 
 	errorRead:
-		if lengthP7 > len(read_I1) || lengthI5 > len(read_I2) || lengthI7 > len(read_I1) || lengthP5 > len(read_I2) || errorNbReads {
+		if lengthP7 > len(read_I1) || lengthI5 > len(read_I2) ||
+			lengthI7 > len(read_I1) || lengthP5 > len(read_I2) || errorNbReads {
 			if errorNbReads {
 				fmt.Printf("#### error at read nb: %d one of the reads ID is null\n", count)
 			} else {
@@ -691,14 +694,21 @@ func launchAnalysisOneFile(
 			index_p5 = read_I2[len(read_I2)-lengthP5-SHIFT_P5:len(read_I2)-SHIFT_P5]
 		}
 
-		isValid, Replicate := checkIndexes(&index_p7, &index_i7, &index_p5, &index_i5)
+		isValid, Replicate = checkIndexes(
+			&index_p7, &index_i7, &index_p5, &index_i5)
 
-		index = fmt.Sprintf("%s%s%s%s", index_p7, index_i7, index_i5, index_p5)
+		barcodeBuffer.WriteString(index_p7)
+		barcodeBuffer.WriteString(index_i7)
+		barcodeBuffer.WriteString(index_i5)
+		barcodeBuffer.WriteString(index_p5)
+
+		barcode = barcodeBuffer.String()
+		barcodeBuffer.Reset()
 
 		if WRITE_LOGS {
 			switch {
 			case isValid:
-				if _, isInside := logs[fmt.Sprintf("success_repl%d", Replicate)].dict[index]; !isInside {
+				if _, isInside := logs[fmt.Sprintf("success_repl%d", Replicate)].dict[barcode]; !isInside {
 					logs["stats"].dict[fmt.Sprintf("Number of cells repl. %d", Replicate)]++
 
 					logsIndexCell[fmt.Sprintf("success_p5_repl%d", Replicate)].dict[index_p5]++
@@ -707,7 +717,7 @@ func launchAnalysisOneFile(
 					logsIndexCell[fmt.Sprintf("success_i7_repl%d", Replicate)].dict[index_i7]++
 
 				}
-				logs[fmt.Sprintf("success_repl%d", Replicate)].dict[index]++
+				logs[fmt.Sprintf("success_repl%d", Replicate)].dict[barcode]++
 				logs["stats"].dict[fmt.Sprintf("Number of reads repl. %d", Replicate)]++
 				logsIndexRead[fmt.Sprintf("success_p5_repl%d", Replicate)].dict[index_p5]++
 				logsIndexRead[fmt.Sprintf("success_p7_repl%d", Replicate)].dict[index_p7]++
@@ -715,7 +725,7 @@ func launchAnalysisOneFile(
 				logsIndexRead[fmt.Sprintf("success_i7_repl%d", Replicate)].dict[index_i7]++
 
 			default:
-				if _, isInside := logs["fail"].dict[index]; !isInside {
+				if _, isInside := logs["fail"].dict[barcode]; !isInside {
 					logs["stats"].dict["number of cells (FAIL)"]++
 
 					logsIndexCell["fail_p5"].dict[index_p5]++
@@ -724,7 +734,7 @@ func launchAnalysisOneFile(
 					logsIndexCell["fail_i7"].dict[index_i7]++
 				}
 
-				logs["fail"].dict[index]++
+				logs["fail"].dict[barcode]++
 				logs["stats"].dict["number of reads (FAIL) "]++
 
 				logsIndexRead["fail_p5"].dict[index_p5]++
@@ -735,18 +745,39 @@ func launchAnalysisOneFile(
 
 		}
 
-		index_1 = fmt.Sprintf("@%s:%s", index, id_I1[1:])
-		index_2 = fmt.Sprintf("@%s:%s", index, id_I2[1:])
-
 		if !isValid {
 			goto endmainloop
 		}
 
-		to_write_R1 = fmt.Sprintf("%s\n%s\n%s\n%s\n", index_1, read_R1, strand_R1, qual_R1)
-		to_write_R2 = fmt.Sprintf("%s\n%s\n%s\n%s\n", index_2, read_R2, strand_R2, qual_R2)
+		R1Buffer.WriteRune('@')
+		R1Buffer.WriteString(barcode)
+		R1Buffer.WriteRune(':')
+		R1Buffer.WriteString(id_I1[1:])
+		R1Buffer.WriteRune('\n')
+		R1Buffer.WriteString(read_R1)
+		R1Buffer.WriteRune('\n')
+		R1Buffer.WriteString(strand_R1)
+		R1Buffer.WriteRune('\n')
+		R1Buffer.WriteString(qual_R1)
+		R1Buffer.WriteRune('\n')
 
-		writerR1Dict[writerR1DictName[Replicate]].Write([]byte(to_write_R1))
-		writerR2Dict[writerR2DictName[Replicate]].Write([]byte(to_write_R2))
+		R2Buffer.WriteRune('@')
+		R2Buffer.WriteString(barcode)
+		R2Buffer.WriteRune(':')
+		R2Buffer.WriteString(id_I2[1:])
+		R2Buffer.WriteRune('\n')
+		R2Buffer.WriteString(read_R2)
+		R2Buffer.WriteRune('\n')
+		R2Buffer.WriteString(strand_R2)
+		R2Buffer.WriteRune('\n')
+		R2Buffer.WriteString(qual_R2)
+		R2Buffer.WriteRune('\n')
+
+		writerR1Dict[writerR1DictName[Replicate]].Write(R1Buffer.Bytes())
+		writerR2Dict[writerR2DictName[Replicate]].Write(R2Buffer.Bytes())
+
+		R1Buffer.Reset()
+		R2Buffer.Reset()
 
 		endmainloop:
 		count++

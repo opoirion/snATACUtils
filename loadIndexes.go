@@ -152,7 +152,9 @@ func checkIndexes(
 	index_p7 * string,
 	index_i7 * string,
 	index_p5 * string,
-	index_i5 * string) (bool, int) {
+	index_i5 * string) (
+		bool,
+		int) {
 
 	if USENOINDEX{
 		return true, 1

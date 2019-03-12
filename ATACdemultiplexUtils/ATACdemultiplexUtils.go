@@ -51,7 +51,7 @@ func (i *ArrayFlags) Set(value string) error {
 	return nil
 }
 
-
+/*RankByWordCountAndDeleteOldMap ...*/
 func RankByWordCountAndDeleteOldMap(wordFrequencies * map[string]int) PairList{
 	pl := make(PairList, len(*wordFrequencies))
 	i := 0
