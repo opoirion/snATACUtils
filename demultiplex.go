@@ -13,6 +13,7 @@ import (
 	"io"
 	"path"
 	"bytes"
+	"strconv"
 	utils "ATACdemultiplex/ATACdemultiplexUtils"
 	pathutils "path"
 )
@@ -307,6 +308,8 @@ func writeReport() {
 		return
 	}
 	tStart := time.Now()
+	var buffer bytes.Buffer
+
 	fmt.Printf("writing reports....\n")
 	writeReportFromMultipleDict(&LOG_INDEX_CELL_CHAN, "index_cell")
 	writeReportFromMultipleDict(&LOG_INDEX_READ_CHAN, "index_read")
@@ -327,13 +330,25 @@ func writeReport() {
 			rankedLogs := utils.RankByWordCountAndDeleteOldMap(&logs)
 
 			for _, pair := range rankedLogs {
-				file.WriteString(fmt.Sprintf("%s\t%d\n", pair.Key, pair.Value))
+				buffer.WriteString(pair.Key)
+				buffer.WriteRune('\t')
+				buffer.WriteString(strconv.Itoa(pair.Value))
+				buffer.WriteRune('\n')
+
+				file.Write(buffer.Bytes())
+				buffer.Reset()
 			}
 
 		default:
 
 			for k, v := range logs {
-				file.WriteString(fmt.Sprintf("%s\t%d\n", k, v))
+				buffer.WriteString(k)
+				buffer.WriteRune('\t')
+				buffer.WriteString(strconv.Itoa(v))
+				buffer.WriteRune('\n')
+
+				file.Write(buffer.Bytes())
+				buffer.Reset()
 			}
 		}
 	}
@@ -348,6 +363,8 @@ func writeReportFromMultipleDict(channel * map[string]chan StatsDict, fname stri
 	filename := fmt.Sprintf("%sreport%s_%s.log",
 		OUTPUT_PATH, OUTPUT_TAG_NAME, fname)
 	file, err := os.Create(filename)
+
+	var buffer bytes.Buffer
 
 	defer file.Close()
 	Check(err)
@@ -383,13 +400,27 @@ func writeReportFromMultipleDict(channel * map[string]chan StatsDict, fname stri
 			rankedLogs := utils.RankByWordCountAndDeleteOldMap(&logs)
 
 			for _, pair := range rankedLogs {
-				fp.WriteString(fmt.Sprintf("%s\t%s\t%d\n", dictType, pair.Key, pair.Value))
+				buffer.WriteString(dictType)
+				buffer.WriteRune('\t')
+				buffer.WriteString(pair.Key)
+				buffer.WriteRune('\t')
+				buffer.WriteString(strconv.Itoa(pair.Value))
+				buffer.WriteRune('\n')
+				fp.Write(buffer.Bytes())
+				buffer.Reset()
 			}
 
 		default:
 
 			for k, v := range logs {
-				fp.WriteString(fmt.Sprintf("%s\t%s\t%d\n", dictType, k, v))
+				buffer.WriteString(dictType)
+				buffer.WriteRune('\t')
+				buffer.WriteString(k)
+				buffer.WriteRune('\t')
+				buffer.WriteString(strconv.Itoa(v))
+				buffer.WriteRune('\n')
+				fp.Write(buffer.Bytes())
+				buffer.Reset()
 			}
 		}
 	}
