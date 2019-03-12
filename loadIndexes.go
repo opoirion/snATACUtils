@@ -149,43 +149,47 @@ func loadIndexRangeFrom(indexType string, str string, platesize int) {
 }
 
 func checkIndexes(
-	index_p7 * string,
-	index_i7 * string,
-	index_p5 * string,
-	index_i5 * string) (
+	index_p7 string,
+	index_i7 string,
+	index_p5 string,
+	index_i5 string) (
 		bool,
-		int) {
+		int,
+		string,
+		string,
+		string,
+		string) {
 
 	if USENOINDEX{
-		return true, 1
+		return true, 1, index_p7, index_i7, index_i5, index_p5
 	}
 
-	success_p7, toChange_p7, ref_p7, replicate_p7 := checkOneIndex(*index_p7, "p7")
-	success_i7, toChange_i7, ref_i7, replicate_i7 := checkOneIndex(*index_i7, "i7")
-	success_i5, toChange_i5, ref_i5, replicate_i5 := checkOneIndex(*index_i5, "i5")
-	success_p5, toChange_p5, ref_p5, replicate_p5 := checkOneIndex(*index_p5, "p5")
+	success_p7, toChange_p7, ref_p7, replicate_p7 := checkOneIndex(index_p7, "p7")
+	success_i7, toChange_i7, ref_i7, replicate_i7 := checkOneIndex(index_i7, "i7")
+	success_i5, toChange_i5, ref_i5, replicate_i5 := checkOneIndex(index_i5, "i5")
+	success_p5, toChange_p5, ref_p5, replicate_p5 := checkOneIndex(index_p5, "p5")
 
 	sum := replicate_p5 + replicate_i5 + replicate_i7 + replicate_p7
 	success := (success_p7 && success_i7 && success_i5 && success_p5 && sum !=0)
 
 	if !success{
-		return false, 0
+		return false, 0, index_p7, index_i7, index_i5, index_p5
 	}
 
 	if toChange_p7{
-		*index_p7 = ref_p7
+		index_p7 = ref_p7
 	}
 
 	if toChange_i7{
-		*index_i7 = ref_i7
+		index_i7 = ref_i7
 	}
 
 	if toChange_p5{
-		*index_p5 = ref_p5
+		index_p5 = ref_p5
 	}
 
 	if toChange_i5{
-		*index_i5 = ref_i5
+		index_i5 = ref_i5
 	}
 
 	var repl int
@@ -197,7 +201,7 @@ func checkIndexes(
 		repl= 2
 	}
 
-	return true, repl
+	return true, repl, index_p7, index_i7, index_i5, index_p5
 }
 
 

@@ -694,8 +694,8 @@ func launchAnalysisOneFile(
 			index_p5 = read_I2[len(read_I2)-lengthP5-SHIFT_P5:len(read_I2)-SHIFT_P5]
 		}
 
-		isValid, Replicate = checkIndexes(
-			&index_p7, &index_i7, &index_p5, &index_i5)
+		isValid, Replicate, index_p7, index_i7, index_p5, index_i5 = checkIndexes(
+			index_p7, index_i7, index_p5, index_i5)
 
 		barcodeBuffer.WriteString(index_p7)
 		barcodeBuffer.WriteString(index_i7)
