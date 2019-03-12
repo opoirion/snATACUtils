@@ -161,35 +161,19 @@ func checkIndexes(
 		string) {
 
 	if USENOINDEX{
-		return true, 1, index_p7, index_i7, index_i5, index_p5
+		return true, 1, index_p7, index_i7, index_p5, index_i5
 	}
 
-	success_p7, toChange_p7, ref_p7, replicate_p7 := checkOneIndex(index_p7, "p7")
-	success_i7, toChange_i7, ref_i7, replicate_i7 := checkOneIndex(index_i7, "i7")
-	success_i5, toChange_i5, ref_i5, replicate_i5 := checkOneIndex(index_i5, "i5")
-	success_p5, toChange_p5, ref_p5, replicate_p5 := checkOneIndex(index_p5, "p5")
+	success_p7, ref_p7, replicate_p7 := checkOneIndex(index_p7, "p7")
+	success_i7, ref_i7, replicate_i7 := checkOneIndex(index_i7, "i7")
+	success_i5, ref_i5, replicate_i5 := checkOneIndex(index_i5, "i5")
+	success_p5, ref_p5, replicate_p5 := checkOneIndex(index_p5, "p5")
 
 	sum := replicate_p5 + replicate_i5 + replicate_i7 + replicate_p7
 	success := (success_p7 && success_i7 && success_i5 && success_p5 && sum !=0)
 
 	if !success{
-		return false, 0, index_p7, index_i7, index_i5, index_p5
-	}
-
-	if toChange_p7{
-		index_p7 = ref_p7
-	}
-
-	if toChange_i7{
-		index_i7 = ref_i7
-	}
-
-	if toChange_p5{
-		index_p5 = ref_p5
-	}
-
-	if toChange_i5{
-		index_i5 = ref_i5
+		return false, 0, index_p7, index_i7, index_p5, index_i5
 	}
 
 	var repl int
@@ -201,19 +185,19 @@ func checkIndexes(
 		repl= 2
 	}
 
-	return true, repl, index_p7, index_i7, index_i5, index_p5
+	return true, repl, ref_p7, ref_i7, ref_p5, ref_i5
 }
 
 
-func checkOneIndex(index string, indexName string) (success bool, toChange bool, ref string, replicate int) {
+func checkOneIndex(index string, indexName string) (success bool, ref string, replicate int) {
 
 	switch{
 	case index == "":
-		return true, false, "", 0
+		return true, index, 0
 	case USEALLBARCODES[indexName]:
 		switch strings.Count(index, "N") {
 		case 0:
-			return true, false, "", 0
+			return true, index, 0
 		default:
 			goto fail
 		}
@@ -222,13 +206,13 @@ func checkOneIndex(index string, indexName string) (success bool, toChange bool,
 		_, isInside := INDEX_NO_DICT[indexName][index]
 
 		if isInside {
-			return true, false, "", 1
+			return true, index, 1
 		}
 
 		isCloseEnougth, refindex := getNbMistake(index, indexName, INDEX_NO_DICT)
 
 		if isCloseEnougth {
-			return true, true, refindex, 1
+			return true, refindex, 1
 		}
 
 	default:
@@ -237,11 +221,11 @@ func checkOneIndex(index string, indexName string) (success bool, toChange bool,
 
 		switch{
 		case isInside_r1 && isInside_r2:
-			return true, false, "", 0
+			return true, index, 0
 		case isInside_r1:
-			return true, false, "", 1
+			return true, index, 1
 		case isInside_r2:
-			return true, false, "", -1
+			return true, index, -1
 		default:
 			isCloseEnougth_r1, refindex_r1 := getNbMistake(index, indexName, INDEX_R1_DICT)
 			isCloseEnougth_r2, refindex_r2 := getNbMistake(index, indexName, INDEX_R2_DICT)
@@ -251,12 +235,12 @@ func checkOneIndex(index string, indexName string) (success bool, toChange bool,
 				if refindex_r1 != refindex_r2 {
 					goto fail
 				}
-				return true, true, refindex_r1, 0
+				return true, refindex_r1, 0
 
 			case isCloseEnougth_r1:
-				return true, true, refindex_r1, 1
+				return true, refindex_r1, 1
 			case isCloseEnougth_r2:
-				return true, true, refindex_r2, -1
+				return true, refindex_r2, -1
 			default:
 				goto fail
 			}
@@ -264,7 +248,7 @@ func checkOneIndex(index string, indexName string) (success bool, toChange bool,
 
 	}
 	fail:
-	return false, false, "", 0
+	return false, index, 0
 }
 
 func getNbMistake (index string, indexName string, dict map[string]map[string]bool) (bool, string) {
