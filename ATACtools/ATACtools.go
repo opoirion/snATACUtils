@@ -12,6 +12,7 @@ import(
 	"sort";
 	"sync";
 	"strconv";
+	"bytes"
 	// "github.com/dsnet/compress/bzip2"
 	utils "ATACdemultiplex/ATACdemultiplexUtils"
 	// Cbzip2 "ATACdemultiplex/cbzip2"
@@ -161,6 +162,7 @@ func extractBEDreadsPerBarcodes(filename string, barcodefilename string) {
 	var refbarcodes = make(map[string]bool)
 	var split = make([]string, 4, 4)
 	var notCheckBarcode = true
+	var buffer bytes.Buffer
 
 	ext := path.Ext(filename)
 	ext2 := path.Ext(filename[:len(filename) - len(ext)])
@@ -199,10 +201,23 @@ func extractBEDreadsPerBarcodes(filename string, barcodefilename string) {
 		if refbarcodes[barcode] || notCheckBarcode {
 
 			if (len(TAG) > 0) {
-				writer.Write([]byte(fmt.Sprintf("%s\t%s\t%s\t%s%s\n", split[0], split[1], split[2], barcode, TAG)))
+				buffer.WriteString(split[0])
+				buffer.WriteRune('\t')
+				buffer.WriteString(split[1])
+				buffer.WriteRune('\t')
+				buffer.WriteString(split[2])
+				buffer.WriteRune('\t')
+				buffer.WriteString(barcode)
+				buffer.WriteString(TAG)
+				buffer.WriteRune('\n')
+
 			} else {
-				writer.Write([]byte(fmt.Sprintf("%s\n", line)))
+				buffer.WriteString(line)
+				buffer.WriteRune('\n')
 			}
+
+			writer.Write(buffer.Bytes())
+			buffer.Reset()
 
 		}
 	}
@@ -217,6 +232,7 @@ func extractFASTQreadsPerBarcodes(filename string, barcodefilename string, waiti
 	var refbarcodes = make(map[string]bool)
 	var readHeader = make([]string, 2, 2)
 	defer waiting.Done()
+	var buffer bytes.Buffer
 
 	ext := path.Ext(filename)
 	ext2 := path.Ext(filename[:len(filename) - len(ext)])
@@ -258,10 +274,20 @@ func extractFASTQreadsPerBarcodes(filename string, barcodefilename string, waiti
 
 		if tocopy {
 			if (isfour == 0) && (len(TAG) > 0) {
-				writer.Write([]byte(fmt.Sprintf("@%s%s:%s\n", barcode, TAG, readHeader[1])))
+				buffer.WriteRune('@')
+				buffer.WriteString(barcode)
+				buffer.WriteString(TAG)
+				buffer.WriteRune(':')
+				buffer.WriteString(readHeader[1])
+				buffer.WriteRune('\n')
+
 			} else {
-				writer.Write([]byte(fmt.Sprintf("%s\n", line)))
+				buffer.WriteString(line)
+				buffer.WriteRune('\n')
 			}
+
+			writer.Write(buffer.Bytes())
+			buffer.Reset()
 		}
 
 		isfour++
@@ -275,9 +301,9 @@ func extractFASTQreadsPerBarcodes(filename string, barcodefilename string, waiti
 	fmt.Printf("file created: %s\n", outfile)
 }
 
-
+/*writeComplement ...*/
 func writeComplement(filename string, complStrategy string) (nbLines int) {
-
+	var buffer bytes.Buffer
 	ext := path.Ext(filename)
 	ext2 := path.Ext(filename[:len(filename) - len(ext)])
 
@@ -290,8 +316,6 @@ func writeComplement(filename string, complStrategy string) (nbLines int) {
 	defer writer.Close()
 
 	cycle := 0
-
-	var newID string
 
 	for scanner.Scan() {
 		nbLines++
@@ -314,24 +338,35 @@ func writeComplement(filename string, complStrategy string) (nbLines int) {
 				split1 := barcode[:10]
 				split2 := barcode[10:]
 
-				newID = fmt.Sprintf("@%s%s:%s\n",
-					split1, returnComp(split2), rest)
+				buffer.WriteRune('@')
+				buffer.WriteString(split1)
+				buffer.Write(returnComp(split2))
+				buffer.WriteRune(':')
+				buffer.WriteString(rest)
+				buffer.WriteRune('\n')
 
 			case "split_10_compl_first":
 				split1 := barcode[:10]
 				split2 := barcode[10:]
 
-				newID = fmt.Sprintf("@%s%s:%s\n",
-					returnComp(split1), split2, rest)
+				buffer.WriteRune('@')
+				buffer.Write(returnComp(split1))
+				buffer.WriteString(split2)
+				buffer.WriteRune(':')
+				buffer.WriteString(rest)
+				buffer.WriteRune('\n')
+
 			default:
 				panic(fmt.Sprintf("wrong strategy used!: %s\n", COMPLSTRATEGY))
 			}
 
-			writer.Write([]byte(newID))
 		default:
-			writer.Write([]byte(line + "\n"))
+			buffer.WriteString(line)
+			buffer.WriteRune('\n')
 
 		}
+		writer.Write(buffer.Bytes())
+		buffer.Reset()
 
 		cycle++
 
@@ -371,6 +406,7 @@ func createIndexCountFile(filename string) (nbLines int) {
 	dict := map[string]int {}
 
 	cycle := 0
+	var buffer bytes.Buffer
 
 	for scanner .Scan() {
 		nbLines++
@@ -398,7 +434,12 @@ func createIndexCountFile(filename string) (nbLines int) {
 	}
 
 	for key, value := range dict {
-		outfile.WriteString(fmt.Sprintf("%s%s%d\n", key, SEP, value))
+		buffer.WriteString(key)
+		buffer.WriteString(SEP)
+		buffer.WriteString(strconv.Itoa(value))
+		buffer.WriteRune('\n')
+		outfile.Write(buffer.Bytes())
+		buffer.Reset()
 	}
 
 	if SORTLOGS {

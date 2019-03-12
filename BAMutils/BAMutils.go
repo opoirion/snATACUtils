@@ -14,6 +14,8 @@ import(
 	"time"
 	"path"
 	"sync"
+	"bytes"
+	"strconv"
 	utils "ATACdemultiplex/ATACdemultiplexUtils"
 )
 
@@ -140,6 +142,7 @@ func CreateCellIndex() {
 	var record * sam.Record
 	var readID string
 	var count int
+	var buffer bytes.Buffer
 
 	readIndex := make(map[string]int)
 
@@ -178,8 +181,16 @@ func CreateCellIndex() {
 		readIndex[readID]++
 	}
 
+
 	for readID, count = range(readIndex) {
-		fOut.WriteString(fmt.Sprintf("%s\t%d\n", readID, count))
+		buffer.WriteString(readID)
+		buffer.WriteRune('\t')
+		buffer.WriteString(strconv.Itoa(count))
+		buffer.WriteRune('\n')
+
+		fOut.Write(buffer.Bytes())
+
+		buffer.Reset()
 	}
 }
 
@@ -385,6 +396,7 @@ func divideMultipleBedFileOneThread(threadID int, waiting *sync.WaitGroup){
 	var isInside bool
 	var filename string
 	var line string
+	var buffer bytes.Buffer
 
 	bedReader, file := utils.ReturnReader(BEDFILENAME, 0, false)
 	defer file.Close()
@@ -401,13 +413,16 @@ func divideMultipleBedFileOneThread(threadID int, waiting *sync.WaitGroup){
 		readID = strings.Split(line, "\t")[3]
 
 		if  _, isInside = CELLIDDICTMULTIPLE[readID];isInside {
+			buffer.WriteString(line)
+			buffer.WriteRune('\n')
 
 			for filename = range(CELLIDDICTMULTIPLE[readID]) {
 				if !((startIndex <= INPUTFNAMEINDEX[filename]) && (INPUTFNAMEINDEX[filename]  < endIndex)) {
 					continue
 				}
-				BEDWRITERDICT[filename].Write([]byte(fmt.Sprintf("%s\n", line)))
+				BEDWRITERDICT[filename].Write(buffer.Bytes())
 			}
+			buffer.Reset()
 		}
 	}
 }
@@ -419,6 +434,7 @@ func DivideMultipleBedFile() {
 	var readID string
 	var isInside bool
 	var filename string
+	var buffer bytes.Buffer
 
 	bedReader, file := utils.ReturnReader(BEDFILENAME, 0, false)
 	defer file.Close()
@@ -443,10 +459,14 @@ func DivideMultipleBedFile() {
 		readID = strings.Split(line, "\t")[3]
 
 		if  _, isInside = CELLIDDICTMULTIPLE[readID];isInside {
+			buffer.WriteString(line)
+			buffer.WriteRune('\n')
 
 			for filename = range(CELLIDDICTMULTIPLE[readID]) {
-				BEDWRITERDICT[filename].Write([]byte(fmt.Sprintf("%s\n", line)))
+				BEDWRITERDICT[filename].Write(buffer.Bytes())
 			}
+
+			buffer.Reset()
 		}
 	}
 }
@@ -521,6 +541,7 @@ func DivideMultipleBamFile() {
 func DivideBed() {
 	var readID string
 	var line string
+	var buffer bytes.Buffer
 
 	if FILENAMEOUT == "" {
 		panic("-out must be specified!")
@@ -551,7 +572,10 @@ func DivideBed() {
 		readID = strings.Split(line, "\t")[3]
 
 		if value := CELLIDDICT[readID];value {
-			bedWriter.Write([]byte(fmt.Sprintf("%s\n", line)))
+			buffer.WriteString(line)
+			buffer.WriteRune('\n')
+			bedWriter.Write(buffer.Bytes())
+			buffer.Reset()
 		}
 	}
 }
