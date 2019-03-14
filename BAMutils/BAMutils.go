@@ -646,11 +646,15 @@ func BedToBedGraphDictMultipleFile(){
 		BEDTOBEDGRAPHCHAN[i] = make(chan map[int]int, THREADNB)
 	}
 
+	guard := make(chan struct{}, THREADNB)
+
 	var waiting sync.WaitGroup
 	waiting.Add(len(BEDFILENAMES))
 
 	for _, file := range BEDFILENAMES {
+		guard <- struct{}{}
 		go bedToBedGraphDictOneThread(file, &waiting)
+		<-guard
 	}
 
 	waiting.Wait()
@@ -694,10 +698,12 @@ func BedToBedGraphDictMultipleFile(){
 	sort.Strings(chroList)
 
 	for _, chro := range chroList {
+		guard <- struct{}{}
 		chroID := chroHashDict[chro]
 		bedFname := fmt.Sprintf("%s.chr%s.bedgraph", filenameout, chro)
 		fileList = append(fileList, bedFname)
 		go writeIndividualChrBedGraph(bedFname, chroID, chro, scale, &waitingSort)
+		<-guard
 	}
 
 	waitingSort.Wait()
