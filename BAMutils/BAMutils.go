@@ -16,6 +16,7 @@ import(
 	"sync"
 	"bytes"
 	"strconv"
+	"sort"
 	utils "ATACdemultiplex/ATACdemultiplexUtils"
 )
 
@@ -25,6 +26,9 @@ var BAMFILENAME string
 
 /*BEDFILENAME bam file name (input) */
 var BEDFILENAME string
+
+/*BEDFILENAMES bam file name (input) */
+var BEDFILENAMES utils.ArrayFlags
 
 /*FILENAMEOUT bam file name (output) */
 var FILENAMEOUT string
@@ -74,8 +78,27 @@ var ADDRG bool
 /*CREATECELLINDEX  dividing the bam file tool */
 var CREATECELLINDEX bool
 
+/*BEDTOBEDGRAPHCHAN bed_to_bedgraph channel dict */
+var BEDTOBEDGRAPHCHAN map[int]chan map[int]int
+
+/*STRTOINTCHAN int -> string map chan */
+var STRTOINTCHAN chan map[string]int
+
+/*INTCHAN int -> string map chan */
+var INTCHAN chan int
+
+/*BINSIZE bin size for bedgraph creation */
+var BINSIZE int
+
+/*BEDTOBEDGRAPH  bedgraph creation bool */
+var BEDTOBEDGRAPH bool
+
+
 func main() {
 	flag.StringVar(&BEDFILENAME, "bed", "", "name of the bed file")
+	flag.Var(&BEDFILENAMES, "beds", "name of the bed files")
+	flag.BoolVar(&BEDTOBEDGRAPH, "bed_to_bedgraph", false,
+		"transform one (-bed) or multiple (use multiple -beds option) into bedgraph")
 	flag.StringVar(&BAMFILENAME, "bam", "", "name of the bam file")
 	flag.StringVar(&FILENAMEOUT, "out", "", "name of the output file")
 	flag.StringVar(&NUCLEIFILE, "cellsID", "", "file with cell IDs")
@@ -86,6 +109,7 @@ func main() {
 	flag.BoolVar(&DIVIDEPARALLEL, "divide_parallel", false, "divide the bam file according to barcode file list usng a parallel version")
 	flag.BoolVar(&ADDRG, "add_rg", false, "add cell ID as RG group to bam file")
 	flag.IntVar(&THREADNB, "threads", 1, "threads concurrency for reading bam file")
+	flag.IntVar(&BINSIZE, "binsize", 50, "bin size for bedgraph creation")
 	flag.Parse()
 
 	if OUTPUTDIR != "" {
@@ -131,6 +155,13 @@ func main() {
 	case CREATECELLINDEX:
 		fmt.Printf("launching CreateCellIndex...\n")
 		CreateCellIndex()
+	case BEDTOBEDGRAPH:
+		if BEDFILENAME != ""{
+			BEDFILENAMES = append(BEDFILENAMES, BEDFILENAME)
+		}
+		fmt.Printf("launching BedToBedGraphDictMultipleFile...\n")
+		BedToBedGraphDictMultipleFile()
+
 	}
 
 	tDiff := time.Now().Sub(tStart)
@@ -277,6 +308,10 @@ func DivideMultipleBedFileParallel() {
 
 	var waiting sync.WaitGroup
 	waiting.Add(THREADNB)
+
+	for i := 1; i < 100; i++ {
+		BEDTOBEDGRAPHCHAN[i] = make(chan map[int]int)
+	}
 
 	for i := 0; i < THREADNB;i++ {
 		go divideMultipleBedFileOneThread(i, &waiting)
@@ -576,6 +611,302 @@ func DivideBed() {
 			buffer.WriteRune('\n')
 			bedWriter.Write(buffer.Bytes())
 			buffer.Reset()
+		}
+	}
+}
+
+/*sum ... */
+func sum(array []int)int{
+	sum := 0
+	var val int
+
+	for _, val = range array {
+		sum += val
+	}
+
+	return sum
+}
+
+
+/*BedToBedGraphDictMultipleFile Transform multiple bed files given using -bed arg */
+func BedToBedGraphDictMultipleFile(){
+	for _, file := range BEDFILENAMES {
+		if _, err := os.Stat(file); os.IsNotExist(err) {
+			log.Fatal(fmt.Sprintf("### bed file: %s do not exists!!!\n", file))
+		}
+	}
+
+	tStart := time.Now()
+
+	INTCHAN = make(chan int, len(BEDFILENAMES))
+	STRTOINTCHAN = make(chan map[string]int, len(BEDFILENAMES))
+	BEDTOBEDGRAPHCHAN = make(map[int]chan map[int]int, THREADNB)
+
+	for i := 1 ; i < 100 ; i++ {
+		BEDTOBEDGRAPHCHAN[i] = make(chan map[int]int, THREADNB)
+	}
+
+	var waiting sync.WaitGroup
+	waiting.Add(len(BEDFILENAMES))
+
+	for _, file := range BEDFILENAMES {
+		go bedToBedGraphDictOneThread(file, &waiting)
+	}
+
+	waiting.Wait()
+
+	tDiff := time.Now().Sub(tStart)
+	fmt.Printf("iterating through bed files done in: %f sec \n", tDiff.Seconds())
+	listNbReads := extractIntfromChan(INTCHAN)
+	chroHashDict := extractStrIntDictFromChan(STRTOINTCHAN)
+
+	totNbReads := sum(listNbReads)
+
+	fmt.Printf("sumf of nub READS: %d\n", totNbReads)
+
+	var waitingSort sync.WaitGroup
+	waitingSort.Add(len(chroHashDict))
+
+	filenameout := FILENAMEOUT
+
+	if filenameout == "" {
+		filenameout = BEDFILENAMES[0]
+	}
+
+	ext := path.Ext(filenameout)
+
+	if ext == ".bedgraph" {
+		filenameout = filenameout[0:len(filenameout) - len(ext)]
+	}
+
+	scale := (float64(totNbReads) / 1e6) * (float64(BINSIZE) / 1e3)
+
+	tStart = time.Now()
+
+	chroList := []string{}
+	fileList := []string{}
+
+	for chro := range chroHashDict {
+		if len(chroHashDict) > 0 {
+			chroList = append(chroList, chro)
+		}
+	}
+	sort.Strings(chroList)
+
+	for _, chro := range chroList {
+		chroID := chroHashDict[chro]
+		bedFname := fmt.Sprintf("%s.chr%s.bedgraph", filenameout, chro)
+		fileList = append(fileList, bedFname)
+		go writeIndividualChrBedGraph(bedFname, chroID, chro, scale, &waitingSort)
+	}
+
+	waitingSort.Wait()
+	tDiff = time.Now().Sub(tStart)
+	fmt.Printf(" writing done in: %f sec \n", tDiff.Seconds())
+
+	cmd := fmt.Sprintf("cat %s > %s.bedgraph", strings.Join(fileList," "), filenameout)
+
+	utils.ExceCmd(cmd)
+	fmt.Printf("%s.bedgraph created!\n", filenameout)
+
+	cmd = fmt.Sprintf("rm %s", strings.Join(fileList, " "))
+	utils.ExceCmd(cmd)
+}
+
+
+/*writeIndividualChrBedGraph write an  bedgraph file for a unique chromosome */
+func writeIndividualChrBedGraph(bedFname string, chroID int, chro string,
+	scale float64, waiting * sync.WaitGroup){
+	defer waiting.Done()
+
+	fWrite, err := os.Create(bedFname)
+	check(err)
+	defer fWrite.Close()
+
+	bedgraphDict := extractIntDictFromChan(BEDTOBEDGRAPHCHAN[chroID])
+	var buffer bytes.Buffer
+
+	chroPosList := make([]int, 0, len(bedgraphDict))
+
+	for key := range bedgraphDict {
+		chroPosList = append(chroPosList, key)
+	}
+
+	sort.Ints(chroPosList)
+	var pos int
+	var value float64
+	currentPos := 0
+
+	for _, binnb := range chroPosList {
+		pos = binnb * BINSIZE
+
+		if pos != currentPos {
+			buffer.WriteString("chr")
+			buffer.WriteString(chro)
+			buffer.WriteRune('\t')
+			buffer.WriteString(strconv.Itoa(currentPos))
+			buffer.WriteRune('\t')
+			buffer.WriteString(strconv.Itoa(pos))
+			buffer.WriteRune('\t')
+			buffer.WriteRune('0')
+			buffer.WriteRune('\n')
+
+			fWrite.Write(buffer.Bytes())
+			buffer.Reset()
+		}
+
+		value = float64(bedgraphDict[binnb]) / scale
+
+		buffer.WriteString("chr")
+		buffer.WriteString(chro)
+		buffer.WriteRune('\t')
+		buffer.WriteString(strconv.Itoa(pos))
+		buffer.WriteRune('\t')
+		buffer.WriteString(strconv.Itoa(pos + BINSIZE))
+		buffer.WriteRune('\t')
+		buffer.WriteString(strconv.FormatFloat(value, 'f', 2, 32))
+		buffer.WriteRune('\n')
+
+		fWrite.Write(buffer.Bytes())
+		buffer.Reset()
+
+		currentPos = pos + BINSIZE
+	}
+}
+
+/*extractIntfromChan Transform multiple bed files given using -bed arg */
+func extractIntfromChan(channel chan int) ([]int) {
+
+	list := []int{}
+
+	loop:
+	for {
+		select{
+		case val := <-channel:
+			list = append(list, val)
+		default:
+			break loop
+		}
+	}
+
+	return list
+}
+
+/*extractStrIntDictFromChan extract and update multiple string -> int dict */
+func extractStrIntDictFromChan(channel chan map[string]int) (map[string]int) {
+
+	dict := make(map[string]int)
+	var isInside bool
+
+	loop:
+	for {
+		select{
+		case statsDict := <-channel:
+			for key, value := range statsDict {
+				if _, isInside = dict[key];!isInside {
+					dict[key] = value
+				}
+			}
+		default:
+			break loop
+		}
+	}
+
+	return dict
+}
+
+
+/*extractIntDictFromChan Transform multiple bed files given using -bed arg */
+func extractIntDictFromChan(channel chan map[int]int) (map[int]int) {
+
+	dict := make(map[int]int)
+
+	loop:
+	for {
+		select{
+		case statsDict := <-channel:
+			for key, value := range statsDict {
+				dict[key] += value
+			}
+		default:
+			break loop
+		}
+	}
+
+	return dict
+}
+
+/*bedToBedGraphDictOneThread Transform a bed file into a bedgraph dict */
+func bedToBedGraphDictOneThread(bed string, waiting *sync.WaitGroup){
+   	bedReader, file := utils.ReturnReader(bed, 0, false)
+	defer file.Close()
+	defer waiting.Done()
+
+	var split []string
+	var chroStr string
+	var chroIndex int
+	var pos int
+	var lineNb int
+	var err error
+	var nbReads int
+	var line string
+	var isInside bool
+
+	bedtobedgraphdict := make(map[int]map[int]int)
+	chrDict := make(map[string]int)
+
+	for i := 1; i < 100; i++ {
+		bedtobedgraphdict[i] = make(map[int]int)
+	}
+
+	uncommon := 50
+
+	for bedReader.Scan() {
+		line = bedReader.Text()
+		nbReads++
+
+		split = strings.Split(line, "\t")
+
+		if CREATECELLINDEX {
+			if isInside = CELLIDDICT[split[4]];!isInside {
+				continue
+			}
+		}
+
+		chroStr = split[0][3:]
+		chroIndex, err = strconv.Atoi(chroStr)
+
+		if err != nil {
+
+			if _, isInside = chrDict[chroStr];!isInside {
+				chrDict[chroStr] = uncommon
+				uncommon++
+			}
+
+			chroIndex = chrDict[chroStr]
+		}
+
+		pos, err = strconv.Atoi(split[1])
+
+		if err != nil {
+			log.Fatal(fmt.Sprintf("Error with line %s at position: %d\n",
+				line, lineNb))
+		}
+
+		bedtobedgraphdict[chroIndex][pos / BINSIZE]++
+	}
+
+	INTCHAN <- nbReads
+	STRTOINTCHAN <- chrDict
+
+	for key := range bedtobedgraphdict {
+
+		if len(bedtobedgraphdict[key]) > 0 {
+			if key < 50 {
+				chrDict[fmt.Sprintf(strconv.Itoa(key))] = key
+			}
+
+			BEDTOBEDGRAPHCHAN[key] <- bedtobedgraphdict[key]
 		}
 	}
 }
