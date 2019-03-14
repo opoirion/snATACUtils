@@ -666,7 +666,7 @@ func BedToBedGraphDictMultipleFile(){
 
 	totNbReads := sum(listNbReads)
 
-	fmt.Printf("sumf of nub READS: %d\n", totNbReads)
+	fmt.Printf("sumf of number READS: %d\n", totNbReads)
 
 	var waitingSort sync.WaitGroup
 	waitingSort.Add(len(chroHashDict))
