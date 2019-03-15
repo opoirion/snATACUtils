@@ -81,12 +81,17 @@ func main() {
 	flag.IntVar(&MAX, "max_nb_lines", 0, "max number of lines")
 	flag.BoolVar(&BZ2, "bz2", false, "is bz2")
 	flag.BoolVar(&GZ, "gz", false, "is gz")
-	flag.BoolVar(&CREATEREFFASTQ, "create_ref_fastq", false, "create a ref FASTQ file using a reference barcode list")
-	flag.BoolVar(&CREATEREFBEDFILE, "create_ref_bed", false, "create a ref bed file using a reference barcode list")
+	flag.BoolVar(&CREATEREFFASTQ, "create_ref_fastq", false, `create a ref FASTQ file using a reference barcode list
+            USAGE: ATACtools -create_ref_bed -filename <fname> (-ref_barcode_list <fname> -tag <string>)`)
+	flag.BoolVar(&CREATEREFBEDFILE, "create_ref_bed", false, `create a ref bed file using a reference barcode list
+            USAGE: ATACtools -create_ref_fastq -filnames <fname1> -filnames <fname2> ... (-ref_barcode_list <fname> -tag <string>)`)
 	flag.StringVar(&REFBARCODELIST, "ref_barcode_list", "", "file containing the reference barcodes (one per line)")
-	flag.BoolVar(&MERGE, "merge", false, "merge input log files together")
+	flag.BoolVar(&MERGE, "merge", false, `merge input log files together
+            USAGE: ATACtools -merge -filename "<fname1> <fname2> <fname3> ..."  (-sortfile -delimiter "<string>" -ignoreerror -ignore_sorting_category)`)
 	flag.IntVar(&GOTOLINE, "gotoline", 0, "go to line")
-	flag.BoolVar(&SORTLOGS, "sortfile", false, "sort files (<key><SEP><value> file")
+	flag.BoolVar(&SORTLOGS, "sortfile", false,
+		`sort files (<key><SEP><value> file
+            USAGE: ATACtools -sortfile -filename <fname> (-delimiter <string> -ignoreerror -ignore_sorting_category)`)
 	flag.BoolVar(&PRINTLASTLINE, "printlastline", false, "print last line")
 	flag.IntVar(&PRINTLASTLINES, "printlastlines", 0, "print last n lines")
 	flag.BoolVar(&BZ2PUREGO, "bz2PureGo", false, "is bz2 using pureGo")
@@ -100,7 +105,8 @@ func main() {
 	flag.StringVar(&SEP, "delimiter", "\t", "delimiter used to split and sort the log file (default \t)")
 	flag.StringVar(&TAG, "tag", "", "tag used when creating a reference fastq file to tag all the reads (default \"\")")
 	flag.StringVar(&COMPLSTRATEGY, "compl_strategy", "split_10_compl_second", "Strategy to use when writing the complement of a fastq file (default split_10_compl_second)")
-	flag.BoolVar(&CREATEBARCODEDICT, "create_barcode_dict", false, "create a barcode key / value count file")
+	flag.BoolVar(&CREATEBARCODEDICT, "create_barcode_dict", false, `create a barcode key / value count file
+            USAGE: ATACtools -create_barcode_list -filename <fname> (-sortfile -delimiter <string>)`)
 	flag.Parse()
 	fmt.Printf("input file(s): %s\n", FILENAME)
 	tStart := time.Now()
