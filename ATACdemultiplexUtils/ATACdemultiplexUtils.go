@@ -1,18 +1,19 @@
 package ATACdemultiplexUtils
 
-import "bufio"
-import "io"
-import "os"
-import "log"
-import "path"
-import "github.com/dsnet/compress/bzip2"
-import "os/exec"
-import "strings"
-import "compress/gzip"
-import "fmt"
-import "sort"
-
 import (
+	"bufio"
+	"io"
+	"os"
+	"log"
+	"bytes"
+	"path"
+	"github.com/dsnet/compress/bzip2"
+	"os/exec"
+	"strings"
+	"compress/gzip"
+	"fmt"
+	"sort"
+	"strconv"
 	originalbzip2  "compress/bzip2"
 )
 
@@ -309,5 +310,129 @@ loop:
 		_, err := (*reader).Read(buff)
 		Check(err)
 		currentPos += BUFFERSIZE
+	}
+}
+
+/*SortLogfile sort a file according to key value
+input:
+    filename string,
+    separator string,
+    outfname string,
+    ignoreSortingCategory bool,
+    ignoreError bool
+*/
+func SortLogfile(filename string, separator string, outfname string,
+	ignoreSortingCategory bool, ignoreError bool)  {
+	file, err := os.Open(filename)
+	defer file.Close()
+	var buffer bytes.Buffer
+	var split []string
+	var valueField, key string
+	var value int
+	check(err)
+	scanner := bufio.NewScanner(file)
+
+	ext := path.Ext(filename)
+
+	if outfname == "" {
+		outfname = fmt.Sprintf("%s_sorted%s", strings.TrimSuffix(filename, ext), ext)
+	}
+
+	outfile, err := os.Create(outfname)
+	defer outfile.Close()
+
+	defer os.Rename(outfname, filename)
+
+	check(err)
+	pl := PairList{}
+
+	lineNb := -1
+	buff := 0
+
+	for scanner.Scan() {
+		line := scanner.Text()
+		lineNb++
+
+		if len(line) == 0 || line[0] == '#' || line[0] == '\n'  {
+			if ignoreSortingCategory{
+				continue
+			}
+			buffer.WriteString(line)
+			buffer.WriteRune('\n')
+
+			outfile.Write(buffer.Bytes())
+			buffer.Reset()
+
+			if len(pl) == 0  {
+				continue
+			}
+			sort.Slice(pl, func(i, j int) bool {
+				return pl[i].Value > pl[j].Value
+			})
+
+			for _, el := range pl {
+				buffer.WriteString(el.Key)
+				buffer.WriteString(separator)
+				buffer.WriteString(strconv.Itoa(el.Value))
+				buffer.WriteRune('\n')
+
+				outfile.Write(buffer.Bytes())
+				buffer.Reset()
+
+				buff++
+				if buff > 100000{
+					outfile.Sync()
+					buff = 0
+				}
+			}
+
+			pl = PairList{}
+			continue
+		}
+
+		split = strings.Split(line, separator)
+		valueField = split[len(split)-1]
+
+		if len(split) > 2 {
+			key = strings.Join(split[:len(split)-1], separator)
+		} else {
+			key = split[0]
+		}
+		value, err = strconv.Atoi(valueField)
+
+		if err != nil {
+			fmt.Printf("value field %s from: %s at line nb %d not conform!\n",
+				valueField, line, lineNb)
+
+			if !ignoreError {
+				check(err)
+			}
+		}
+
+
+		pl = append(pl, Pair{Key:key, Value:value})
+	}
+
+	if len(pl) == 0 {
+		return
+	}
+
+	sort.Slice(pl, func(i, j int) bool {
+		return pl[i].Value > pl[j].Value
+	})
+
+	for _, el := range pl {
+		outfile.WriteString(fmt.Sprintf("%s%s%d\n", el.Key, separator, el.Value))
+		buff++
+		if buff > 100000{
+			outfile.Sync()
+			buff = 0
+		}
+	}
+}
+
+func check(err error) {
+	if err != nil {
+		log.Fatal(err)
 	}
 }

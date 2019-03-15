@@ -48,7 +48,7 @@ var NUCLEIINDEX string
 /*CELLIDDICT cell ID<->dict */
 var CELLIDDICT map[string]bool
 
-/*CELLIDDINDEX cell ID<->dict */
+/*INPUTFNAMEINDEX cell ID<->dict */
 var INPUTFNAMEINDEX map[string]int
 
 /*CELLIDDICTMULTIPLE cell ID<->dict */
@@ -84,6 +84,9 @@ var BEDTOBEDGRAPHCHAN map[int]chan map[int]int
 /*STRTOINTCHAN int -> string map chan */
 var STRTOINTCHAN chan map[string]int
 
+/*SORTFILE sort file bool */
+var SORTFILE bool
+
 /*INTCHAN int -> string map chan */
 var INTCHAN chan int
 
@@ -93,30 +96,42 @@ var BINSIZE int
 /*BEDTOBEDGRAPH  bedgraph creation bool */
 var BEDTOBEDGRAPH bool
 
+/*DELIMITER  delimiter (string) */
+var DELIMITER string
+
 
 func main() {
 	flag.StringVar(&BEDFILENAME, "bed", "", "name of the bed file")
 	flag.Var(&BEDFILENAMES, "beds", "name of the bed files")
 	flag.BoolVar(&BEDTOBEDGRAPH, "bed_to_bedgraph", false,
-		"transform one (-bed) or multiple (use multiple -beds option) into bedgraph")
+		`transform one (-bed) or multiple (use multiple -beds option) into bedgraph
+                USAGE: BAMutils -bed_to_bedgraph -bed <fname> (-out <fname> -threads <int>)`)
 	flag.StringVar(&BAMFILENAME, "bam", "", "name of the bam file")
 	flag.StringVar(&FILENAMEOUT, "out", "", "name of the output file")
 	flag.StringVar(&NUCLEIFILE, "cellsID", "", "file with cell IDs")
 	flag.StringVar(&OUTPUTDIR, "output_dir", "", "output directory")
-	flag.BoolVar(&CREATECELLINDEX, "create_cell_index", false, "create cell index")
+	flag.BoolVar(&CREATECELLINDEX, "create_cell_index", false, `create cell index (cell -> read Counts) for a bam or bed file
+                USAGE: BAMutils -create_cell_index -bed/bam <name> -out <output name> (-sort)
+`)
 	flag.StringVar(&NUCLEIINDEX, "cell_index", "", "nuclei <-> output files index")
-	flag.BoolVar(&DIVIDE, "divide", false, "divide the bam file according to barcode file list")
-	flag.BoolVar(&DIVIDEPARALLEL, "divide_parallel", false, "divide the bam file according to barcode file list usng a parallel version")
+	flag.BoolVar(&DIVIDE, "divide", false, `divide the bam file according to barcode file list
+                USAGE: BAMutils -divide -cell_index <fname> -bed/bam <fname> (-threads <int>)
+`)
+	flag.BoolVar(&DIVIDEPARALLEL, "divide_parallel", false,
+		`divide the bam file according to barcode file list using a parallel version
+                USAGE: BAMutils -divide_parallel -cell_index <fname> -bed/bam <fname> (-threads <int>)`)
+	flag.BoolVar(&SORTFILE, "sort", false, "sort output file of cell index")
 	flag.BoolVar(&ADDRG, "add_rg", false, "add cell ID as RG group to bam file")
 	flag.IntVar(&THREADNB, "threads", 1, "threads concurrency for reading bam file")
 	flag.IntVar(&BINSIZE, "binsize", 50, "bin size for bedgraph creation")
+	flag.StringVar(&DELIMITER, "delimiter", "\t", "delimiter used")
 	flag.Parse()
 
 	if OUTPUTDIR != "" {
 		FILENAMEOUT = fmt.Sprintf("%s/%s", OUTPUTDIR, FILENAMEOUT)
 	}
 
-	if BAMFILENAME == "" && BEDFILENAME == "" {
+	if BAMFILENAME == "" && BEDFILENAME == "" && len(BEDFILENAMES) == 0 {
 		panic("-bam or -bed must be specified!")
 	}
 
@@ -153,8 +168,21 @@ func main() {
 		fmt.Printf("launching DivideBam...\n")
 		DivideBam()
 	case CREATECELLINDEX:
-		fmt.Printf("launching CreateCellIndex...\n")
-		CreateCellIndex()
+		switch{
+		case BAMFILENAME != "":
+			fmt.Printf("launching CreateCellIndexBam...\n")
+			CreateCellIndexBam()
+		case BEDFILENAME != "":
+			fmt.Printf("launching CreateCellIndexBed...\n")
+			CreateCellIndexBed()
+		default:
+			log.Fatal("error! either -bam or -bed must be provided")
+		}
+
+		if SORTFILE {
+			utils.SortLogfile(FILENAMEOUT, DELIMITER, "", true, false)
+		}
+
 	case BEDTOBEDGRAPH:
 		if BEDFILENAME != ""{
 			BEDFILENAMES = append(BEDFILENAMES, BEDFILENAME)
@@ -168,8 +196,8 @@ func main() {
 	fmt.Printf("done in time: %f s \n", tDiff.Seconds())
 }
 
-/*CreateCellIndex create cell index */
-func CreateCellIndex() {
+/*CreateCellIndexBam create cell index */
+func CreateCellIndexBam() {
 	var record * sam.Record
 	var readID string
 	var count int
@@ -215,7 +243,7 @@ func CreateCellIndex() {
 
 	for readID, count = range(readIndex) {
 		buffer.WriteString(readID)
-		buffer.WriteRune('\t')
+		buffer.WriteString(DELIMITER)
 		buffer.WriteString(strconv.Itoa(count))
 		buffer.WriteRune('\n')
 
@@ -223,6 +251,46 @@ func CreateCellIndex() {
 
 		buffer.Reset()
 	}
+	fmt.Printf("cell index: %s created\n", FILENAMEOUT)
+}
+
+
+/*CreateCellIndexBed create cell index */
+func CreateCellIndexBed() {
+	var line string
+
+	var readID string
+	var count int
+	var buffer bytes.Buffer
+
+	readIndex := make(map[string]int)
+
+	fOut, err := os.Create(FILENAMEOUT)
+
+	check(err)
+	defer fOut.Close()
+
+	bedReader, file := utils.ReturnReader(BEDFILENAME, 0, false)
+	defer file.Close()
+
+	for bedReader.Scan(){
+		line = bedReader.Text()
+
+		readID = strings.Split(line, "\t")[3]
+		readIndex[readID]++
+	}
+
+	for readID, count = range(readIndex) {
+		buffer.WriteString(readID)
+		buffer.WriteString(DELIMITER)
+		buffer.WriteString(strconv.Itoa(count))
+		buffer.WriteRune('\n')
+
+		fOut.Write(buffer.Bytes())
+
+		buffer.Reset()
+	}
+	fmt.Printf("cell index: %s created\n", FILENAMEOUT)
 }
 
 
@@ -637,6 +705,12 @@ func BedToBedGraphDictMultipleFile(){
 	}
 
 	tStart := time.Now()
+	checkCellIndex := false
+
+	if NUCLEIFILE != "" {
+		loadCellIDDict(NUCLEIFILE)
+		checkCellIndex = true
+	}
 
 	INTCHAN = make(chan int, len(BEDFILENAMES))
 	STRTOINTCHAN = make(chan map[string]int, len(BEDFILENAMES))
@@ -653,7 +727,7 @@ func BedToBedGraphDictMultipleFile(){
 
 	for _, file := range BEDFILENAMES {
 		guard <- struct{}{}
-		go bedToBedGraphDictOneThread(file, &waiting)
+		go bedToBedGraphDictOneThread(file, &waiting, checkCellIndex)
 		<-guard
 	}
 
@@ -661,10 +735,15 @@ func BedToBedGraphDictMultipleFile(){
 
 	tDiff := time.Now().Sub(tStart)
 	fmt.Printf("iterating through bed files done in: %f sec \n", tDiff.Seconds())
+
+	collectAndProcessMultipleBedGraphDict()
+}
+
+func collectAndProcessMultipleBedGraphDict() {
 	listNbReads := extractIntfromChan(INTCHAN)
 	chroHashDict := extractStrIntDictFromChan(STRTOINTCHAN)
-
 	totNbReads := sum(listNbReads)
+	guard := make(chan struct{}, THREADNB)
 
 	fmt.Printf("sumf of number READS: %d\n", totNbReads)
 
@@ -685,7 +764,7 @@ func BedToBedGraphDictMultipleFile(){
 
 	scale := (float64(totNbReads) / 1e6) * (float64(BINSIZE) / 1e3)
 
-	tStart = time.Now()
+	tStart := time.Now()
 
 	chroList := []string{}
 	fileList := []string{}
@@ -707,7 +786,7 @@ func BedToBedGraphDictMultipleFile(){
 	}
 
 	waitingSort.Wait()
-	tDiff = time.Now().Sub(tStart)
+	tDiff := time.Now().Sub(tStart)
 	fmt.Printf(" writing done in: %f sec \n", tDiff.Seconds())
 
 	cmd := fmt.Sprintf("cat %s > %s.bedgraph", strings.Join(fileList," "), filenameout)
@@ -843,7 +922,7 @@ func extractIntDictFromChan(channel chan map[int]int) (map[int]int) {
 }
 
 /*bedToBedGraphDictOneThread Transform a bed file into a bedgraph dict */
-func bedToBedGraphDictOneThread(bed string, waiting *sync.WaitGroup){
+func bedToBedGraphDictOneThread(bed string, waiting *sync.WaitGroup, checkCellIndex bool){
    	bedReader, file := utils.ReturnReader(bed, 0, false)
 	defer file.Close()
 	defer waiting.Done()
@@ -873,8 +952,8 @@ func bedToBedGraphDictOneThread(bed string, waiting *sync.WaitGroup){
 
 		split = strings.Split(line, "\t")
 
-		if CREATECELLINDEX {
-			if isInside = CELLIDDICT[split[4]];!isInside {
+		if checkCellIndex {
+			if isInside = CELLIDDICT[split[3]];!isInside {
 				continue
 			}
 		}

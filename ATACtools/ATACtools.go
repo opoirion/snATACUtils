@@ -9,7 +9,6 @@ import(
 	"time";
 	"strings";
 	"path";
-	"sort";
 	"sync";
 	"strconv";
 	"bytes"
@@ -132,7 +131,7 @@ func main() {
 	case MERGE:
 		mergeLogFiles(strings.Split(FILENAME, " "), OUTFILE)
 	case SORTLOGS:
-		sortLogfile(FILENAME, SEP)
+		utils.SortLogfile(FILENAME, SEP, "", IGNORESORTINGCATEGORY, IGNOREERROR)
 		nbLines = 0
 	case BZ2:
 		nbLines = countLineBz2(FILENAME)
@@ -443,7 +442,7 @@ func createIndexCountFile(filename string) (nbLines int) {
 	}
 
 	if SORTLOGS {
-		defer sortLogfile(outfilename, SEP)
+		defer utils.SortLogfile(outfilename, SEP, "", IGNORESORTINGCATEGORY, IGNOREERROR)
 	}
 
 	fmt.Printf("output file: %s\n", outfilename)
@@ -501,76 +500,6 @@ func readtowrite(filename string) int  {
 	return nbLines
 
 }
-
-//  ...
-func sortLogfile(filename string, separator string)  {
-	file, err := os.Open(filename)
-	defer file.Close()
-	check(err)
-	scanner := bufio.NewScanner(file)
-
-	ext := path.Ext(filename)
-	outfname := fmt.Sprintf("%s_sorted%s", strings.TrimSuffix(filename, ext), ext)
-	outfile, err := os.Create(outfname)
-	defer outfile.Close()
-
-	defer os.Rename(outfname, filename)
-
-	check(err)
-	pl := utils.PairList{}
-
-	lineNb := -1
-	buff := 0
-
-	for scanner.Scan() {
-		line := scanner.Text()
-		lineNb += 1
-
-		if len(line) == 0 || line[0] == '#' || line[0] == '\n'  {
-			if IGNORESORTINGCATEGORY{
-				continue
-			}
-
-			outfile.WriteString(fmt.Sprintf("%s\n", line))
-			if len(pl) == 0  {
-				continue
-			}
-			sort.Sort(sort.Reverse(pl))
-
-			for _, el := range pl {
-				outfile.WriteString(fmt.Sprintf("%s%s%d\n", el.Key, SEP, el.Value))
-
-				buff += 1
-				if buff > 100000{
-					outfile.Sync()
-					buff = 0
-				}
-			}
-
-			pl = utils.PairList{}
-			continue
-		}
-
-		key, value := splitLine(line, lineNb)
-		pl = append(pl, utils.Pair{Key:key, Value:value})
-	}
-
-	if len(pl) == 0 {
-		return
-	}
-
-	sort.Sort(sort.Reverse(pl))
-
-	for _, el := range pl {
-		outfile.WriteString(fmt.Sprintf("%s%s%d\n", el.Key, SEP, el.Value))
-		buff += 1
-		if buff > 100000{
-			outfile.Sync()
-			buff = 0
-		}
-	}
-}
-
 
 func splitLine(line string, lineNb int) (key string, value int){
 	split := strings.Split(line, SEP)
@@ -645,7 +574,7 @@ func mergeLogFiles(filenames []string, outfname string) {
 	}
 
 	if SORTLOGS {
-		defer sortLogfile(outfname, SEP)
+		defer utils.SortLogfile(outfname, SEP, "", IGNORESORTINGCATEGORY, IGNOREERROR)
 	}
 }
 
