@@ -10,7 +10,7 @@ import (
 	"github.com/dsnet/compress/bzip2"
 	"os/exec"
 	"strings"
-	"compress/gzip"
+	gzip "github.com/klauspost/pgzip"
 	"fmt"
 	"sort"
 	"strconv"

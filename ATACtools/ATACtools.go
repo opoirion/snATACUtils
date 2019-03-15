@@ -249,15 +249,20 @@ func extractFASTQreadsPerBarcodes(filename string, barcodefilename string, waiti
 	defer file.Close()
 	writer := utils.ReturnWriter(outfile, COMPRESSIONMODE, false)
 	defer writer.Close()
+	notCheckBarcode := true
 
-	barcodefile, err := os.Open(barcodefilename)
-	check(err)
-	defer barcodefile.Close()
-	bscanner := bufio.NewScanner(barcodefile)
 
-	for bscanner.Scan() {
-		line := bscanner.Text()
-		refbarcodes[line] = true
+	if barcodefilename != "" {
+		notCheckBarcode = false
+		barcodefile, err := os.Open(barcodefilename)
+		check(err)
+		defer barcodefile.Close()
+		bscanner := bufio.NewScanner(barcodefile)
+
+		for bscanner.Scan() {
+			line := bscanner.Text()
+			refbarcodes[line] = true
+		}
 	}
 
 	isfour := 0
@@ -271,7 +276,7 @@ func extractFASTQreadsPerBarcodes(filename string, barcodefilename string, waiti
 		if (isfour == 0) {
 			readHeader = strings.SplitN(line, ":", 2)
 			barcode = readHeader[0][1:]
-			if refbarcodes[barcode] {
+			if refbarcodes[barcode] || notCheckBarcode {
 				tocopy = true
 				nbLine++
 			}
