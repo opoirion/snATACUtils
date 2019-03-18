@@ -101,10 +101,11 @@ func main() {
 	flag.StringVar(&SEARCHLINE, "search_in_line", "", "search specific motifs in line")
 	flag.StringVar(&OUTFILE, "output", "", "file name of the output")
 	flag.StringVar(&OUTTAG, "output_tag", "reference", "particule to annotate the output file name")
-	flag.BoolVar(&WRITECOMPL, "write_compl", false, "write the barcode complement of a fastq files")
+	flag.BoolVar(&WRITECOMPL, "write_compl", false, `write the barcode complement of a fastq files
+            USAGE: ATACtools -write_compl <fastq_file> (-compl_strategy <"split_10_compl_second"/"split_10_compl_first"> -tag <string>)`)
 	flag.StringVar(&SEP, "delimiter", "\t", "delimiter used to split and sort the log file (default \t)")
 	flag.StringVar(&TAG, "tag", "", "tag used when creating a reference fastq file to tag all the reads (default \"\")")
-	flag.StringVar(&COMPLSTRATEGY, "compl_strategy", "split_10_compl_second", "Strategy to use when writing the complement of a fastq file (default split_10_compl_second)")
+	flag.StringVar(&COMPLSTRATEGY, "compl_strategy", "split_10_compl_second", `Strategy to use when writing the complement of a fastq file (default split_10_compl_second: split after 10 bases and complementary only second)`)
 	flag.BoolVar(&CREATEBARCODEDICT, "create_barcode_dict", false, `create a barcode key / value count file
             USAGE: ATACtools -create_barcode_list -filename <fname> (-sortfile -delimiter <string>)`)
 	flag.Parse()
