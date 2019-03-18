@@ -1,3 +1,5 @@
+/* Suite of functions dedicated to pre/post process files related to snATAC pipeline */
+
 package main
 
 import(
@@ -12,9 +14,7 @@ import(
 	"sync";
 	"strconv";
 	"bytes"
-	// "github.com/dsnet/compress/bzip2"
 	utils "ATACdemultiplex/ATACdemultiplexUtils"
-	// Cbzip2 "ATACdemultiplex/cbzip2"
 )
 
 
@@ -72,6 +72,8 @@ var CREATEBARCODEDICT bool
 var FILENAMES utils.ArrayFlags
 /*TAG ...*/
 var TAG string
+/*CICEROPROCESSING ...*/
+var CICEROPROCESSING bool
 
 
 func main() {
@@ -81,13 +83,16 @@ func main() {
 	flag.IntVar(&MAX, "max_nb_lines", 0, "max number of lines")
 	flag.BoolVar(&BZ2, "bz2", false, "is bz2")
 	flag.BoolVar(&GZ, "gz", false, "is gz")
+	flag.BoolVar(&CICEROPROCESSING, "bed_to_cicero", false,
+		`format a bed to cicero input (ex: chr1\t1215523\t1216200\tcellID -> chr1_1215523_121620,tcellID,1)
+            USAGE: ATACtools -bed_to_cicero -filename <bedfile> (-filenames <bedfile2> -filenames <bedfile3> ...  -ignoreerror)`)
 	flag.BoolVar(&CREATEREFFASTQ, "create_ref_fastq", false, `create a ref FASTQ file using a reference barcode list
             USAGE: ATACtools -create_ref_bed -filename <fname> (-ref_barcode_list <fname> -tag <string>)`)
 	flag.BoolVar(&CREATEREFBEDFILE, "create_ref_bed", false, `create a ref bed file using a reference barcode list
             USAGE: ATACtools -create_ref_fastq -filnames <fname1> -filnames <fname2> ... (-ref_barcode_list <fname> -tag <string>)`)
 	flag.StringVar(&REFBARCODELIST, "ref_barcode_list", "", "file containing the reference barcodes (one per line)")
 	flag.BoolVar(&MERGE, "merge", false, `merge input log files together
-            USAGE: ATACtools -merge -filename "<fname1> <fname2> <fname3> ..."  (-sortfile -delimiter "<string>" -ignoreerror -ignore_sorting_category)`)
+            USAGE: ATACtools -merge -filenames <fname1> -filenames <fname2> -filenames <fname3> ...  (-sortfile -delimiter "<string>" -ignoreerror -ignore_sorting_category)`)
 	flag.IntVar(&GOTOLINE, "gotoline", 0, "go to line")
 	flag.BoolVar(&SORTLOGS, "sortfile", false,
 		`sort files (<key><SEP><value> file
@@ -109,12 +114,24 @@ func main() {
 	flag.BoolVar(&CREATEBARCODEDICT, "create_barcode_dict", false, `create a barcode key / value count file
             USAGE: ATACtools -create_barcode_list -filename <fname> (-sortfile -delimiter <string>)`)
 	flag.Parse()
-	fmt.Printf("input file(s): %s\n", FILENAME)
+
+
+	if FILENAME != "" {
+		fmt.Printf("input file(s): %s\n", FILENAME)
+	}
+
+	for _, filename := range FILENAMES {
+		fmt.Printf("input file(s): %s\n", filename)
+	}
+
 	tStart := time.Now()
 
 	var nbLines int
 
 	switch  {
+	case CICEROPROCESSING:
+		bedFilestoCiceroInput(FILENAMES, OUTFILE)
+
 	case WRITECOMPL:
 		writeComplement(FILENAME, COMPLSTRATEGY)
 
@@ -136,7 +153,7 @@ func main() {
 	case CREATEBARCODEDICT:
 		createIndexCountFile(FILENAME)
 	case MERGE:
-		mergeLogFiles(strings.Split(FILENAME, " "), OUTFILE)
+		mergeLogFiles(FILENAMES, OUTFILE)
 	case SORTLOGS:
 		utils.SortLogfile(FILENAME, SEP, "", IGNORESORTINGCATEGORY, IGNOREERROR)
 		nbLines = 0
@@ -160,12 +177,93 @@ func main() {
 	fmt.Printf("time: %f s\n", tDiff.Seconds())
 
 }
+/*bedFilestoCiceroInput ...*/
+func bedFilestoCiceroInput(filenames []string, outfile string) {
+	var ext string
+	var finalOutfile string
+
+	if FILENAME != "" {
+		filenames = append(filenames, FILENAME)
+	}
+
+	if len(filenames) == 0 {
+		log.Fatal("at least one input file (option -filename(s) <string>) must be filled!")
+	}
+
+	if outfile == "" {
+		ext = path.Ext(filenames[0])
+		finalOutfile = fmt.Sprintf("%s.cicero_input%s", filenames[0][:len(filenames[0])-len(ext)], ext)
+	} else {
+
+		finalOutfile = outfile
+	}
+
+	var waiting sync.WaitGroup
+	waiting.Add(len(filenames))
+
+	outfiles := []string{}
+
+	tStart := time.Now()
+	ext = path.Ext(finalOutfile)
+
+	for i, file := range filenames {
+		outfile := fmt.Sprintf("%s.index_%d%s", finalOutfile, i, ext)
+		go bedFiletoCiceroInputOnethread(file, outfile, &waiting, i==0)
+		outfiles = append(outfiles, outfile)
+	}
+
+	waiting.Wait()
+
+	cmd := fmt.Sprintf("cat %s > %s", strings.Join(outfiles, " "), finalOutfile)
+	utils.ExceCmd(cmd)
+	cmd = fmt.Sprintf("rm %s", strings.Join(outfiles, " "))
+	utils.ExceCmd(cmd)
+
+	tDiff := time.Now().Sub(tStart)
+	fmt.Printf("file:%s created in %f s\n", finalOutfile, tDiff.Seconds())
+}
+
+/*bedFiletoCiceroInputOnethread ...*/
+func bedFiletoCiceroInputOnethread(filename string, outfile string, waiting * sync.WaitGroup, writeHeader bool) {
+	defer waiting.Done()
+	var buffer bytes.Buffer
+	var split = make([]string, 4, 4)
+	var nbLine int
+
+	scanner, file := utils.ReturnReader(filename, 0, false)
+	defer file.Close()
+	writer := utils.ReturnWriter(outfile, COMPRESSIONMODE, false)
+	defer writer.Close()
+
+	if writeHeader {
+		writer.Write([]byte("Peak,cell,Count\n"))
+	}
+
+	for scanner.Scan() {
+		line := scanner.Text()
+		nbLine++
+
+		split = strings.Split(line, "\t")
+		buffer.WriteString(split[0])
+		buffer.WriteRune('_')
+		buffer.WriteString(split[1])
+		buffer.WriteRune('_')
+		buffer.WriteString(split[2])
+		buffer.WriteRune(',')
+		buffer.WriteString(split[3])
+		buffer.WriteRune(',')
+		buffer.WriteRune('1')
+		buffer.WriteRune('\n')
+		writer.Write(buffer.Bytes())
+		buffer.Reset()
+	}
+}
 
 /*extractBEDreadsPerBarcodes create a new FASTQ file using a barcode name */
 func extractBEDreadsPerBarcodes(filename string, barcodefilename string) {
 
 	var barcode string
-	var refbarcodes = make(map[string]bool)
+	var refbarcodes map[string]bool
 	var split = make([]string, 4, 4)
 	var notCheckBarcode = true
 	var buffer bytes.Buffer
@@ -183,15 +281,7 @@ func extractBEDreadsPerBarcodes(filename string, barcodefilename string) {
 
 	if barcodefilename != "" {
 		notCheckBarcode = false
-		barcodefile, err := os.Open(barcodefilename)
-		check(err)
-		defer barcodefile.Close()
-		bscanner := bufio.NewScanner(barcodefile)
-
-		for bscanner.Scan() {
-			line := bscanner.Text()
-			refbarcodes[line] = true
-		}
+		refbarcodes = loadCellIDDict(barcodefilename)
 	}
 
 	nbLine := 0
@@ -255,15 +345,7 @@ func extractFASTQreadsPerBarcodes(filename string, barcodefilename string, waiti
 
 	if barcodefilename != "" {
 		notCheckBarcode = false
-		barcodefile, err := os.Open(barcodefilename)
-		check(err)
-		defer barcodefile.Close()
-		bscanner := bufio.NewScanner(barcodefile)
-
-		for bscanner.Scan() {
-			line := bscanner.Text()
-			refbarcodes[line] = true
-		}
+		refbarcodes = loadCellIDDict(barcodefilename)
 	}
 
 	isfour := 0
@@ -650,4 +732,20 @@ func check(err error) {
 	if err != nil {
 		log.Fatal(err)
 	}
+}
+
+func loadCellIDDict(fname string) map[string]bool {
+	f, err := os.Open(fname)
+	check(err)
+	defer f.Close()
+	scanner := bufio.NewScanner(f)
+
+	celliddict := make(map[string]bool)
+
+	for scanner.Scan() {
+		line := scanner.Text()
+
+		celliddict[line] = true
+	}
+	return celliddict
 }

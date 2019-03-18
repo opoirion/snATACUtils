@@ -1,3 +1,5 @@
+/* Suite of functions dedicated to process BAM or BED files */
+
 package main
 
 import(
