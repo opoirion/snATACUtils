@@ -208,7 +208,7 @@ func bedFilestoCiceroInput(filenames []string, outfile string) {
 
 	for i, file := range filenames {
 		outfile := fmt.Sprintf("%s.index_%d%s", finalOutfile, i, ext)
-		go bedFiletoCiceroInputOnethread(file, outfile, &waiting, i==0)
+		go bedFiletoCiceroInputOnethread(file, outfile, REFBARCODELIST, &waiting, i==0)
 		outfiles = append(outfiles, outfile)
 	}
 
@@ -224,11 +224,19 @@ func bedFilestoCiceroInput(filenames []string, outfile string) {
 }
 
 /*bedFiletoCiceroInputOnethread ...*/
-func bedFiletoCiceroInputOnethread(filename string, outfile string, waiting * sync.WaitGroup, writeHeader bool) {
+func bedFiletoCiceroInputOnethread(filename string, outfile string, barcodefilename string,
+	waiting * sync.WaitGroup, writeHeader bool) {
 	defer waiting.Done()
 	var buffer bytes.Buffer
 	var split = make([]string, 4, 4)
 	var nbLine int
+	var barcodeIndex map[string]bool
+	var checkBarcode bool
+
+	if barcodefilename != "" {
+		checkBarcode = true
+		barcodeIndex = loadCellIDDict(barcodefilename)
+	}
 
 	scanner, file := utils.ReturnReader(filename, 0, false)
 	defer file.Close()
@@ -244,6 +252,11 @@ func bedFiletoCiceroInputOnethread(filename string, outfile string, waiting * sy
 		nbLine++
 
 		split = strings.Split(line, "\t")
+
+		if checkBarcode && !barcodeIndex[split[3]] {
+			continue
+		}
+
 		buffer.WriteString(split[0])
 		buffer.WriteRune('_')
 		buffer.WriteString(split[1])
