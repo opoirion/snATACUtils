@@ -17,7 +17,7 @@ import(
 	"bytes"
 	"strconv"
 	"sort"
-	utils "ATACdemultiplex/ATACdemultiplexUtils"
+	utils "gitlab.com/Grouumf/ATACdemultiplex/ATACdemultiplexUtils"
 )
 
 
@@ -377,7 +377,7 @@ func DivideMultipleBedFileParallel() {
 	var waiting sync.WaitGroup
 	waiting.Add(THREADNB)
 
-	for i := 1; i < 100; i++ {
+	for i := 1; i < 250; i++ {
 		BEDTOBEDGRAPHCHAN[i] = make(chan map[int]int)
 	}
 
@@ -716,7 +716,7 @@ func BedToBedGraphDictMultipleFile(){
 	STRTOINTCHAN = make(chan map[string]int, len(BEDFILENAMES))
 	BEDTOBEDGRAPHCHAN = make(map[int]chan map[int]int, THREADNB)
 
-	for i := 1 ; i < 100 ; i++ {
+	for i := 1 ; i < 250 ; i++ {
 		BEDTOBEDGRAPHCHAN[i] = make(chan map[int]int, THREADNB)
 	}
 
@@ -940,11 +940,11 @@ func bedToBedGraphDictOneThread(bed string, waiting *sync.WaitGroup, checkCellIn
 	bedtobedgraphdict := make(map[int]map[int]int)
 	chrDict := make(map[string]int)
 
-	for i := 1; i < 100; i++ {
+	for i := 1; i < 250; i++ {
 		bedtobedgraphdict[i] = make(map[int]int)
 	}
 
-	uncommon := 50
+	uncommon := 200
 
 	for bedReader.Scan() {
 		line = bedReader.Text()
@@ -964,8 +964,13 @@ func bedToBedGraphDictOneThread(bed string, waiting *sync.WaitGroup, checkCellIn
 		if err != nil {
 
 			if _, isInside = chrDict[chroStr];!isInside {
-				chrDict[chroStr] = uncommon
-				uncommon++
+
+				if len(chroStr) == 1 {
+					chrDict[chroStr] = int(chroStr[0]) + 100
+				} else {
+					chrDict[chroStr] = uncommon
+					uncommon++
+				}
 			}
 
 			chroIndex = chrDict[chroStr]

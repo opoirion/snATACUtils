@@ -14,7 +14,7 @@ import (
 	"path"
 	"bytes"
 	"strconv"
-	utils "ATACdemultiplex/ATACdemultiplexUtils"
+	utils "gitlab.com/Grouumf/ATACdemultiplex/ATACdemultiplexUtils"
 	pathutils "path"
 )
 

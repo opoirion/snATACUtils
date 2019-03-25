@@ -5,7 +5,7 @@ import (
 	"log"
 	"bufio"
 	originalbzip2  "compress/bzip2"
-	utils "ATACdemultiplex/ATACdemultiplexUtils"
+	utils "gitlab.com/Grouumf/ATACdemultiplex/ATACdemultiplexUtils"
 	"strings"
 	"path"
 	"fmt"
