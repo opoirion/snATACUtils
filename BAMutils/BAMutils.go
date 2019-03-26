@@ -101,13 +101,16 @@ var BEDTOBEDGRAPH bool
 /*DELIMITER  delimiter (string) */
 var DELIMITER string
 
+/*SPLIT split file per chromosomes */
+var SPLIT bool
+
 
 func main() {
 	flag.StringVar(&BEDFILENAME, "bed", "", "name of the bed file")
 	flag.Var(&BEDFILENAMES, "beds", "name of the bed files")
 	flag.BoolVar(&BEDTOBEDGRAPH, "bed_to_bedgraph", false,
 		`transform one (-bed) or multiple (use multiple -beds option) into bedgraph
-                USAGE: BAMutils -bed_to_bedgraph -bed <fname> (-out <fname> -threads <int>)`)
+                USAGE: BAMutils -bed_to_bedgraph -bed <fname> (-out <fname> -threads <int> -split)`)
 	flag.StringVar(&BAMFILENAME, "bam", "", "name of the bam file")
 	flag.StringVar(&FILENAMEOUT, "out", "", "name of the output file")
 	flag.StringVar(&NUCLEIFILE, "cellsID", "", "file with cell IDs")
@@ -124,6 +127,8 @@ func main() {
                 USAGE: BAMutils -divide_parallel -cell_index <fname> -bed/bam <fname> (-threads <int>)`)
 	flag.BoolVar(&SORTFILE, "sort", false, "sort output file of cell index")
 	flag.BoolVar(&ADDRG, "add_rg", false, "add cell ID as RG group to bam file")
+	flag.BoolVar(&SPLIT, "split", false, `split file per chromosomes
+                USAGE: BAMutils -split -bed <bedfile> (-out <string> -cellsID <string>)`)
 	flag.IntVar(&THREADNB, "threads", 1, "threads concurrency for reading bam file")
 	flag.IntVar(&BINSIZE, "binsize", 50, "bin size for bedgraph creation")
 	flag.StringVar(&DELIMITER, "delimiter", "\t", "delimiter used")
@@ -191,11 +196,79 @@ func main() {
 		}
 		fmt.Printf("launching BedToBedGraphDictMultipleFile...\n")
 		BedToBedGraphDictMultipleFile()
+	case SPLIT:
+		SplitBedPerChr()
 
 	}
 
 	tDiff := time.Now().Sub(tStart)
 	fmt.Printf("done in time: %f s \n", tDiff.Seconds())
+}
+
+/*SplitBedPerChr split a bed file per chromosome */
+func SplitBedPerChr() {
+	var count int
+	var chrID string
+	var line []byte
+	var split [][]byte
+	var isInside bool
+	var bedFname string
+	var ext string
+	var buffer bytes.Buffer
+
+	checkCellIndex := false
+
+	sep := []byte("\t")
+
+	if FILENAMEOUT == "" {
+		FILENAMEOUT = BEDFILENAME
+	}
+
+	if NUCLEIFILE != "" {
+		loadCellIDDict(NUCLEIFILE)
+		checkCellIndex = true
+	}
+
+	ext = path.Ext(FILENAMEOUT)
+
+	bedReader, file := utils.ReturnReader(BEDFILENAME, 0, false)
+
+	defer file.Close()
+
+	resFileDict := make(map[string]io.WriteCloser)
+	resNameDict := make(map[string]string)
+
+	for bedReader.Scan() {
+		line = bedReader.Bytes()
+		count++
+		split = bytes.Split(line, sep)
+
+		if checkCellIndex {
+			if !CELLIDDICT[string(split[3])] {
+				continue
+			}
+		}
+
+		chrID = string(split[0])
+
+		if _, isInside = resNameDict[chrID]; !isInside {
+			bedFname = fmt.Sprintf("%s.%s%s",
+				FILENAMEOUT[:len(FILENAMEOUT) - len(ext)], chrID, ext)
+			resNameDict[chrID] = bedFname
+			resFileDict[chrID] = utils.ReturnWriter(bedFname, 6, false)
+			defer resFileDict[chrID].Close()
+		}
+
+		buffer.Write(line)
+		buffer.WriteRune('\n')
+
+		resFileDict[chrID].Write(buffer.Bytes())
+		buffer.Reset()
+	}
+
+	for _,f := range resNameDict {
+		fmt.Printf("file %s written\n", f)
+	}
 }
 
 /*CreateCellIndexBam create cell index */
@@ -664,10 +737,6 @@ func DivideBed() {
 	defer file.Close()
 	defer bedWriter.Close()
 
-	fWrite, err := os.Create(FILENAMEOUT)
-	check(err)
-	defer fWrite.Close()
-
 	count := 0
 
 	for bedReader.Scan() {
@@ -738,10 +807,10 @@ func BedToBedGraphDictMultipleFile(){
 	tDiff := time.Now().Sub(tStart)
 	fmt.Printf("iterating through bed files done in: %f sec \n", tDiff.Seconds())
 
-	collectAndProcessMultipleBedGraphDict()
+	collectAndProcessMultipleBedGraphDict(FILENAMEOUT)
 }
 
-func collectAndProcessMultipleBedGraphDict() {
+func collectAndProcessMultipleBedGraphDict(filenameout string) {
 	listNbReads := extractIntfromChan(INTCHAN)
 	chroHashDict := extractStrIntDictFromChan(STRTOINTCHAN)
 	totNbReads := sum(listNbReads)
@@ -751,8 +820,6 @@ func collectAndProcessMultipleBedGraphDict() {
 
 	var waitingSort sync.WaitGroup
 	waitingSort.Add(len(chroHashDict))
-
-	filenameout := FILENAMEOUT
 
 	if filenameout == "" {
 		filenameout = BEDFILENAMES[0]
@@ -791,13 +858,21 @@ func collectAndProcessMultipleBedGraphDict() {
 	tDiff := time.Now().Sub(tStart)
 	fmt.Printf(" writing done in: %f sec \n", tDiff.Seconds())
 
-	cmd := fmt.Sprintf("cat %s > %s.bedgraph", strings.Join(fileList," "), filenameout)
+	if !SPLIT {
+		tStart = time.Now()
+		cmd := fmt.Sprintf("cat %s > %s.bedgraph", strings.Join(fileList," "), filenameout)
 
-	utils.ExceCmd(cmd)
-	fmt.Printf("%s.bedgraph created!\n", filenameout)
+		utils.ExceCmd(cmd)
+		fmt.Printf("%s.bedgraph created!\n", filenameout)
 
-	cmd = fmt.Sprintf("rm %s", strings.Join(fileList, " "))
-	utils.ExceCmd(cmd)
+		cmd = fmt.Sprintf("rm %s", strings.Join(fileList, " "))
+		utils.ExceCmd(cmd)
+		fmt.Printf(" concatenation and cleaning done in: %f sec \n", tDiff.Seconds())
+	} else {
+		for _,f := range fileList {
+			fmt.Printf("file: %s created\n", f)
+		}
+	}
 }
 
 
