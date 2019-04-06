@@ -119,8 +119,8 @@ func main() {
                 USAGE: BAMutils -create_cell_index -bed/bam <name> -out <output name> (-sort)
 `)
 	flag.StringVar(&NUCLEIINDEX, "cell_index", "", "nuclei <-> output files index")
-	flag.BoolVar(&DIVIDE, "divide", false, `divide the bam file according to barcode file list
-                USAGE: BAMutils -divide -cell_index <fname> -bed/bam <fname> (-threads <int>)
+	flag.BoolVar(&DIVIDE, "divide", false, `divide the bam/bed file according to barcode file list
+                USAGE: BAMutils -divide -bed/bam <fname> (-cell_index <fname> -threads <int> -cellsID <fname>)
 `)
 	flag.BoolVar(&DIVIDEPARALLEL, "divide_parallel", false,
 		`divide the bam file according to barcode file list using a parallel version
