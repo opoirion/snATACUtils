@@ -236,7 +236,7 @@ func bedFiletoCiceroInputOnethread(filename string, outfile string, barcodefilen
 
 	if barcodefilename != "" {
 		checkBarcode = true
-		barcodeIndex = loadCellIDDict(barcodefilename)
+		barcodeIndex = utils.LoadCellIDDict(barcodefilename)
 	}
 
 	scanner, file := utils.ReturnReader(filename, 0, false)
@@ -295,7 +295,7 @@ func extractBEDreadsPerBarcodes(filename string, barcodefilename string) {
 
 	if barcodefilename != "" {
 		notCheckBarcode = false
-		refbarcodes = loadCellIDDict(barcodefilename)
+		refbarcodes = utils.LoadCellIDDict(barcodefilename)
 	}
 
 	nbLine := 0
@@ -359,7 +359,7 @@ func extractFASTQreadsPerBarcodes(filename string, barcodefilename string, waiti
 
 	if barcodefilename != "" {
 		notCheckBarcode = false
-		refbarcodes = loadCellIDDict(barcodefilename)
+		refbarcodes = utils.LoadCellIDDict(barcodefilename)
 	}
 
 	isfour := 0
@@ -746,20 +746,4 @@ func check(err error) {
 	if err != nil {
 		log.Fatal(err)
 	}
-}
-
-func loadCellIDDict(fname string) map[string]bool {
-	f, err := os.Open(fname)
-	check(err)
-	defer f.Close()
-	scanner := bufio.NewScanner(f)
-
-	celliddict := make(map[string]bool)
-
-	for scanner.Scan() {
-		line := scanner.Text()
-
-		celliddict[line] = true
-	}
-	return celliddict
 }

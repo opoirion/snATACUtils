@@ -436,3 +436,19 @@ func check(err error) {
 		log.Fatal(err)
 	}
 }
+
+func LoadCellIDDict(fname string) map[string]bool {
+	f, err := os.Open(fname)
+	check(err)
+	defer f.Close()
+	scanner := bufio.NewScanner(f)
+
+	celliddict := make(map[string]bool)
+
+	for scanner.Scan() {
+		line := scanner.Text()
+
+		celliddict[line] = true
+	}
+	return celliddict
+}
