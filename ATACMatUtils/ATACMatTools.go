@@ -16,6 +16,8 @@ import(
 	"time"
 	"bytes"
 	"io"
+	"sync"
+	"github.com/jinzhu/copier"
 )
 
 /*INFILES multiple input files */
@@ -45,11 +47,14 @@ var PEAKIDDICT map[string]uint
 /*CHRINTERVALDICT peak ID<->pos */
 var CHRINTERVALDICT map[string]*interval.IntTree
 
+/*CHRINTERVALDICTTHREAD peak ID<->pos */
+var CHRINTERVALDICTTHREAD map[int]map[string]*interval.IntTree
+
+/*FEATMUTEXDICT feature pos<->sync.Mutex */
+var FEATMUTEXDICT map[uint]*sync.Mutex
+
 /*CHRINTERVALDICT peak ID<->pos */
 var INTERVALMAPPING map[uintptr]string
-
-/*CELLFEATURE peak ID<->pos */
-var CELLFEATURE map[string]*interval.IntTree
 
 /*BOOLSPARSEMATRIX cell x feature sparse matrix  */
 var BOOLSPARSEMATRIX map[uint]map[uint]bool
@@ -57,6 +62,11 @@ var BOOLSPARSEMATRIX map[uint]map[uint]bool
 /*FILENAMEOUT  output file name output */
 var FILENAMEOUT string
 
+/*THREADNB number of threads for reading the bam file */
+var THREADNB int
+
+/*BUFFERSIZE buffer size for multithreading */
+const BUFFERSIZE = 1000000
 
 //IntInterval Integer-specific intervals
 type IntInterval struct {
@@ -96,13 +106,19 @@ func main() {
 	flag.BoolVar(&CREATECOOMATRIX, "coo", false,
 		`transform one (-bed) or multiple (use multiple -beds option) into a boolean sparse matrix in COO format
                 USAGE: ATACMatTools -coo -bed  <bedFile> -ygi <bedFile> -xgi <fname>`)
-	flag.BoolVar(&MERGEOUTPUTS, "merge_matrices", false,
+	flag.BoolVar(&MERGEOUTPUTS, "merge", false,
 		`merge multiple matrices results into one output file
                 USAGE: ATACMatTools -coo -merge -xgi <fname> -in <matrixFile1> -in <matrixFile2> ...`)
+	flag.IntVar(&THREADNB, "threads", 1, "threads concurrency")
 	flag.Parse()
 
-	if FILENAMEOUT == "" {
+	switch {
+	case FILENAMEOUT == "" && len(INFILES) > 0:
+		FILENAMEOUT = fmt.Sprintf("%s.coo.gz", INFILES[0])
+	case FILENAMEOUT == "" && BEDFILENAME != "":
 		FILENAMEOUT = fmt.Sprintf("%s.coo.gz", BEDFILENAME)
+	case FILENAMEOUT == "":
+		FILENAMEOUT = fmt.Sprintf("output.coo.gz")
 	}
 
 	tStart := time.Now()
@@ -116,6 +132,8 @@ func main() {
 			if len(INFILES) == 0 {
 				log.Fatal("Error at least one input (-in) file must be provided!")
 			}
+
+
 			mergeCOOFiles(INFILES)
 		case BEDFILENAME == "":
 			log.Fatal("Error at least one bed file must be provided!")
@@ -132,24 +150,57 @@ func main() {
 
 
 func createBoolSparseMatrix(){
+	fmt.Printf("load indexes...\n")
 	loadCellIDDict(CELLSIDFNAME)
 	loadPeaks(PEAKFILE)
-
-	tStart := time.Now()
-	createPeakIntervalTree()
-	tDiff := time.Now().Sub(tStart)
-	fmt.Printf("Create peak index done in time: %f s \n", tDiff.Seconds())
 
 	BOOLSPARSEMATRIX = make(map[uint]map[uint]bool)
 
 	for _, pos := range CELLIDDICT {
 		BOOLSPARSEMATRIX[pos] = make(map[uint]bool)
 	}
+	fmt.Printf("create peak interval tree...\n")
+	tStart := time.Now()
+	createPeakIntervalTree()
+	tDiff := time.Now().Sub(tStart)
+	fmt.Printf("Create peak index done in time: %f s \n", tDiff.Seconds())
 
-	createBoolSparseMatrixOneFile(BEDFILENAME)
+	switch{
+	case THREADNB > 1:
+		fmt.Printf("init mutexes...\n")
+		initMutexDict()
+		fmt.Printf("init threading...\n")
+		initIntervalDictsThreading()
+		fmt.Printf("launching sparse matrices creation...\n")
+		createBoolSparseMatrixOneFileThreading(BEDFILENAME)
+	default:
+		createBoolSparseMatrixOneFile(BEDFILENAME)
+	}
+
+	fmt.Printf("writing to output file...\n")
 	writeBoolMatrixToFile(FILENAMEOUT)
 }
 
+func initMutexDict() {
+	FEATMUTEXDICT = make(map[uint]*sync.Mutex)
+
+	for _, pos := range PEAKIDDICT {
+		FEATMUTEXDICT[pos] = &sync.Mutex{}
+	}
+}
+
+func initIntervalDictsThreading() {
+	CHRINTERVALDICTTHREAD = make(map[int]map[string]*interval.IntTree)
+
+	for i := 0;i< THREADNB;i++ {
+		CHRINTERVALDICTTHREAD[i] = make(map[string]*interval.IntTree)
+
+		for key, tree := range CHRINTERVALDICT {
+			CHRINTERVALDICTTHREAD[i][key] = &interval.IntTree{}
+			copier.Copy(CHRINTERVALDICTTHREAD[i][key], tree)
+		}
+	}
+}
 
 func writeBoolMatrixToFile(outfile string) {
 	var buffer bytes.Buffer
@@ -179,6 +230,7 @@ func writeBoolMatrixToFile(outfile string) {
 
 /*mergeCOOFiles merge multiple COO output files*/
 func mergeCOOFiles(filenames []string) {
+	fmt.Printf("creating xgi index..\n")
 	loadCellIDDict(CELLSIDFNAME)
 
 	BOOLSPARSEMATRIX = make(map[uint]map[uint]bool)
@@ -188,8 +240,11 @@ func mergeCOOFiles(filenames []string) {
 	}
 
 	for _, filename := range filenames {
+		fmt.Printf("merging file: %s\n", filename)
 		mergeCOOFile(filename)
 	}
+
+	fmt.Printf("writing to output file...\n")
 
 	writeBoolMatrixToFile(FILENAMEOUT)
 }
@@ -218,6 +273,94 @@ func mergeCOOFile(filename string) {
 	}
 }
 
+
+/*createBoolSparseMatrixOneFileThreading ceate the bool Sparse Matrix for one bed file using multi-threading*/
+func createBoolSparseMatrixOneFileThreading(bedfilename string) {
+	var nbReads uint
+	var bufferLine [BUFFERSIZE]string
+	var bufferIt int
+	var waiting sync.WaitGroup
+
+	bedReader, file := utils.ReturnReader(BEDFILENAME, 0, false)
+
+	defer file.Close()
+
+	for bedReader.Scan() {
+		bufferLine[bufferIt] = bedReader.Text()
+		nbReads++
+		bufferIt++
+
+		if bufferIt >= BUFFERSIZE {
+			chunk := bufferIt / THREADNB
+			bufferStart := 0
+			bufferStop := chunk
+
+			for i := 0; i < THREADNB;i++{
+
+				waiting.Add(1)
+				go updateBoolSparseMatrixOneThread(&bufferLine , bufferStart, bufferStop, i, &waiting)
+
+				bufferStart += chunk
+				bufferStop += chunk
+
+				if i == THREADNB - 1 {
+					bufferStop = bufferIt
+				}
+			}
+
+			bufferIt = 0
+		}
+
+		waiting.Wait()
+	}
+
+	if bufferIt > 0 {
+		waiting.Add(1)
+		updateBoolSparseMatrixOneThread(&bufferLine , 0, bufferIt, 0, &waiting)
+	}
+}
+
+
+func updateBoolSparseMatrixOneThread(bufferLine * [BUFFERSIZE]string, bufferStart ,bufferStop, threadnb int,
+	waiting * sync.WaitGroup) {
+	defer waiting.Done()
+	var split []string
+	var isInside bool
+	var start, end int
+	var err error
+
+	var intervals []interval.IntInterface
+	var int interval.IntInterface
+	var cellPos,featPos uint
+
+	for i := bufferStart; i < bufferStop;i++ {
+
+		split = strings.Split(bufferLine[i], "\t")
+
+		if cellPos, isInside = CELLIDDICT[split[3]];!isInside {
+			continue
+		}
+
+		start, err = strconv.Atoi(split[1])
+		check(err)
+
+		end, err = strconv.Atoi(split[2])
+		check(err)
+
+		if _, isInside = CHRINTERVALDICT[split[0]];!isInside {
+			continue
+		}
+
+		intervals = CHRINTERVALDICTTHREAD[threadnb][split[0]].Get(IntInterval{Start: start, End: end})
+
+		for _, int = range intervals {
+			featPos = PEAKIDDICT[INTERVALMAPPING[int.ID()]]
+			FEATMUTEXDICT[featPos].Lock()
+			BOOLSPARSEMATRIX[cellPos][featPos] = true
+			FEATMUTEXDICT[featPos].Unlock()
+		}
+	}
+}
 
 func createBoolSparseMatrixOneFile(bedfilename string) {
 	var line string
