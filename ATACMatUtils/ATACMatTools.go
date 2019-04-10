@@ -50,8 +50,8 @@ var CHRINTERVALDICT map[string]*interval.IntTree
 /*CHRINTERVALDICTTHREAD peak ID<->pos */
 var CHRINTERVALDICTTHREAD map[int]map[string]*interval.IntTree
 
-/*FEATMUTEXDICT feature pos<->sync.Mutex */
-var FEATMUTEXDICT map[uint]*sync.Mutex
+/*CELLMUTEXDICT feature pos<->sync.Mutex */
+var CELLMUTEXDICT map[uint]*sync.Mutex
 
 /*CHRINTERVALDICT peak ID<->pos */
 var INTERVALMAPPING map[uintptr]string
@@ -182,10 +182,10 @@ func createBoolSparseMatrix(){
 }
 
 func initMutexDict() {
-	FEATMUTEXDICT = make(map[uint]*sync.Mutex)
+	CELLMUTEXDICT = make(map[uint]*sync.Mutex)
 
-	for _, pos := range PEAKIDDICT {
-		FEATMUTEXDICT[pos] = &sync.Mutex{}
+	for _, pos := range CELLIDDICT {
+		CELLMUTEXDICT[pos] = &sync.Mutex{}
 	}
 }
 
@@ -353,12 +353,14 @@ func updateBoolSparseMatrixOneThread(bufferLine * [BUFFERSIZE]string, bufferStar
 
 		intervals = CHRINTERVALDICTTHREAD[threadnb][split[0]].Get(IntInterval{Start: start, End: end})
 
+		CELLMUTEXDICT[cellPos].Lock()
+
 		for _, int = range intervals {
 			featPos = PEAKIDDICT[INTERVALMAPPING[int.ID()]]
-			FEATMUTEXDICT[featPos].Lock()
 			BOOLSPARSEMATRIX[cellPos][featPos] = true
-			FEATMUTEXDICT[featPos].Unlock()
 		}
+
+		CELLMUTEXDICT[cellPos].Unlock()
 	}
 }
 
