@@ -142,13 +142,12 @@ func main() {
 	switch {
 	case CREATECOOMATRIX || READINPEAK:
 		switch {
-		case CELLSIDFNAME == "":
+		case CELLSIDFNAME == "" && !READINPEAK:
 			log.Fatal("Error -xgi file must be provided!")
 		case MERGEOUTPUTS:
 			if len(INFILES) == 0 {
 				log.Fatal("Error at least one input (-in) file must be provided!")
 			}
-
 
 			mergeCOOFiles(INFILES)
 		case BEDFILENAME == "":
@@ -169,7 +168,11 @@ func main() {
 
 func computeReadsInPeaksForCell(){
 	fmt.Printf("load indexes...\n")
-	loadCellIDDict(CELLSIDFNAME)
+
+	if CELLSIDFNAME != "" {
+		loadCellIDDict(CELLSIDFNAME)
+	}
+
 	loadPeaks(PEAKFILE)
 	createPeakIntervalTree()
 
@@ -425,14 +428,24 @@ func updateReadInPeakThread(bufferLine * [BUFFERSIZE]string, bufferStart ,buffer
 	var start, end int
 	var err error
 
+	isCellsID := true
+
+	if CELLSIDFNAME == "" {
+		isCellsID = false
+	}
+
 	var intervals []interval.IntInterface
 
 	for i := bufferStart; i < bufferStop;i++ {
 
 		split = strings.Split(bufferLine[i], "\t")
 
-		if _, isInside = CELLIDDICT[split[3]];!isInside {
-			continue
+		if isCellsID {
+
+			if _, isInside = CELLIDDICT[split[3]];!isInside {
+				continue
+			}
+
 		}
 
 		start, err = strconv.Atoi(split[1])
