@@ -122,9 +122,9 @@ func main() {
 	flag.BoolVar(&MERGEOUTPUTS, "merge", false,
 		`merge multiple matrices results into one output file
                 USAGE: ATACMatTools -coo -merge -xgi <fname> -in <matrixFile1> -in <matrixFile2> ...`)
-	flag.BoolVar(&READINPEAK, "read_in_peak", false,
+	flag.BoolVar(&READINPEAK, "count", false,
 		`Count the number of reads in peaks for each cell
-                USAGE: ATACMatTools -read_in_peak  -xgi <fname> -ygi <bedfile> -bed <bedFile>`)
+                USAGE: ATACMatTools -count  -xgi <fname> -ygi <bedfile> -bed <bedFile>`)
 	flag.IntVar(&THREADNB, "threads", 1, "threads concurrency")
 	flag.Parse()
 
