@@ -86,6 +86,7 @@ func ReturnWriter(fname string, compressionMode int, pureGo bool) (io.WriteClose
 
 	ext := path.Ext(fname)
 	var bzipFile io.WriteCloser
+	var err error
 
 	switch ext {
 	case  ".bz2":
@@ -94,8 +95,8 @@ func ReturnWriter(fname string, compressionMode int, pureGo bool) (io.WriteClose
 	case ".gz":
 		bzipFile = ReturnWriterForGzipFile(fname)
 	default:
-		panic(fmt.Sprintf("%s does not have either bzip2 (bz) or gzip (gz) extension!",
-			fname))
+		bzipFile, err = os.Create(fname)
+		check(err)
 	}
 
 	return bzipFile
@@ -145,6 +146,7 @@ func ReturnReader(fname string, startingLine int, pureGo bool) (*bufio.Scanner, 
 	ext := path.Ext(fname)
 	var bzipScanner * bufio.Scanner
 	var fileOpen * os.File
+	var err error
 
 	switch ext {
 	case ".bz2":
@@ -157,8 +159,9 @@ func ReturnReader(fname string, startingLine int, pureGo bool) (*bufio.Scanner, 
 	case ".gz":
 		bzipScanner, fileOpen = ReturnReaderForGzipfile(fname, startingLine)
 	default:
-		panic(fmt.Sprintf("%s does not have either bzip2 (bz) or gzip (gz) extension!",
-			fname))
+		fileOpen, err = os.Open(fname)
+		check(err)
+		bzipScanner = bufio.NewScanner(fileOpen)
 	}
 
 	return bzipScanner, fileOpen

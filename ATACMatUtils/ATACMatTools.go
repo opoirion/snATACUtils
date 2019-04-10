@@ -8,7 +8,6 @@ import(
 	"log"
 	"flag"
 	"os"
-	"path"
 	utils "gitlab.com/Grouumf/ATACdemultiplex/ATACdemultiplexUtils"
 	"github.com/biogo/store/interval"
 	"fmt"
@@ -16,8 +15,11 @@ import(
 	"strconv"
 	"time"
 	"bytes"
+	"io"
 )
 
+/*INFILES multiple input files */
+var INFILES utils.ArrayFlags
 
 /*BEDFILENAME bam file name (input) */
 var BEDFILENAME string
@@ -28,8 +30,11 @@ var PEAKFILE string
 /*CELLSIDFNAME file name file with ordered cell IDs (one ID per line) */
 var CELLSIDFNAME string
 
-/*CREATESPARSEMATRIX create sparse matrix */
-var CREATESPARSEMATRIX bool
+/*CREATECOOMATRIX create COO sparse matrix */
+var CREATECOOMATRIX bool
+
+/*MERGECOOOUTPUTS merge output files */
+var MERGEOUTPUTS bool
 
 /*CELLIDDICT cell ID<->pos */
 var CELLIDDICT map[string]uint
@@ -85,28 +90,37 @@ func (i IntInterval) String() string {
 func main() {
 	flag.StringVar(&FILENAMEOUT, "out", "", "name of the output file")
 	flag.StringVar(&BEDFILENAME, "bed", "", "name of the bed file")
-	flag.StringVar(&PEAKFILE, "peak", "", "name of the bed file")
-	flag.StringVar(&CELLSIDFNAME, "cellsID", "", "name of the file containing the ordered list of cell IDs (one ID per line)")
-	flag.BoolVar(&CREATESPARSEMATRIX, "coo", false,
+	flag.Var(&INFILES, "in", "name of the input file(s)")
+	flag.StringVar(&PEAKFILE, "ygi", "", "name of the bed file containing the region of interest( i.e. PEAK )")
+	flag.StringVar(&CELLSIDFNAME, "xgi", "", "name of the file containing the ordered list of cell IDs (one ID per line)")
+	flag.BoolVar(&CREATECOOMATRIX, "coo", false,
 		`transform one (-bed) or multiple (use multiple -beds option) into a boolean sparse matrix in COO format
-                USAGE: MatUtils -coo -bed  <bedFile> -peaks <bedFile> -cellsID <fname>`)
+                USAGE: ATACMatTools -coo -bed  <bedFile> -ygi <bedFile> -xgi <fname>`)
+	flag.BoolVar(&MERGEOUTPUTS, "merge_matrices", false,
+		`merge multiple matrices results into one output file
+                USAGE: ATACMatTools -coo -merge -xgi <fname> -in <matrixFile1> -in <matrixFile2> ...`)
 	flag.Parse()
 
 	if FILENAMEOUT == "" {
-		FILENAMEOUT = fmt.Sprintf("%s.tsv", BEDFILENAME)
+		FILENAMEOUT = fmt.Sprintf("%s.coo.gz", BEDFILENAME)
 	}
 
 	tStart := time.Now()
 
 	switch {
-	case CREATESPARSEMATRIX:
+	case CREATECOOMATRIX:
 		switch {
+		case CELLSIDFNAME == "":
+			log.Fatal("Error -xgi file must be provided!")
+		case MERGEOUTPUTS:
+			if len(INFILES) == 0 {
+				log.Fatal("Error at least one input (-in) file must be provided!")
+			}
+			mergeCOOFiles(INFILES)
 		case BEDFILENAME == "":
 			log.Fatal("Error at least one bed file must be provided!")
 		case PEAKFILE == "":
-			log.Fatal("Error peak file (bed format) must be provided!")
-		case CELLSIDFNAME == "":
-			log.Fatal("Error cellsID file must be provided!")
+			log.Fatal("Error peak file -ygi (bed format) must be provided!")
 		default:
 			createBoolSparseMatrix()
 		}
@@ -121,7 +135,6 @@ func createBoolSparseMatrix(){
 	loadCellIDDict(CELLSIDFNAME)
 	loadPeaks(PEAKFILE)
 
-	fmt.Printf("Creating peak interval index...\n")
 	tStart := time.Now()
 	createPeakIntervalTree()
 	tDiff := time.Now().Sub(tStart)
@@ -137,13 +150,15 @@ func createBoolSparseMatrix(){
 	writeBoolMatrixToFile(FILENAMEOUT)
 }
 
+
 func writeBoolMatrixToFile(outfile string) {
 	var buffer bytes.Buffer
 	var cellPos, featPos uint
+	var writer io.WriteCloser
 
-	writer, err := os.Create(outfile)
+	writer = utils.ReturnWriter(outfile, 0, false)
+
 	defer writer.Close()
-	check(err)
 
 	for cellPos = range BOOLSPARSEMATRIX {
 		for featPos = range BOOLSPARSEMATRIX[cellPos] {
@@ -160,6 +175,47 @@ func writeBoolMatrixToFile(outfile string) {
 	}
 
 	fmt.Printf("file: %s created!\n", outfile)
+}
+
+/*mergeCOOFiles merge multiple COO output files*/
+func mergeCOOFiles(filenames []string) {
+	loadCellIDDict(CELLSIDFNAME)
+
+	BOOLSPARSEMATRIX = make(map[uint]map[uint]bool)
+
+	for _, pos := range CELLIDDICT {
+		BOOLSPARSEMATRIX[pos] = make(map[uint]bool)
+	}
+
+	for _, filename := range filenames {
+		mergeCOOFile(filename)
+	}
+
+	writeBoolMatrixToFile(FILENAMEOUT)
+}
+
+
+/*mergeCOOFile add one file to the matrix*/
+func mergeCOOFile(filename string) {
+	var scanner *bufio.Scanner
+	var f *os.File
+	var err error
+	var split []string
+	var start, stop int
+
+	scanner, f = utils.ReturnReader(filename, 0, false)
+
+	defer f.Close()
+
+	for scanner.Scan() {
+		split = strings.Split(scanner.Text(), "\t")
+		start, err = strconv.Atoi(split[0])
+		check(err)
+		stop, err = strconv.Atoi(split[1])
+		check(err)
+
+		BOOLSPARSEMATRIX[uint(start)][uint(stop)] = true
+	}
 }
 
 
@@ -210,7 +266,7 @@ func createBoolSparseMatrixOneFile(bedfilename string) {
 
 
 
-
+/*loadCellIDDict ...*/
 func loadCellIDDict(fname string) {
 	f, err := os.Open(fname)
 	check(err)
@@ -228,21 +284,13 @@ func loadCellIDDict(fname string) {
 	}
 }
 
+/*loadPeaks ...*/
 func loadPeaks(fname string) {
 	var scanner *bufio.Scanner
 	var f *os.File
-	var err error
 
-	ext := path.Ext(fname)
+	scanner, f = utils.ReturnReader(fname, 0, false)
 
-	switch ext {
-	case ".gz":
-		scanner, f = utils.ReturnReader(fname, 0, false)
-	default:
-		f, err = os.Open(fname)
-		check(err)
-		scanner = bufio.NewScanner(f)
-	}
 	defer f.Close()
 
 
@@ -258,6 +306,7 @@ func loadPeaks(fname string) {
 	}
 }
 
+/*createPeakIntervalTree ...*/
 func createPeakIntervalTree() {
 	var split []string
 	var chroStr string
