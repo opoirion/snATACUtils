@@ -35,8 +35,17 @@ var CELLSIDFNAME string
 /*CREATECOOMATRIX create COO sparse matrix */
 var CREATECOOMATRIX bool
 
-/*MERGECOOOUTPUTS merge output files */
+/*READINPEAK read in peak */
+var READINPEAK bool
+
+/*MERGEOUTPUTS merge output files */
 var MERGEOUTPUTS bool
+
+/*SEP separator for writing output */
+var SEP string
+
+/*CELLIDCOUNT cell ID<->pos */
+var CELLIDCOUNT map[string]int
 
 /*CELLIDDICT cell ID<->pos */
 var CELLIDDICT map[string]uint
@@ -49,6 +58,9 @@ var CHRINTERVALDICT map[string]*interval.IntTree
 
 /*CHRINTERVALDICTTHREAD peak ID<->pos */
 var CHRINTERVALDICTTHREAD map[int]map[string]*interval.IntTree
+
+/*MUTEX global mutex */
+var MUTEX *sync.Mutex
 
 /*CELLMUTEXDICT feature pos<->sync.Mutex */
 var CELLMUTEXDICT map[uint]*sync.Mutex
@@ -103,12 +115,16 @@ func main() {
 	flag.Var(&INFILES, "in", "name of the input file(s)")
 	flag.StringVar(&PEAKFILE, "ygi", "", "name of the bed file containing the region of interest( i.e. PEAK )")
 	flag.StringVar(&CELLSIDFNAME, "xgi", "", "name of the file containing the ordered list of cell IDs (one ID per line)")
+	flag.StringVar(&SEP, "delimiter", "\t", "delimiter used to write the output file (default \t)")
 	flag.BoolVar(&CREATECOOMATRIX, "coo", false,
 		`transform one (-bed) or multiple (use multiple -beds option) into a boolean sparse matrix in COO format
                 USAGE: ATACMatTools -coo -bed  <bedFile> -ygi <bedFile> -xgi <fname>`)
 	flag.BoolVar(&MERGEOUTPUTS, "merge", false,
 		`merge multiple matrices results into one output file
                 USAGE: ATACMatTools -coo -merge -xgi <fname> -in <matrixFile1> -in <matrixFile2> ...`)
+	flag.BoolVar(&READINPEAK, "read_in_peak", false,
+		`Count the number of reads in peaks for each cell
+                USAGE: ATACMatTools -read_in_peak  -xgi <fname> -ygi <bedfile> -bed <bedFile>`)
 	flag.IntVar(&THREADNB, "threads", 1, "threads concurrency")
 	flag.Parse()
 
@@ -124,7 +140,7 @@ func main() {
 	tStart := time.Now()
 
 	switch {
-	case CREATECOOMATRIX:
+	case CREATECOOMATRIX || READINPEAK:
 		switch {
 		case CELLSIDFNAME == "":
 			log.Fatal("Error -xgi file must be provided!")
@@ -139,6 +155,8 @@ func main() {
 			log.Fatal("Error at least one bed file must be provided!")
 		case PEAKFILE == "":
 			log.Fatal("Error peak file -ygi (bed format) must be provided!")
+		case READINPEAK:
+			computeReadsInPeaksForCell()
 		default:
 			createBoolSparseMatrix()
 		}
@@ -149,21 +167,37 @@ func main() {
 }
 
 
-func createBoolSparseMatrix(){
+func computeReadsInPeaksForCell(){
 	fmt.Printf("load indexes...\n")
 	loadCellIDDict(CELLSIDFNAME)
 	loadPeaks(PEAKFILE)
+	createPeakIntervalTree()
 
+	CELLIDCOUNT = make(map[string]int)
+
+	fmt.Printf("init mutexes...\n")
+	initMutexDict()
+	fmt.Printf("init threading...\n")
+	initIntervalDictsThreading()
+	createReadInPeakOneFileThreading(BEDFILENAME)
+	writeCellCounter(FILENAMEOUT)
+}
+
+func initBoolSparseMatrix() {
 	BOOLSPARSEMATRIX = make(map[uint]map[uint]bool)
 
 	for _, pos := range CELLIDDICT {
 		BOOLSPARSEMATRIX[pos] = make(map[uint]bool)
 	}
-	fmt.Printf("create peak interval tree...\n")
-	tStart := time.Now()
+}
+
+func createBoolSparseMatrix(){
+	fmt.Printf("load indexes...\n")
+	loadCellIDDict(CELLSIDFNAME)
+	loadPeaks(PEAKFILE)
+
+	initBoolSparseMatrix()
 	createPeakIntervalTree()
-	tDiff := time.Now().Sub(tStart)
-	fmt.Printf("Create peak index done in time: %f s \n", tDiff.Seconds())
 
 	switch{
 	case THREADNB > 1:
@@ -177,11 +211,12 @@ func createBoolSparseMatrix(){
 		createBoolSparseMatrixOneFile(BEDFILENAME)
 	}
 
-	fmt.Printf("writing to output file...\n")
 	writeBoolMatrixToFile(FILENAMEOUT)
 }
 
 func initMutexDict() {
+	MUTEX = &sync.Mutex{}
+
 	CELLMUTEXDICT = make(map[uint]*sync.Mutex)
 
 	for _, pos := range CELLIDDICT {
@@ -203,6 +238,8 @@ func initIntervalDictsThreading() {
 }
 
 func writeBoolMatrixToFile(outfile string) {
+	fmt.Printf("writing to output file...\n")
+
 	var buffer bytes.Buffer
 	var cellPos, featPos uint
 	var writer io.WriteCloser
@@ -214,9 +251,9 @@ func writeBoolMatrixToFile(outfile string) {
 	for cellPos = range BOOLSPARSEMATRIX {
 		for featPos = range BOOLSPARSEMATRIX[cellPos] {
 			buffer.WriteString(strconv.Itoa(int(cellPos)))
-			buffer.WriteRune('\t')
+			buffer.WriteString(SEP)
 			buffer.WriteString(strconv.Itoa(int(featPos)))
-			buffer.WriteRune('\t')
+			buffer.WriteString(SEP)
 			buffer.WriteRune('1')
 			buffer.WriteRune('\n')
 
@@ -228,23 +265,38 @@ func writeBoolMatrixToFile(outfile string) {
 	fmt.Printf("file: %s created!\n", outfile)
 }
 
+func writeCellCounter(outfile string) {
+	var buffer bytes.Buffer
+	var cellID string
+	var writer io.WriteCloser
+
+	writer = utils.ReturnWriter(outfile, 0, false)
+
+	defer writer.Close()
+
+	for cellID = range CELLIDCOUNT {
+		buffer.WriteString(cellID)
+		buffer.WriteString(SEP)
+		buffer.WriteString(strconv.Itoa(int(CELLIDCOUNT[cellID])))
+		buffer.WriteRune('\n')
+
+		writer.Write(buffer.Bytes())
+		buffer.Reset()
+	}
+
+	fmt.Printf("file: %s created!\n", outfile)
+}
+
 /*mergeCOOFiles merge multiple COO output files*/
 func mergeCOOFiles(filenames []string) {
 	fmt.Printf("creating xgi index..\n")
 	loadCellIDDict(CELLSIDFNAME)
-
-	BOOLSPARSEMATRIX = make(map[uint]map[uint]bool)
-
-	for _, pos := range CELLIDDICT {
-		BOOLSPARSEMATRIX[pos] = make(map[uint]bool)
-	}
+	initBoolSparseMatrix()
 
 	for _, filename := range filenames {
 		fmt.Printf("merging file: %s\n", filename)
 		mergeCOOFile(filename)
 	}
-
-	fmt.Printf("writing to output file...\n")
 
 	writeBoolMatrixToFile(FILENAMEOUT)
 }
@@ -263,7 +315,7 @@ func mergeCOOFile(filename string) {
 	defer f.Close()
 
 	for scanner.Scan() {
-		split = strings.Split(scanner.Text(), "\t")
+		split = strings.Split(scanner.Text(), SEP)
 		start, err = strconv.Atoi(split[0])
 		check(err)
 		stop, err = strconv.Atoi(split[1])
@@ -320,6 +372,90 @@ func createBoolSparseMatrixOneFileThreading(bedfilename string) {
 	}
 }
 
+func createReadInPeakOneFileThreading(bedfilename string) {
+	var nbReads uint
+	var bufferLine [BUFFERSIZE]string
+	var bufferIt int
+	var waiting sync.WaitGroup
+
+	bedReader, file := utils.ReturnReader(BEDFILENAME, 0, false)
+
+	defer file.Close()
+
+	for bedReader.Scan() {
+		bufferLine[bufferIt] = bedReader.Text()
+		nbReads++
+		bufferIt++
+
+		if bufferIt >= BUFFERSIZE {
+			chunk := bufferIt / THREADNB
+			bufferStart := 0
+			bufferStop := chunk
+
+			for i := 0; i < THREADNB;i++{
+
+				waiting.Add(1)
+				go updateReadInPeakThread(&bufferLine , bufferStart, bufferStop, i, &waiting)
+
+				bufferStart += chunk
+				bufferStop += chunk
+
+				if i == THREADNB - 1 {
+					bufferStop = bufferIt
+				}
+			}
+
+			bufferIt = 0
+		}
+
+		waiting.Wait()
+	}
+
+	if bufferIt > 0 {
+		waiting.Add(1)
+		updateReadInPeakThread(&bufferLine , 0, bufferIt, 0, &waiting)
+	}
+}
+
+func updateReadInPeakThread(bufferLine * [BUFFERSIZE]string, bufferStart ,bufferStop, threadnb int,
+	waiting * sync.WaitGroup) {
+	defer waiting.Done()
+	var split []string
+	var isInside bool
+	var start, end int
+	var err error
+
+	var intervals []interval.IntInterface
+
+	for i := bufferStart; i < bufferStop;i++ {
+
+		split = strings.Split(bufferLine[i], "\t")
+
+		if _, isInside = CELLIDDICT[split[3]];!isInside {
+			continue
+		}
+
+		start, err = strconv.Atoi(split[1])
+		check(err)
+
+		end, err = strconv.Atoi(split[2])
+		check(err)
+
+		if _, isInside = CHRINTERVALDICT[split[0]];!isInside {
+			continue
+		}
+
+		intervals = CHRINTERVALDICTTHREAD[threadnb][split[0]].Get(IntInterval{Start: start, End: end})
+
+		MUTEX.Lock()
+
+		for _ = range intervals {
+			CELLIDCOUNT[split[3]]++
+		}
+
+		MUTEX.Unlock()
+	}
+}
 
 func updateBoolSparseMatrixOneThread(bufferLine * [BUFFERSIZE]string, bufferStart ,bufferStop, threadnb int,
 	waiting * sync.WaitGroup) {
@@ -460,6 +596,9 @@ func createPeakIntervalTree() {
 	var err error
 	var isInside bool
 
+	fmt.Printf("create peak interval tree...\n")
+	tStart := time.Now()
+
 	CHRINTERVALDICT = make(map[string]*interval.IntTree)
 	INTERVALMAPPING = make(map[uintptr]string)
 
@@ -486,6 +625,9 @@ func createPeakIntervalTree() {
 
 		INTERVALMAPPING[int.ID()] = key
 	}
+
+	tDiff := time.Now().Sub(tStart)
+	fmt.Printf("Create peak index done in time: %f s \n", tDiff.Seconds())
 }
 
 func check(err error) {
