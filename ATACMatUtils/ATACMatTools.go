@@ -23,10 +23,10 @@ import(
 /*INFILES multiple input files */
 var INFILES utils.ArrayFlags
 
-/*BEDFILENAME bam file name (input) */
+/*BEDFILENAME bed file name (input) */
 var BEDFILENAME string
 
-/*PEAKFILE bam file name (input) */
+/*PEAKFILE bed file name (input) */
 var PEAKFILE string
 
 /*CELLSIDFNAME file name file with ordered cell IDs (one ID per line) */
@@ -44,7 +44,7 @@ var MERGEOUTPUTS bool
 /*SEP separator for writing output */
 var SEP string
 
-/*CELLIDCOUNT cell ID<->pos */
+/*CELLIDCOUNT cell ID<->count */
 var CELLIDCOUNT map[string]int
 
 /*CELLIDDICT cell ID<->pos */
@@ -53,10 +53,10 @@ var CELLIDDICT map[string]uint
 /*PEAKIDDICT peak ID<->pos */
 var PEAKIDDICT map[string]uint
 
-/*CHRINTERVALDICT peak ID<->pos */
+/*CHRINTERVALDICT chr ID <-> interval tree */
 var CHRINTERVALDICT map[string]*interval.IntTree
 
-/*CHRINTERVALDICTTHREAD peak ID<->pos */
+/*CHRINTERVALDICTTHREAD threadNB -> chr ID -> pos */
 var CHRINTERVALDICTTHREAD map[int]map[string]*interval.IntTree
 
 /*MUTEX global mutex */
@@ -65,7 +65,7 @@ var MUTEX *sync.Mutex
 /*CELLMUTEXDICT feature pos<->sync.Mutex */
 var CELLMUTEXDICT map[uint]*sync.Mutex
 
-/*CHRINTERVALDICT peak ID<->pos */
+/*INTERVALMAPPING peak ID pos <->pos */
 var INTERVALMAPPING map[uintptr]string
 
 /*BOOLSPARSEMATRIX cell x feature sparse matrix  */
