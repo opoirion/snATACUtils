@@ -332,7 +332,13 @@ func mergeCOOFile(filename string) {
 /*createBoolSparseMatrixOneFileThreading ceate the bool Sparse Matrix for one bed file using multi-threading*/
 func createBoolSparseMatrixOneFileThreading(bedfilename string) {
 	var nbReads uint
-	var bufferLine [BUFFERSIZE]string
+	var bufferLine1 [BUFFERSIZE]string
+	var bufferLine2 [BUFFERSIZE]string
+	var bufferPointer * [BUFFERSIZE]string
+
+	isBuffer1 := true
+	bufferPointer = &bufferLine1
+
 	var bufferIt int
 	var waiting sync.WaitGroup
 
@@ -340,10 +346,12 @@ func createBoolSparseMatrixOneFileThreading(bedfilename string) {
 
 	defer file.Close()
 
+	scanBed:
 	for bedReader.Scan() {
-		bufferLine[bufferIt] = bedReader.Text()
+		bufferPointer[bufferIt] = bedReader.Text()
 		nbReads++
 		bufferIt++
+
 
 		if bufferIt >= BUFFERSIZE {
 			chunk := bufferIt / THREADNB
@@ -353,7 +361,7 @@ func createBoolSparseMatrixOneFileThreading(bedfilename string) {
 			for i := 0; i < THREADNB;i++{
 
 				waiting.Add(1)
-				go updateBoolSparseMatrixOneThread(&bufferLine , bufferStart, bufferStop, i, &waiting)
+				go updateBoolSparseMatrixOneThread(bufferPointer , bufferStart, bufferStop, i, &waiting)
 
 				bufferStart += chunk
 				bufferStop += chunk
@@ -364,32 +372,47 @@ func createBoolSparseMatrixOneFileThreading(bedfilename string) {
 			}
 
 			bufferIt = 0
-		}
 
-		waiting.Wait()
+			if isBuffer1 {
+				bufferPointer = &bufferLine2
+				isBuffer1 = false
+				goto scanBed
+			} else {
+				bufferPointer = &bufferLine1
+				isBuffer1 = true
+				waiting.Wait()
+			}
+		}
 	}
 
 	if bufferIt > 0 {
 		waiting.Add(1)
-		updateBoolSparseMatrixOneThread(&bufferLine , 0, bufferIt, 0, &waiting)
+		updateBoolSparseMatrixOneThread(bufferPointer , 0, bufferIt, 0, &waiting)
 	}
 }
 
 func createReadInPeakOneFileThreading(bedfilename string) {
 	var nbReads uint
-	var bufferLine [BUFFERSIZE]string
+	var bufferLine1 [BUFFERSIZE]string
+	var bufferLine2 [BUFFERSIZE]string
+	var bufferPointer * [BUFFERSIZE]string
+
 	var bufferIt int
 	var waiting sync.WaitGroup
+
+	isBuffer1 := true
+	bufferPointer = &bufferLine1
 
 	bedReader, file := utils.ReturnReader(BEDFILENAME, 0, false)
 
 	defer file.Close()
 
 	for bedReader.Scan() {
-		bufferLine[bufferIt] = bedReader.Text()
+		bufferPointer[bufferIt] = bedReader.Text()
 		nbReads++
 		bufferIt++
 
+		scanBed:
 		if bufferIt >= BUFFERSIZE {
 			chunk := bufferIt / THREADNB
 			bufferStart := 0
@@ -398,7 +421,7 @@ func createReadInPeakOneFileThreading(bedfilename string) {
 			for i := 0; i < THREADNB;i++{
 
 				waiting.Add(1)
-				go updateReadInPeakThread(&bufferLine , bufferStart, bufferStop, i, &waiting)
+				go updateReadInPeakThread(bufferPointer , bufferStart, bufferStop, i, &waiting)
 
 				bufferStart += chunk
 				bufferStop += chunk
@@ -409,14 +432,22 @@ func createReadInPeakOneFileThreading(bedfilename string) {
 			}
 
 			bufferIt = 0
-		}
 
-		waiting.Wait()
+			if isBuffer1 {
+				bufferPointer = &bufferLine2
+				isBuffer1 = false
+				goto scanBed
+			} else {
+				bufferPointer = &bufferLine1
+				isBuffer1 = true
+				waiting.Wait()
+			}
+		}
 	}
 
 	if bufferIt > 0 {
 		waiting.Add(1)
-		updateReadInPeakThread(&bufferLine , 0, bufferIt, 0, &waiting)
+		updateReadInPeakThread(bufferPointer , 0, bufferIt, 0, &waiting)
 	}
 }
 
