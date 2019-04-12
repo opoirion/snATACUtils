@@ -385,6 +385,8 @@ func createBoolSparseMatrixOneFileThreading(bedfilename string) {
 		}
 	}
 
+	waiting.Wait()
+
 	if bufferIt > 0 {
 		waiting.Add(1)
 		updateBoolSparseMatrixOneThread(bufferPointer , 0, bufferIt, 0, &waiting)
@@ -444,6 +446,8 @@ func createReadInPeakOneFileThreading(bedfilename string) {
 			}
 		}
 	}
+
+	waiting.Wait()
 
 	if bufferIt > 0 {
 		waiting.Add(1)
