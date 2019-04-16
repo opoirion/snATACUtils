@@ -8,7 +8,7 @@ import(
 	"flag"
 	utils "gitlab.com/Grouumf/ATACdemultiplex/ATACdemultiplexUtils"
 	"fmt"
-	"math/rand"
+	"github.com/valyala/fastrand"
 	"sync"
 	"path"
 	"io"
@@ -16,6 +16,7 @@ import(
 	"strings"
 	"strconv"
 	"time"
+	"math/rand"
 )
 
 
@@ -63,6 +64,12 @@ var MUTEX sync.Mutex
 
 /*WAITING  waiting group*/
 var WAITING * sync.WaitGroup
+
+/*BUFFERSIZE  buffer size*/
+const BUFFERSIZE = 50000
+
+/*BUFFERLINEARRAY  cell->nb reads array*/
+var BUFFERLINEARRAY [][BUFFERSIZE]string
 
 
 func main() {
@@ -118,13 +125,13 @@ func simulateBedFiles(bedfilenames []string) {
 
 
 func simulateOneBedFile(bedfilename, outputfile string, nbLines , it int) {
-	var line string
 	tStart := time.Now()
 
 	fmt.Printf("Initating random number of reads per cell...\n")
 	initNbReads(it, nbLines)
 
 	BUFFERARRAY = make([]bytes.Buffer, THREADNB)
+	BUFFERLINEARRAY = make([][BUFFERSIZE]string, THREADNB)
 	THREADSCHANNEL = make(chan int, THREADNB)
 
 	writer := utils.ReturnWriter(outputfile, 0, false)
@@ -137,42 +144,60 @@ func simulateOneBedFile(bedfilename, outputfile string, nbLines , it int) {
 
 	bedReader, file := utils.ReturnReader(bedfilename, 0, false)
 	defer file.Close()
+	threadID := <-THREADSCHANNEL
+	lineID := 0
 
 	for bedReader.Scan() {
-		line = bedReader.Text()
-		WAITING.Add(1)
-		go processOneRead(line, &writer, <-THREADSCHANNEL)
+		BUFFERLINEARRAY[threadID][lineID] = bedReader.Text()
+
+		lineID++
+
+		if lineID >= BUFFERSIZE {
+			WAITING.Add(1)
+			go processOneRead(&BUFFERLINEARRAY[threadID], &writer, threadID, lineID)
+			lineID = 0
+			threadID = <-THREADSCHANNEL
+		}
 	}
 
+	WAITING.Add(1)
+	go processOneRead(&BUFFERLINEARRAY[threadID], &writer, threadID, lineID)
 	WAITING.Wait()
 
 	tDiff := time.Now().Sub(tStart)
 	fmt.Printf("Simulating one bed done in time: %f s \n", tDiff.Seconds())
 }
 
-func processOneRead(line string, writer * io.WriteCloser, threadID int) {
+func processOneRead(lines * [BUFFERSIZE]string, writer * io.WriteCloser, threadID, lineEnd int) {
 	defer WAITING.Done()
 	var randNum float64
+	var split []string
+	var i int
 
-	split := strings.Split(line, "\t")
 	write := false
 
-	for i := 0; i < len(READSARRAY); i++ {
-		randNum = rand.Float64()
+	for pos := 0;pos < lineEnd;pos++ {
 
-		if READSARRAY[i] > randNum {
-			write = true
+		split = strings.Split(lines[pos], "\t")
 
-			BUFFERARRAY[threadID].WriteString(split[0])
-			BUFFERARRAY[threadID].WriteRune('\t')
-			BUFFERARRAY[threadID].WriteString(split[1])
-			BUFFERARRAY[threadID].WriteRune('\t')
-			BUFFERARRAY[threadID].WriteString(split[2])
-			BUFFERARRAY[threadID].WriteRune('\t')
-			BUFFERARRAY[threadID].WriteString("SIM")
-			BUFFERARRAY[threadID].WriteString(strconv.Itoa(i))
-			BUFFERARRAY[threadID].WriteRune('\n')
+		for i = 0; i < len(READSARRAY); i++ {
+			randNum = float64(fastrand.Uint32n(100000)) / 100000.0
+
+			if READSARRAY[i] > randNum {
+				write = true
+
+				BUFFERARRAY[threadID].WriteString(split[0])
+				BUFFERARRAY[threadID].WriteRune('\t')
+				BUFFERARRAY[threadID].WriteString(split[1])
+				BUFFERARRAY[threadID].WriteRune('\t')
+				BUFFERARRAY[threadID].WriteString(split[2])
+				BUFFERARRAY[threadID].WriteRune('\t')
+				BUFFERARRAY[threadID].WriteString("SIM")
+				BUFFERARRAY[threadID].WriteString(strconv.Itoa(i))
+				BUFFERARRAY[threadID].WriteRune('\n')
+			}
 		}
+
 	}
 
 	if write {
