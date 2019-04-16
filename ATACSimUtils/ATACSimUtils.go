@@ -28,6 +28,9 @@ var BEDFILENAMES utils.ArrayFlags
 /*FILENAMEOUT  output file name output */
 var FILENAMEOUT string
 
+/*TAGNAME  tag name for the simulated cells */
+var TAGNAME string
+
 /*MEAN  mean of the nb of reads per cell dist */
 var MEAN float64
 
@@ -64,6 +67,7 @@ var WAITING * sync.WaitGroup
 
 func main() {
 	flag.StringVar(&BEDFILENAME, "bed", "", "name of the bed file")
+	flag.StringVar(&TAGNAME, "tag", "", "tag name for the simulated cells")
 	flag.Var(&BEDFILENAMES, "beds", "name of several bed files")
 	flag.IntVar(&THREADNB, "threads", 1, "threads concurrency")
 	flag.IntVar(&SEED, "seed", 2019, "Seed used for random processes")
@@ -72,7 +76,7 @@ func main() {
 	flag.Float64Var(&STD, "std", 2000, "Std. of the nb. of reads per cell used")
 	flag.StringVar(&FILENAMEOUT, "out", "", "name/tag the output file(s)")
 	flag.BoolVar(&SIMULATEBED, "simulate", false, `Simulate scATAC-Seq bed files
-                      USAGE: ATACSimUtils -simulate -nb <int> -mean <float> std <float> -bed <bedfile> (-threads <int> -out <string>)`)
+                      USAGE: ATACSimUtils -simulate -nb <int> -mean <float> std <float> -bed <bedfile> (-threads <int> -out <string> -tag <string>)`)
 	flag.Parse()
 
 	BEDFILENAMES = append(BEDFILENAMES, BEDFILENAME)
