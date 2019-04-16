@@ -193,6 +193,7 @@ func processOneRead(lines * [BUFFERSIZE]string, writer * io.WriteCloser, threadI
 				BUFFERARRAY[threadID].WriteString(split[2])
 				BUFFERARRAY[threadID].WriteRune('\t')
 				BUFFERARRAY[threadID].WriteString("SIM")
+				BUFFERARRAY[threadID].WriteString(TAGNAME)
 				BUFFERARRAY[threadID].WriteString(strconv.Itoa(i))
 				BUFFERARRAY[threadID].WriteRune('\n')
 			}
