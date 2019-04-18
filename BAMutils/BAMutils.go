@@ -452,10 +452,6 @@ func DivideMultipleBedFileParallel() {
 	var waiting sync.WaitGroup
 	waiting.Add(THREADNB)
 
-	for i := 1; i < 250; i++ {
-		BEDTOBEDGRAPHCHAN[i] = make(chan map[int]int)
-	}
-
 	for i := 0; i < THREADNB;i++ {
 		go divideMultipleBedFileOneThread(i, &waiting)
 	}
@@ -1000,9 +996,9 @@ func extractIntDictFromChan(channel chan map[int]int) (map[int]int) {
 
 /*bedToBedGraphDictOneThread Transform a bed file into a bedgraph dict */
 func bedToBedGraphDictOneThread(bed string, waiting *sync.WaitGroup, checkCellIndex bool){
+	defer waiting.Done()
    	bedReader, file := utils.ReturnReader(bed, 0, false)
 	defer file.Close()
-	defer waiting.Done()
 
 	var split []string
 	var chroStr string
@@ -1073,7 +1069,13 @@ func bedToBedGraphDictOneThread(bed string, waiting *sync.WaitGroup, checkCellIn
 
 	for key := range bedtobedgraphdict {
 
+
+
 		if len(bedtobedgraphdict[key]) > 0 {
+			if _, isInside = BEDTOBEDGRAPHCHAN[key];!isInside {
+				BEDTOBEDGRAPHCHAN[key] = make(chan map[int]int, THREADNB)
+			}
+
 			if key < 50 {
 				chrDict[fmt.Sprintf(strconv.Itoa(key))] = key
 			}
