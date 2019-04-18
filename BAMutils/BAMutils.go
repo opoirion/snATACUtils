@@ -399,20 +399,21 @@ func InsertRGTagToBamFile() {
 	check(err)
 	defer bamWriter.Close()
 
+	loop:
 	for {
 		record, err = bamReader.Read()
 
 		switch err {
 		case io.EOF:
-			break
+			break loop
 		case nil:
 		default:
 			fmt.Printf("ERROR: %s\n",err)
-			break
+			break loop
 		}
 
 		if record == nil {
-			break
+			break loop
 		}
 
 		readID = strings.SplitN(record.Name, ":", 2)[0]
@@ -468,8 +469,8 @@ func DivideMultipleBamFileParallel() {
 	check(err)
 
 	bamReader, err := bam.NewReader(f, THREADNB)
-	defer bamReader.Close()
 	check(err)
+	defer bamReader.Close()
 
 	header := bamReader.Header()
 	loadCellIDIndexAndBAMWriter(NUCLEIINDEX, header)
@@ -518,29 +519,30 @@ func divideMultipleBamFileOneThread(threadID int, waiting *sync.WaitGroup){
 	check(err)
 
 	bamReader, err := bam.NewReader(f, THREADNB)
-	defer bamReader.Close()
 	check(err)
+	defer bamReader.Close()
 
 	count := 0
 	chunkSize := len(CELLIDDICTMULTIPLE) / (THREADNB - 1)
 	startIndex := chunkSize * threadID
 	endIndex := chunkSize * (threadID + 1)
 
+	loop:
 	for {
 		record, err = bamReader.Read()
 		count++
 
 		switch err {
 		case io.EOF:
-			break
+			break loop
 		case nil:
 		default:
 			fmt.Printf("ERROR: %s\n",err)
-			break
+			break loop
 		}
 
 		if record == nil {
-			break
+			break loop
 		}
 
 		readID = strings.SplitN(record.Name, ":", 2)[0]
@@ -677,21 +679,22 @@ func DivideMultipleBamFile() {
 
 	count := 0
 
+	loop:
 	for {
 		record, err = bamReader.Read()
 		count++
 
 		switch err {
 		case io.EOF:
-			break
+			break loop
 		case nil:
 		default:
 			fmt.Printf("ERROR: %s\n",err)
-			break
+			break loop
 		}
 
 		if record == nil {
-			break
+			break loop
 		}
 
 		read = record.String()
@@ -1113,8 +1116,8 @@ func DivideBam() {
 	defer fWrite.Close()
 
 	bamReader, err := bam.NewReader(f, THREADNB)
-	defer bamReader.Close()
 	check(err)
+	defer bamReader.Close()
 
 	header := bamReader.Header()
 	bamWriter, err := bam.NewWriter(fWrite, header, THREADNB)
@@ -1122,21 +1125,22 @@ func DivideBam() {
 	defer bamWriter.Close()
 	count := 0
 
+	loop:
 	for {
 		record, err = bamReader.Read()
 		count++
 
 		switch err {
 		case io.EOF:
-			break
+			break loop
 		case nil:
 		default:
 			fmt.Printf("ERROR: %s\n",err)
-			break
+			break loop
 		}
 
 		if record == nil {
-			break
+			break loop
 		}
 
 		read = record.String()
@@ -1229,7 +1233,7 @@ func loadCellIDIndexAndBEDWriter(fname string) {
 		cellid := split[0]
 		filename := split[1]
 
-		ext := filename[len(filename)-7:len(filename)]
+		ext := filename[len(filename)-7:]
 
 		if ext != ".bed.gz" {
 			filePath = fmt.Sprintf("%s/%s.bed.gz", OUTPUTDIR, filename)
