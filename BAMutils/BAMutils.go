@@ -1047,6 +1047,11 @@ func bedToBedGraphDictOneThread(bed string, waiting *sync.WaitGroup, checkCellIn
 				} else {
 					chrDict[chroStr] = uncommon
 					uncommon++
+
+					if _, isInside = bedtobedgraphdict[uncommon];!isInside {
+						bedtobedgraphdict[uncommon] = make(map[int]int)
+
+					}
 				}
 			}
 
