@@ -110,7 +110,7 @@ func main() {
 	flag.Var(&BEDFILENAMES, "beds", "name of the bed files")
 	flag.BoolVar(&BEDTOBEDGRAPH, "bed_to_bedgraph", false,
 		`transform one (-bed) or multiple (use multiple -beds option) into bedgraph
-                USAGE: BAMutils -bed_to_bedgraph -bed <fname> (-out <fname> -threads <int> -split)`)
+                USAGE: BAMutils -bed_to_bedgraph -bed <fname> (-out <fname> -threads <int> -cellsID <fname> -split)`)
 	flag.StringVar(&BAMFILENAME, "bam", "", "name of the bam file")
 	flag.StringVar(&FILENAMEOUT, "out", "", "name of the output file")
 	flag.StringVar(&NUCLEIFILE, "cellsID", "", "file with cell IDs")
