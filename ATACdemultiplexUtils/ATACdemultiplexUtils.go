@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"sort"
 	"strconv"
+	"time"
 	originalbzip2  "compress/bzip2"
 )
 
@@ -454,4 +455,23 @@ func LoadCellIDDict(fname string) map[string]bool {
 		celliddict[line] = true
 	}
 	return celliddict
+}
+
+
+func CountNbLines(filename string) int {
+	reader, file := ReturnReader(filename, 0, false)
+	defer file.Close()
+
+	nbLines := 0
+
+	tStart := time.Now()
+
+	for reader.Scan() {
+		nbLines++
+	}
+
+	tDiff := time.Now().Sub(tStart)
+	fmt.Printf("Count nb lines done in time: %f s \n", tDiff.Seconds())
+
+	return nbLines
 }

@@ -23,18 +23,10 @@ import(
 var FILENAME string
 /*MAX ...*/
 var MAX int
-/*BZ2 ...*/
-var BZ2 bool
-/*GZ ...*/
-var GZ bool
 /*PRINTLASTLINE ...*/
 var PRINTLASTLINE bool
 /*PRINTLASTLINES ...*/
 var PRINTLASTLINES int
-/*BZ2PUREGO ...*/
-var BZ2PUREGO bool
-/*READTOWRITE ...*/
-var READTOWRITE bool
 /*COMPRESSIONMODE ...*/
 var COMPRESSIONMODE int
 /*GOTOLINE ...*/
@@ -63,6 +55,8 @@ var OUTTAG string
 var MERGE bool
 /*WRITECOMPL ...*/
 var WRITECOMPL bool
+/*SCAN ...*/
+var SCAN bool
 /*COMPDICT ...*/
 var COMPDICT = map[byte]byte {'A': 'T', 'T': 'A', 'G': 'C', 'C': 'G'}
 /*COMPLSTRATEGY ...*/
@@ -82,8 +76,6 @@ func main() {
 	flag.Var(&FILENAMES, "filenames", "name of the files to use")
 	flag.IntVar(&COMPRESSIONMODE, "compressionMode", 6, "compressionMode for native bzip2 lib (1 faster -> 9 smaller) <default: 6>")
 	flag.IntVar(&MAX, "max_nb_lines", 0, "max number of lines")
-	flag.BoolVar(&BZ2, "bz2", false, "is bz2")
-	flag.BoolVar(&GZ, "gz", false, "is gz")
 	flag.BoolVar(&CICEROPROCESSING, "bed_to_cicero", false,
 		`format a bed to cicero input (ex: chr1\t1215523\t1216200\tcellID -> chr1_1215523_121620,tcellID,1)
             USAGE: ATACtools -bed_to_cicero -filename <bedfile> (-filenames <bedfile2> -filenames <bedfile3> ...  -ignoreerror)`)
@@ -100,8 +92,6 @@ func main() {
             USAGE: ATACtools -sortfile -filename <fname> (-delimiter <string> -ignoreerror -ignore_sorting_category)`)
 	flag.BoolVar(&PRINTLASTLINE, "printlastline", false, "print last line")
 	flag.IntVar(&PRINTLASTLINES, "printlastlines", 0, "print last n lines")
-	flag.BoolVar(&BZ2PUREGO, "bz2PureGo", false, "is bz2 using pureGo")
-	flag.BoolVar(&READTOWRITE, "readtowrite", false, "read to write")
 	flag.BoolVar(&IGNOREERROR, "ignoreerror", false, "ignore error and continue")
 	flag.BoolVar(&IGNORESORTINGCATEGORY, "ignore_sorting_category", false, "ignore file cateogry (identified by #) when sorting")
 	flag.StringVar(&SEARCHLINE, "search_in_line", "", "search specific motifs in line")
@@ -109,6 +99,8 @@ func main() {
 	flag.StringVar(&OUTTAG, "output_tag", "reference", "particule to annotate the output file name")
 	flag.BoolVar(&WRITECOMPL, "write_compl", false, `write the barcode complement of a fastq files
             USAGE: ATACtools -write_compl <fastq_file> (-compl_strategy <"split_10_compl_second"/"split_10_compl_first"> -tag <string>)`)
+	flag.BoolVar(&SCAN, "scan", false, `scan a file and determine the number of line
+            USAGE ATACtools -scan -filename <string> (-printlastline -printlastlines <int> -search_in_line <string> -gotoline <int>)`)
 	flag.StringVar(&SEP, "delimiter", "\t", "delimiter used to split and sort the log file (default \t)")
 	flag.StringVar(&TAG, "tag", "", "tag used when creating a reference fastq file to tag all the reads (default \"\")")
 	flag.StringVar(&COMPLSTRATEGY, "compl_strategy", "split_10_compl_second", `Strategy to use when writing the complement of a fastq file (default split_10_compl_second: split after 10 bases and complementary only second)`)
@@ -158,16 +150,10 @@ func main() {
 	case SORTLOGS:
 		utils.SortLogfile(FILENAME, SEP, "", IGNORESORTINGCATEGORY, IGNOREERROR)
 		nbLines = 0
-	case BZ2:
-		nbLines = countLineBz2(FILENAME)
-	case GZ:
-		nbLines = countLineGz(FILENAME)
-	case BZ2PUREGO:
-		nbLines = countLineBz2PureGo(FILENAME, 0)
-	case READTOWRITE:
-		nbLines = readtowrite(FILENAME)
-	default:
+	case SCAN:
 		nbLines = countLine(FILENAME)
+	default:
+		log.Fatal("Error at least one processing option (scan/bed_to_cicero/create_ref_fastq/create_ref_bed/merge/create_barcode_list) should be used!")
 	}
 
 	tDiff := time.Now().Sub(tStart)
@@ -576,38 +562,11 @@ func returnComp(s string) (comp []byte) {
 }
 
 func countLine(filename string) int {
-	file, err := os.Open(filename)
-	check(err)
-
-	scanner := bufio.NewScanner(file)
+	scanner, file := utils.ReturnReader(filename, 0, false)
+	defer file.Close()
 	return processScanner(scanner)
 }
 
-// readtowrite ...
-func readtowrite(filename string) int  {
-	scanner, file := utils.ReturnReaderForBzipfile(filename, 0)
-	defer file.Close()
-	writer := utils.ReturnWriterForBzipfile("tmp.bz2")
-
-	nbLines := 0
-
-	for scanner.Scan() {
-		nbLines++
-		line := scanner.Text()
-		if len(line) > 6 {
-
-			line = fmt.Sprintf(">%s%s%s", line[:4], line[:5], strings.Split(line,"@" )[0])
-
-		}
-
-		writer.Write([]byte(line))
-	}
-
-	utils.ExceCmd("rm tmp.bz2")
-
-	return nbLines
-
-}
 
 func splitLine(line string, lineNb int) (key string, value int){
 	split := strings.Split(line, SEP)
@@ -686,14 +645,6 @@ func mergeLogFiles(filenames []string, outfname string) {
 	}
 }
 
-func countLineBz2(filename string) int {
-
-	scanner, file := utils.ReturnReaderForBzipfile(filename, 0)
-	defer file.Close()
-
-	return processScanner(scanner)
-}
-
 func processScanner(scanner * bufio.Scanner) (nbLines int) {
 	nbLines = 0
 	for scanner.Scan() {
@@ -723,22 +674,6 @@ func processScanner(scanner * bufio.Scanner) (nbLines int) {
 
 	return nbLines
 
-}
-
-func countLineGz(filename string) int {
-
-	scanner, file := utils.ReturnReaderForGzipfile(filename, 0)
-	defer file.Close()
-
-	return processScanner(scanner)
-}
-
-func countLineBz2PureGo(filename string, pos int) int {
-
-	scanner, file := utils.ReturnReaderForBzipfilePureGo(filename, pos)
-	defer file.Close()
-
-	return processScanner(scanner)
 }
 
 

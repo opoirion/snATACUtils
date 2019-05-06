@@ -41,6 +41,9 @@ var OUTPUTDIR string
 /*THREADNB number of threads for reading the bam file */
 var THREADNB int
 
+/*DOWNSAMPLE number of threads for reading the bam file */
+var DOWNSAMPLE float64
+
 /*NUCLEIFILE file with cells ID */
 var NUCLEIFILE string
 
@@ -129,6 +132,8 @@ func main() {
 	flag.BoolVar(&ADDRG, "add_rg", false, "add cell ID as RG group to bam file")
 	flag.BoolVar(&SPLIT, "split", false, `split file per chromosomes
                 USAGE: BAMutils -split -bed <bedfile> (-out <string> -cellsID <string>)`)
+	flag.Float64Var(&DOWNSAMPLE, "downsample", 1.0, `Downsample the number of reads from a a bed file (downsample = 1.0 is 100% and downsample = 0.0 is 0% of the reads)
+                USAGE: BAMutils -downsample <float> -bed <bedfile> (-out <string> -cellsID <string>)`)
 	flag.IntVar(&THREADNB, "threads", 1, "threads concurrency for reading bam file")
 	flag.IntVar(&BINSIZE, "binsize", 50, "bin size for bedgraph creation")
 	flag.StringVar(&DELIMITER, "delimiter", "\t", "delimiter used")
@@ -199,10 +204,92 @@ func main() {
 	case SPLIT:
 		SplitBedPerChr()
 
+	case DOWNSAMPLE < 1.0 && DOWNSAMPLE > 0.0:
+		downSampleBedFile()
 	}
 
 	tDiff := time.Now().Sub(tStart)
 	fmt.Printf("done in time: %f s \n", tDiff.Seconds())
+}
+
+func downSampleBedFile() {
+	var line []byte
+	var split [][]byte
+	checkCellIndex := false
+	var buffer bytes.Buffer
+	var thres int
+
+	writeToThres := false
+
+	ext := path.Ext(BEDFILENAME)
+	count := 0
+	totalNbReads := 0
+
+	if DOWNSAMPLE > 0.5 {
+		thres = int(10.0 * DOWNSAMPLE)
+		writeToThres = true
+
+	} else {
+		thres = int(1.0 / DOWNSAMPLE)
+	}
+
+	sep := []byte("\t")
+
+	if FILENAMEOUT == "" {
+		FILENAMEOUT = fmt.Sprintf("%s.downsample%s", BEDFILENAME[:len(BEDFILENAME) - len(ext)], ext)
+	}
+
+	if NUCLEIFILE != "" {
+		loadCellIDDict(NUCLEIFILE)
+		checkCellIndex = true
+	}
+
+	bedReader, file := utils.ReturnReader(BEDFILENAME, 0, false)
+	defer file.Close()
+
+	writer := utils.ReturnWriter(FILENAMEOUT, 6, false)
+	defer writer.Close()
+
+	for bedReader.Scan() {
+
+		if checkCellIndex {
+			line = bedReader.Bytes()
+			split = bytes.Split(line, sep)
+			if !CELLIDDICT[string(split[3])] {
+				continue
+			}
+		}
+
+		count++
+
+		switch {
+
+		case !writeToThres && count >= thres:
+			line = bedReader.Bytes()
+			buffer.Write(line)
+			buffer.WriteRune('\n')
+			writer.Write(buffer.Bytes())
+			buffer.Reset()
+			count = 0
+			totalNbReads++
+
+		case !writeToThres:
+
+		case writeToThres && count <= thres:
+			line = bedReader.Bytes()
+			buffer.Write(line)
+			buffer.WriteRune('\n')
+			writer.Write(buffer.Bytes())
+			buffer.Reset()
+			totalNbReads++
+
+		case writeToThres && count >= 10:
+			count = 0
+		}
+	}
+
+	fmt.Printf("Total number of reads used: %d\n", totalNbReads)
+	fmt.Printf("File: %s written \n", FILENAMEOUT)
 }
 
 /*SplitBedPerChr split a bed file per chromosome */
@@ -391,8 +478,8 @@ func InsertRGTagToBamFile() {
 	defer fOut.Close()
 
 	bamReader, err := bam.NewReader(f, THREADNB)
-	defer bamReader.Close()
 	check(err)
+	defer bamReader.Close()
 
 	header := bamReader.Header()
 	bamWriter, err := bam.NewWriter(fOut, header, THREADNB)
