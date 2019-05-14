@@ -2,20 +2,12 @@ package main
 
 import (
 	"os"
-	"log"
 	"bufio"
-	originalbzip2  "compress/bzip2"
 	utils "gitlab.com/Grouumf/ATACdemultiplex/ATACdemultiplexUtils"
-	"strings"
 	"path"
 	"fmt"
 )
 
-
-/*FILENAME ...*/
-var FILENAME string
-/*MAX ...*/
-var MAX int
 
 func countLine(fname string, compressionMode int) int {
 	fStat, err := os.Stat(fname)
@@ -50,26 +42,9 @@ func countLine(fname string, compressionMode int) int {
 	}
 
 	seek, err := fileScanner.Seek(0, 1)
+	utils.Check(err)
 	fmt.Printf("estimated number of lines: %d\n", (int(size) / int(seek)) * i)
 
 	return (int(size) / int(seek)) * i
-
-}
-
-func guessPosToGo(fname string, lineToGo int) int {
-	fileOpen, err := os.OpenFile(fname, 0, 0)
-
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	readerOs := bufio.NewReader(fileOpen)
-	readerBzip := originalbzip2.NewReader(readerOs)
-
-	chunk := make([]byte, 10000)
-	readerBzip.Read(chunk)
-	nbLines := strings.Count(string(chunk), "\n")
-
-	return lineToGo * 10000 / nbLines
 
 }

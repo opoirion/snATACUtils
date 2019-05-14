@@ -254,7 +254,7 @@ func checkOneIndex(index string, indexName string) (success bool, ref string, re
 func getNbMistake (index string, indexName string, dict map[string]map[string]bool) (bool, string) {
 	var nbMistake int
 
-	for indexref, _ := range dict[indexName] {
+	for indexref := range dict[indexName] {
 		nbMistake = 0
 		for i, char := range index {
 			if char != rune(indexref[i]) {

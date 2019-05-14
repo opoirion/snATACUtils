@@ -203,7 +203,7 @@ func main() {
 
 	MAX_NB_MISTAKE_DICT = make(map[string]int)
 
-	for index, _ := range(LENGTHDIC) {
+	for index := range(LENGTHDIC) {
 		MAX_NB_MISTAKE_DICT[index] = MAX_NB_MISTAKE
 	}
 
@@ -297,7 +297,7 @@ func main() {
 
 	writeReport()
 
-	tDiff := time.Now().Sub(tStart)
+	tDiff := time.Since(tStart)
 	fmt.Printf("demultiplexing finished in %f s\n", tDiff.Seconds())
 }
 
@@ -320,8 +320,8 @@ func writeReport() {
 			OUTPUT_PATH, OUTPUT_TAG_NAME, key)
 
 		file, err := os.Create(filename)
-		defer file.Close()
 		Check(err)
+		defer file.Close()
 
 		file.WriteString("#<key>\t<value>\n")
 
@@ -353,7 +353,7 @@ func writeReport() {
 		}
 	}
 
-	tDiff := time.Now().Sub(tStart)
+	tDiff := time.Since(tStart)
 	fmt.Printf("writing report finished in: %f s\n", tDiff.Seconds())
 }
 
@@ -374,8 +374,8 @@ func writeReportFromMultipleDict(channel * map[string]chan StatsDict, fname stri
 		OUTPUT_PATH, OUTPUT_TAG_NAME, fname)
 	fileFail, err := os.Create(filename)
 
-	defer fileFail.Close()
 	Check(err)
+	defer fileFail.Close()
 
 	var fp *os.File
 
