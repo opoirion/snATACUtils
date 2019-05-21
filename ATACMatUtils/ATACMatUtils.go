@@ -247,7 +247,7 @@ func writeBoolMatrixToFile(outfile string) {
 	var cellPos, featPos uint
 	var writer io.WriteCloser
 
-	writer = utils.ReturnWriter(outfile, 0, false)
+	writer = utils.ReturnWriter(outfile)
 
 	defer writer.Close()
 
@@ -273,7 +273,7 @@ func writeCellCounter(outfile string) {
 	var cellID string
 	var writer io.WriteCloser
 
-	writer = utils.ReturnWriter(outfile, 0, false)
+	writer = utils.ReturnWriter(outfile)
 
 	defer writer.Close()
 

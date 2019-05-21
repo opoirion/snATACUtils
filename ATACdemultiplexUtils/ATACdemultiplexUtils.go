@@ -83,7 +83,7 @@ func ExceCmd(cmd string) {
 }
 
 /*ReturnWriter ... */
-func ReturnWriter(fname string, compressionMode int, pureGo bool) (io.WriteCloser) {
+func ReturnWriter(fname string) (io.WriteCloser) {
 
 	ext := path.Ext(fname)
 	var bzipFile io.WriteCloser

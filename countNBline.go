@@ -9,7 +9,12 @@ import (
 )
 
 
-func countLine(fname string, compressionMode int) int {
+/*FILENAME ...*/
+var FILENAME string
+/*MAX ...*/
+var MAX int
+
+func countLine(fname string) int {
 	fStat, err := os.Stat(fname)
 	Check(err)
 
@@ -34,7 +39,6 @@ func countLine(fname string, compressionMode int) int {
 
 
 	defer fileScanner.Close()
-	// defer writer.Close()
 
 	for scanner.Scan() {
 		i++

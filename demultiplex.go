@@ -46,7 +46,7 @@ var OUTPUT_TAG_NAME string
 var INDEX_REPLICATE_R1 string
 /*INDEX_REPLICATE_R2 ...*/
 var INDEX_REPLICATE_R2 string
-/*INDEX_REPLICATE_R2 ...*/
+/*INDEX_NO_REPLICATE ...*/
 var INDEX_NO_REPLICATE bool
 /*OUTPUT_PATH ...*/
 var OUTPUT_PATH string
@@ -156,7 +156,7 @@ func initChan(logChan * map[string]chan StatsDict, logType []string) {
 /* */
 func main() {
 	flag.StringVar(&FASTQ_I1, "fastq_I1", "", "fastq index file index paired read 1")
-	flag.StringVar(&FASTQ_I2, "fastq_I2", "", "fastq index file index paired read 2")
+	flag.StringVar(&FASTQ_I2, "fastq_I2", "", "fastq index file index paired read 2 (not needed for 10x dataset)")
 	flag.StringVar(&FASTQ_R1, "fastq_R1", "", "fastq read file index paired read 1")
 	flag.StringVar(&FASTQ_R2, "fastq_R2", "", "fastq read file index paired read 2")
 	flag.BoolVar(&DEBUG, "debug", false, "debug wrongly formated reads")
@@ -165,7 +165,6 @@ func main() {
 	flag.IntVar(&MAX_NB_MISTAKE, "max_nb_mistake", 2, "Maximum number of mistakes allowed to assign a reference read id (default 2)")
 	flag.IntVar(&MAX_NB_MISTAKE_P5, "max_nb_mistake_p5", -1, "Maximum number of mistakes allowed for p5 only (default: same as max_nb_mistake)")
 	flag.StringVar(&OUTPUT_TAG_NAME, "output_tag_name", "", "tag for the output file names (default None)")
-	flag.BoolVar(&USE_BZIP_GO_LIBRARY, "use_bzip2_go_lib", false, "use bzip2 go library instead of native C lib (slower)")
 	flag.BoolVar(&WRITE_LOGS, "write_logs", false, "write logs (might slower the execution time)")
 	flag.BoolVar(&SORT_LOGS, "sort_logs", false, "sort logs (might consume a lot of RAM and provoke failure)")
 	flag.IntVar(&SHIFT_P5, "shift_p5", 0, "shift p5 barcodes toward n nucleotides from the left (default 0)")
@@ -201,6 +200,16 @@ func main() {
 		" if return, the demultiplex returns in case of an error and continue.")
 	flag.Parse()
 
+	if PRINTVERSION {
+		fmt.Printf("ATACdemultiplex version: %s\n", VERSION)
+		return
+	}
+
+	if FASTQ_I2 == "" && FASTQ_I1 != "" {
+		FormatingR1R2FastqUsingI1Only(FASTQ_R1, FASTQ_R2, FASTQ_I1)
+		return
+	}
+
 	MAX_NB_MISTAKE_DICT = make(map[string]int)
 
 	for index := range(LENGTHDIC) {
@@ -217,11 +226,6 @@ func main() {
 	}
 
 	LoadIndexRange()
-
-	if PRINTVERSION {
-		fmt.Printf("ATACdemultiplex version: %s\n", VERSION)
-		return
-	}
 
 	if OUTPUT_PATH == "." || OUTPUT_PATH == "" {
 		OUTPUT_PATH = "./"
@@ -457,7 +461,7 @@ func launchAnalysisMultipleFile() {
 	case MAX_NB_READS != 0:
 		chunk = (MAX_NB_READS / NB_THREADS)
 	default:
-		nbReads = countLine(FASTQ_I1, COMPRESSION_MODE) / 4
+		nbReads = countLine(FASTQ_I1) / 4
 		fmt.Printf("estimated number of reads: %d\n", nbReads)
 		chunk = (nbReads / NB_THREADS) - (nbReads / NB_THREADS) % 4
 	}
@@ -564,10 +568,10 @@ func launchAnalysisOneFile(
 
 	ext := path.Ext(filenameR1)
 
-	scannerI1, fileI1 = utils.ReturnReader(FASTQ_I1, startingRead * 4, USE_BZIP_GO_LIBRARY)
-	scannerI2, fileI2 = utils.ReturnReader(FASTQ_I2, startingRead * 4, USE_BZIP_GO_LIBRARY)
-	scannerR1, fileR1 = utils.ReturnReader(FASTQ_R1, startingRead * 4, USE_BZIP_GO_LIBRARY)
-	scannerR2, fileR2 = utils.ReturnReader(FASTQ_R2, startingRead * 4, USE_BZIP_GO_LIBRARY)
+	scannerI1, fileI1 = utils.ReturnReader(FASTQ_I1, startingRead * 4, false)
+	scannerI2, fileI2 = utils.ReturnReader(FASTQ_I2, startingRead * 4, false)
+	scannerR1, fileR1 = utils.ReturnReader(FASTQ_R1, startingRead * 4, false)
+	scannerR2, fileR2 = utils.ReturnReader(FASTQ_R2, startingRead * 4, false)
 
 	var barcodeBuffer bytes.Buffer
 	var R1Buffer bytes.Buffer
@@ -588,12 +592,8 @@ func launchAnalysisOneFile(
 		writerR2DictName[repl] = fmt.Sprintf("%s%s%s%s.demultiplexed.R2.repl%d.fastq%s", OUTPUT_PATH, index,
 			strings.TrimSuffix(filenameR2, fmt.Sprintf(".fastq%s", ext)),
 			OUTPUT_TAG_NAME, repl, ext)
-		writerR1Dict[writerR1DictName[repl]] = utils.ReturnWriter(
-			writerR1DictName[repl], COMPRESSION_MODE,
-			USE_BZIP_GO_LIBRARY)
-		writerR2Dict[writerR2DictName[repl]] = utils.ReturnWriter(
-			writerR2DictName[repl], COMPRESSION_MODE,
-			USE_BZIP_GO_LIBRARY)
+		writerR1Dict[writerR1DictName[repl]] = utils.ReturnWriter(writerR1DictName[repl])
+		writerR2Dict[writerR2DictName[repl]] = utils.ReturnWriter(writerR2DictName[repl])
 
 		defer writerR1Dict[writerR1DictName[repl]].Close()
 		defer writerR2Dict[writerR2DictName[repl]].Close()

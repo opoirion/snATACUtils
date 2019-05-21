@@ -247,7 +247,7 @@ func downSampleBedFile() {
 	bedReader, file := utils.ReturnReader(BEDFILENAME, 0, false)
 	defer file.Close()
 
-	writer := utils.ReturnWriter(FILENAMEOUT, 6, false)
+	writer := utils.ReturnWriter(FILENAMEOUT)
 	defer writer.Close()
 
 	for bedReader.Scan() {
@@ -342,7 +342,7 @@ func SplitBedPerChr() {
 			bedFname = fmt.Sprintf("%s.%s%s",
 				FILENAMEOUT[:len(FILENAMEOUT) - len(ext)], chrID, ext)
 			resNameDict[chrID] = bedFname
-			resFileDict[chrID] = utils.ReturnWriter(bedFname, 6, false)
+			resFileDict[chrID] = utils.ReturnWriter(bedFname)
 			defer resFileDict[chrID].Close()
 		}
 
@@ -818,7 +818,7 @@ func DivideBed() {
 	loadCellIDDict(NUCLEIFILE)
 
 	bedReader, file := utils.ReturnReader(BEDFILENAME, 0, false)
-	bedWriter := utils.ReturnWriter(FILENAMEOUT, 6, false)
+	bedWriter := utils.ReturnWriter(FILENAMEOUT)
 
 	defer file.Close()
 	defer bedWriter.Close()
@@ -1329,7 +1329,7 @@ func loadCellIDIndexAndBEDWriter(fname string) {
 		}
 
 		if _, isInside := BEDWRITERDICT[filename]; !isInside {
-			BEDWRITERDICT[filename] = utils.ReturnWriter(filePath, 6, false)
+			BEDWRITERDICT[filename] = utils.ReturnWriter(filePath)
 			check(err)
 			OUTFILENAMELIST[filename] = true
 		}

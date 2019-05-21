@@ -134,7 +134,7 @@ func simulateOneBedFile(bedfilename, outputfile string, nbLines , it int) {
 	BUFFERLINEARRAY = make([][BUFFERSIZE]string, THREADNB)
 	THREADSCHANNEL = make(chan int, THREADNB)
 
-	writer := utils.ReturnWriter(outputfile, 0, false)
+	writer := utils.ReturnWriter(outputfile)
 	defer writer.Close()
 
 	for i:=0;i<THREADNB;i++ {

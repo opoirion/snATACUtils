@@ -74,7 +74,6 @@ var CICEROPROCESSING bool
 func main() {
 	flag.StringVar(&FILENAME, "filename", "", "name of the file(s) multiple files should be into \"")
 	flag.Var(&FILENAMES, "filenames", "name of the files to use")
-	flag.IntVar(&COMPRESSIONMODE, "compressionMode", 6, "compressionMode for native bzip2 lib (1 faster -> 9 smaller) <default: 6>")
 	flag.IntVar(&MAX, "max_nb_lines", 0, "max number of lines")
 	flag.BoolVar(&CICEROPROCESSING, "bed_to_cicero", false,
 		`format a bed to cicero input (ex: chr1\t1215523\t1216200\tcellID -> chr1_1215523_121620,tcellID,1)
@@ -227,7 +226,7 @@ func bedFiletoCiceroInputOnethread(filename string, outfile string, barcodefilen
 
 	scanner, file := utils.ReturnReader(filename, 0, false)
 	defer file.Close()
-	writer := utils.ReturnWriter(outfile, COMPRESSIONMODE, false)
+	writer := utils.ReturnWriter(outfile)
 	defer writer.Close()
 
 	if writeHeader {
@@ -276,7 +275,7 @@ func extractBEDreadsPerBarcodes(filename string, barcodefilename string) {
 
 	scanner, file := utils.ReturnReader(filename, 0, false)
 	defer file.Close()
-	writer := utils.ReturnWriter(outfile, COMPRESSIONMODE, false)
+	writer := utils.ReturnWriter(outfile)
 	defer writer.Close()
 
 	if barcodefilename != "" {
@@ -338,7 +337,7 @@ func extractFASTQreadsPerBarcodes(filename string, barcodefilename string, waiti
 
 	scanner, file := utils.ReturnReader(filename, 0, false)
 	defer file.Close()
-	writer := utils.ReturnWriter(outfile, COMPRESSIONMODE, false)
+	writer := utils.ReturnWriter(outfile)
 	defer writer.Close()
 	notCheckBarcode := true
 
@@ -405,7 +404,7 @@ func writeComplement(filename string, complStrategy string) (nbLines int) {
 
 	scanner, file := utils.ReturnReader(filename, 0, false)
 	defer file.Close()
-	writer := utils.ReturnWriter(outfile, COMPRESSIONMODE, false)
+	writer := utils.ReturnWriter(outfile)
 	defer writer.Close()
 
 	cycle := 0
