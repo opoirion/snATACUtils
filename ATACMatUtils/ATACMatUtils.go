@@ -313,7 +313,7 @@ func mergeCOOFile(filename string) {
 	var split []string
 	var start, stop int
 
-	scanner, f = utils.ReturnReader(filename, 0, false)
+	scanner, f = utils.ReturnReader(filename, 0)
 
 	defer f.Close()
 
@@ -342,7 +342,7 @@ func createBoolSparseMatrixOneFileThreading(bedfilename string) {
 	var bufferIt int
 	var waiting sync.WaitGroup
 
-	bedReader, file := utils.ReturnReader(BEDFILENAME, 0, false)
+	bedReader, file := utils.ReturnReader(BEDFILENAME, 0)
 
 	defer file.Close()
 
@@ -405,7 +405,7 @@ func createReadInPeakOneFileThreading(bedfilename string) {
 	isBuffer1 := true
 	bufferPointer = &bufferLine1
 
-	bedReader, file := utils.ReturnReader(BEDFILENAME, 0, false)
+	bedReader, file := utils.ReturnReader(BEDFILENAME, 0)
 
 	defer file.Close()
 
@@ -559,7 +559,7 @@ func createBoolSparseMatrixOneFile(bedfilename string) {
 	var interval interval.IntInterface
 	var cellPos,featPos uint
 
-	bedReader, file := utils.ReturnReader(BEDFILENAME, 0, false)
+	bedReader, file := utils.ReturnReader(BEDFILENAME, 0)
 
 	defer file.Close()
 
@@ -618,7 +618,7 @@ func loadPeaks(fname string) {
 	var scanner *bufio.Scanner
 	var f *os.File
 
-	scanner, f = utils.ReturnReader(fname, 0, false)
+	scanner, f = utils.ReturnReader(fname, 0)
 
 	defer f.Close()
 

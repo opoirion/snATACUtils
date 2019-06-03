@@ -142,7 +142,7 @@ func simulateOneBedFile(bedfilename, outputfile string, nbLines , it int) {
 	}
 
 
-	bedReader, file := utils.ReturnReader(bedfilename, 0, false)
+	bedReader, file := utils.ReturnReader(bedfilename, 0)
 	defer file.Close()
 	threadID := <-THREADSCHANNEL
 	lineID := 0
@@ -225,7 +225,7 @@ func initNbReads(it int, nbLines int) {
 
 
 func countNbLines(bedfile string) int {
-	bedReader, file := utils.ReturnReader(bedfile, 0, false)
+	bedReader, file := utils.ReturnReader(bedfile, 0)
 
 	defer file.Close()
 	nbLines := 0

@@ -18,7 +18,7 @@ import (
 	originalbzip2  "compress/bzip2"
 )
 
-
+/*BUFFERSIZE ... */
 const BUFFERSIZE = 1000000
 
 /*Pair ...*/
@@ -143,7 +143,7 @@ func ReturnReaderForBzipfileOld(fname string, seekPos int) (*bufio.Scanner, *os.
 }
 
 /*ReturnReader ... */
-func ReturnReader(fname string, startingLine int, pureGo bool) (*bufio.Scanner, *os.File) {
+func ReturnReader(fname string, startingLine int) (*bufio.Scanner, *os.File) {
 	ext := path.Ext(fname)
 	var bzipScanner * bufio.Scanner
 	var fileOpen * os.File
@@ -151,12 +151,8 @@ func ReturnReader(fname string, startingLine int, pureGo bool) (*bufio.Scanner, 
 
 	switch ext {
 	case ".bz2":
-		switch pureGo {
-		case true:
-			bzipScanner, fileOpen = ReturnReaderForBzipfilePureGo(fname, startingLine)
-		default:
-			bzipScanner, fileOpen = ReturnReaderForBzipfile(fname, startingLine)
-		}
+		bzipScanner, fileOpen = ReturnReaderForBzipfile(fname, startingLine)
+
 	case ".gz":
 		bzipScanner, fileOpen = ReturnReaderForGzipfile(fname, startingLine)
 	default:
@@ -191,7 +187,7 @@ func ReturnReaderForGzipfile(fname string, startingLine int) (*bufio.Scanner, *o
 /*ReturnReaderForBzipfilePureGo ... */
 func ReturnReaderForBzipfilePureGo(fname string, startingLine int) (*bufio.Scanner, *os.File) {
 	var bzipScanner * bufio.Scanner
-	buffer := make([]byte, BUFFERSIZE, BUFFERSIZE)
+	buffer := make([]byte, BUFFERSIZE)
 
 	fileOpen, err := os.OpenFile(fname, 0, 0)
 
@@ -207,7 +203,8 @@ func ReturnReaderForBzipfilePureGo(fname string, startingLine int) (*bufio.Scann
 		return bzipScanner, fileOpen
 	}
 
-	readerBzip.Read(buffer)
+	_, err = readerBzip.Read(buffer)
+	check(err)
 
 	nbLines := strings.Count(string(buffer), "\n")
 	currentLine := nbLines
@@ -236,8 +233,9 @@ loop:
 /*ReturnReaderForBzipfile ... */
 func ReturnReaderForBzipfile(fname string, startingLine int) (*bufio.Scanner, *os.File) {
 	var bzipScanner * bufio.Scanner
+	var err error
 
-	buffer := make([]byte, BUFFERSIZE, BUFFERSIZE)
+	buffer := make([]byte, BUFFERSIZE)
 
 	readerBzip, fileOpen := returnBzipReader(fname)
 
@@ -246,7 +244,8 @@ func ReturnReaderForBzipfile(fname string, startingLine int) (*bufio.Scanner, *o
 		return bzipScanner, fileOpen
 	}
 
-	readerBzip.Read(buffer)
+	_, err = readerBzip.Read(buffer)
+	check(err)
 
 	nbLines := strings.Count(string(buffer), "\n")
 	currentLine := nbLines
@@ -298,25 +297,6 @@ func returnBzipReader(fname string) (io.Reader, *os.File) {
 }
 
 
-/*seekFile ... */
-func seekFile(reader * io.ReadCloser, pos int) {
-	currentPos := 0
-	buff := make([]byte, BUFFERSIZE)
-
-loop:
-	for {
-		if pos - currentPos < BUFFERSIZE {
-			buff := make([]byte, pos - currentPos)
-			(*reader).Read(buff)
-			break loop
-		}
-
-		_, err := (*reader).Read(buff)
-		Check(err)
-		currentPos += BUFFERSIZE
-	}
-}
-
 /*SortLogfile sort a file according to key value
 input:
     filename string,
@@ -328,6 +308,7 @@ input:
 func SortLogfile(filename string, separator string, outfname string,
 	ignoreSortingCategory bool, ignoreError bool)  {
 	file, err := os.Open(filename)
+	check(err)
 	defer file.Close()
 	var buffer bytes.Buffer
 	var split []string
@@ -343,8 +324,8 @@ func SortLogfile(filename string, separator string, outfname string,
 	}
 
 	outfile, err := os.Create(outfname)
+	check(err)
 	defer outfile.Close()
-
 	defer os.Rename(outfname, filename)
 
 	check(err)
@@ -441,6 +422,7 @@ func check(err error) {
 	}
 }
 
+/*LoadCellIDDict create cell ID bool dict */
 func LoadCellIDDict(fname string) map[string]bool {
 	f, err := os.Open(fname)
 	check(err)
@@ -457,9 +439,9 @@ func LoadCellIDDict(fname string) map[string]bool {
 	return celliddict
 }
 
-
+/*CountNbLines count nb lines in a file*/
 func CountNbLines(filename string) int {
-	reader, file := ReturnReader(filename, 0, false)
+	reader, file := ReturnReader(filename, 0)
 	defer file.Close()
 
 	nbLines := 0
@@ -470,7 +452,7 @@ func CountNbLines(filename string) int {
 		nbLines++
 	}
 
-	tDiff := time.Now().Sub(tStart)
+	tDiff := time.Since(tStart)
 	fmt.Printf("Count nb lines done in time: %f s \n", tDiff.Seconds())
 
 	return nbLines

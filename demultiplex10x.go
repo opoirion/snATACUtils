@@ -65,9 +65,9 @@ func FormatingR1R2FastqUsingI1Only(filenameR1 string, filenameR2 string, filenam
 	defer writerR1.Close()
 	defer writerR2.Close()
 
-	scannerR1, fileR1 = utils.ReturnReader(filenameR1, 0, false)
-	scannerR2, fileR2 = utils.ReturnReader(filenameR2, 0, false)
-	scannerI1, fileI1 = utils.ReturnReader(filenameI1, 0, false)
+	scannerR1, fileR1 = utils.ReturnReader(filenameR1, 0)
+	scannerR2, fileR2 = utils.ReturnReader(filenameR2, 0)
+	scannerI1, fileI1 = utils.ReturnReader(filenameI1, 0)
 
 	defer fileR1.Close()
 	defer fileR2.Close()

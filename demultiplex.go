@@ -568,10 +568,10 @@ func launchAnalysisOneFile(
 
 	ext := path.Ext(filenameR1)
 
-	scannerI1, fileI1 = utils.ReturnReader(FASTQ_I1, startingRead * 4, false)
-	scannerI2, fileI2 = utils.ReturnReader(FASTQ_I2, startingRead * 4, false)
-	scannerR1, fileR1 = utils.ReturnReader(FASTQ_R1, startingRead * 4, false)
-	scannerR2, fileR2 = utils.ReturnReader(FASTQ_R2, startingRead * 4, false)
+	scannerI1, fileI1 = utils.ReturnReader(FASTQ_I1, startingRead * 4)
+	scannerI2, fileI2 = utils.ReturnReader(FASTQ_I2, startingRead * 4)
+	scannerR1, fileR1 = utils.ReturnReader(FASTQ_R1, startingRead * 4)
+	scannerR2, fileR2 = utils.ReturnReader(FASTQ_R2, startingRead * 4)
 
 	var barcodeBuffer bytes.Buffer
 	var R1Buffer bytes.Buffer

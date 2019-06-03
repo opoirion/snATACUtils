@@ -224,7 +224,7 @@ func bedFiletoCiceroInputOnethread(filename string, outfile string, barcodefilen
 		barcodeIndex = utils.LoadCellIDDict(barcodefilename)
 	}
 
-	scanner, file := utils.ReturnReader(filename, 0, false)
+	scanner, file := utils.ReturnReader(filename, 0)
 	defer file.Close()
 	writer := utils.ReturnWriter(outfile)
 	defer writer.Close()
@@ -273,7 +273,7 @@ func extractBEDreadsPerBarcodes(filename string, barcodefilename string) {
 	outfile := fmt.Sprintf("%s.%s%s%s",
 		filename[:len(filename) - len(ext) -len(ext2)], OUTTAG, ext2, ext)
 
-	scanner, file := utils.ReturnReader(filename, 0, false)
+	scanner, file := utils.ReturnReader(filename, 0)
 	defer file.Close()
 	writer := utils.ReturnWriter(outfile)
 	defer writer.Close()
@@ -335,7 +335,7 @@ func extractFASTQreadsPerBarcodes(filename string, barcodefilename string, waiti
 	outfile := fmt.Sprintf("%s.%s%s%s",
 		filename[:len(filename) - len(ext) -len(ext2)], OUTTAG, ext2, ext)
 
-	scanner, file := utils.ReturnReader(filename, 0, false)
+	scanner, file := utils.ReturnReader(filename, 0)
 	defer file.Close()
 	writer := utils.ReturnWriter(outfile)
 	defer writer.Close()
@@ -402,7 +402,7 @@ func writeComplement(filename string, complStrategy string) (nbLines int) {
 	outfile := fmt.Sprintf("%s.compl%s%s",
 		filename[:len(filename) - len(ext) -len(ext2)], ext2, ext)
 
-	scanner, file := utils.ReturnReader(filename, 0, false)
+	scanner, file := utils.ReturnReader(filename, 0)
 	defer file.Close()
 	writer := utils.ReturnWriter(outfile)
 	defer writer.Close()
@@ -489,7 +489,7 @@ func createIndexCountFile(filename string) (nbLines int) {
 	outfilename := fmt.Sprintf("%s.barcodeCounts",
 		filename[:len(filename) - len(ext) -len(ext2)])
 
-	scanner, file := utils.ReturnReader(filename, 0, false)
+	scanner, file := utils.ReturnReader(filename, 0)
 	defer file.Close()
 	outfile, err := os.Create(outfilename)
 	check(err)
@@ -561,7 +561,7 @@ func returnComp(s string) (comp []byte) {
 }
 
 func countLine(filename string) int {
-	scanner, file := utils.ReturnReader(filename, 0, false)
+	scanner, file := utils.ReturnReader(filename, 0)
 	defer file.Close()
 	return processScanner(scanner)
 }

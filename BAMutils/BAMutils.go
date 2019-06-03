@@ -244,7 +244,7 @@ func downSampleBedFile() {
 		checkCellIndex = true
 	}
 
-	bedReader, file := utils.ReturnReader(BEDFILENAME, 0, false)
+	bedReader, file := utils.ReturnReader(BEDFILENAME, 0)
 	defer file.Close()
 
 	writer := utils.ReturnWriter(FILENAMEOUT)
@@ -318,7 +318,7 @@ func SplitBedPerChr() {
 
 	ext = path.Ext(FILENAMEOUT)
 
-	bedReader, file := utils.ReturnReader(BEDFILENAME, 0, false)
+	bedReader, file := utils.ReturnReader(BEDFILENAME, 0)
 
 	defer file.Close()
 
@@ -432,7 +432,7 @@ func CreateCellIndexBed() {
 	check(err)
 	defer fOut.Close()
 
-	bedReader, file := utils.ReturnReader(BEDFILENAME, 0, false)
+	bedReader, file := utils.ReturnReader(BEDFILENAME, 0)
 	defer file.Close()
 
 	for bedReader.Scan(){
@@ -661,7 +661,7 @@ func divideMultipleBedFileOneThread(threadID int, waiting *sync.WaitGroup){
 	var line string
 	var buffer bytes.Buffer
 
-	bedReader, file := utils.ReturnReader(BEDFILENAME, 0, false)
+	bedReader, file := utils.ReturnReader(BEDFILENAME, 0)
 	defer file.Close()
 
 	count := 0
@@ -699,7 +699,7 @@ func DivideMultipleBedFile() {
 	var filename string
 	var buffer bytes.Buffer
 
-	bedReader, file := utils.ReturnReader(BEDFILENAME, 0, false)
+	bedReader, file := utils.ReturnReader(BEDFILENAME, 0)
 	defer file.Close()
 
 	loadCellIDIndexAndBEDWriter(NUCLEIINDEX)
@@ -817,7 +817,7 @@ func DivideBed() {
 
 	loadCellIDDict(NUCLEIFILE)
 
-	bedReader, file := utils.ReturnReader(BEDFILENAME, 0, false)
+	bedReader, file := utils.ReturnReader(BEDFILENAME, 0)
 	bedWriter := utils.ReturnWriter(FILENAMEOUT)
 
 	defer file.Close()
@@ -1087,7 +1087,7 @@ func extractIntDictFromChan(channel chan map[int]int) (map[int]int) {
 /*bedToBedGraphDictOneThread Transform a bed file into a bedgraph dict */
 func bedToBedGraphDictOneThread(bed string, waiting *sync.WaitGroup, checkCellIndex bool){
 	defer waiting.Done()
-   	bedReader, file := utils.ReturnReader(bed, 0, false)
+   	bedReader, file := utils.ReturnReader(bed, 0)
 	defer file.Close()
 
 	var split []string
