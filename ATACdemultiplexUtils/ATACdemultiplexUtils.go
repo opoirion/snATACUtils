@@ -18,6 +18,10 @@ import (
 	originalbzip2  "compress/bzip2"
 )
 
+type closer interface {
+	Close() error
+}
+
 /*BUFFERSIZE ... */
 const BUFFERSIZE = 1000000
 
@@ -71,10 +75,15 @@ func RankByWordCountAndDeleteOldMap(wordFrequencies * map[string]int) PairList{
 /*Check ... */
 func Check(err error) {
 	if err != nil {
-		log.Fatal(err)
+		panic(err)
 	}
 }
 
+/*CloseFile close file checking error */
+func CloseFile(file closer) {
+	err := file.Close()
+	Check(err)
+}
 
 /*ExceCmd ... */
 func ExceCmd(cmd string) {
@@ -97,7 +106,7 @@ func ReturnWriter(fname string) (io.WriteCloser) {
 		bzipFile = ReturnWriterForGzipFile(fname)
 	default:
 		bzipFile, err = os.Create(fname)
-		check(err)
+		Check(err)
 	}
 
 	return bzipFile
@@ -157,7 +166,7 @@ func ReturnReader(fname string, startingLine int) (*bufio.Scanner, *os.File) {
 		bzipScanner, fileOpen = ReturnReaderForGzipfile(fname, startingLine)
 	default:
 		fileOpen, err = os.Open(fname)
-		check(err)
+		Check(err)
 		bzipScanner = bufio.NewScanner(fileOpen)
 	}
 
@@ -204,7 +213,7 @@ func ReturnReaderForBzipfilePureGo(fname string, startingLine int) (*bufio.Scann
 	}
 
 	_, err = readerBzip.Read(buffer)
-	check(err)
+	Check(err)
 
 	nbLines := strings.Count(string(buffer), "\n")
 	currentLine := nbLines
@@ -245,7 +254,7 @@ func ReturnReaderForBzipfile(fname string, startingLine int) (*bufio.Scanner, *o
 	}
 
 	_, err = readerBzip.Read(buffer)
-	check(err)
+	Check(err)
 
 	nbLines := strings.Count(string(buffer), "\n")
 	currentLine := nbLines
@@ -308,13 +317,13 @@ input:
 func SortLogfile(filename string, separator string, outfname string,
 	ignoreSortingCategory bool, ignoreError bool)  {
 	file, err := os.Open(filename)
-	check(err)
+	Check(err)
 	defer file.Close()
 	var buffer bytes.Buffer
 	var split []string
 	var valueField, key string
 	var value int
-	check(err)
+	Check(err)
 	scanner := bufio.NewScanner(file)
 
 	ext := path.Ext(filename)
@@ -324,11 +333,11 @@ func SortLogfile(filename string, separator string, outfname string,
 	}
 
 	outfile, err := os.Create(outfname)
-	check(err)
+	Check(err)
 	defer outfile.Close()
 	defer os.Rename(outfname, filename)
 
-	check(err)
+	Check(err)
 	pl := PairList{}
 
 	lineNb := -1
@@ -390,7 +399,7 @@ func SortLogfile(filename string, separator string, outfname string,
 				valueField, line, lineNb)
 
 			if !ignoreError {
-				check(err)
+				Check(err)
 			}
 		}
 
@@ -416,16 +425,10 @@ func SortLogfile(filename string, separator string, outfname string,
 	}
 }
 
-func check(err error) {
-	if err != nil {
-		log.Fatal(err)
-	}
-}
-
 /*LoadCellIDDict create cell ID bool dict */
 func LoadCellIDDict(fname string) map[string]bool {
 	f, err := os.Open(fname)
-	check(err)
+	Check(err)
 	defer f.Close()
 	scanner := bufio.NewScanner(f)
 
