@@ -32,8 +32,8 @@ var GENEFILE string
 /*SNPFILES multiple input files for GWAS SNP-genes */
 var SNPFILES utils.ArrayFlags
 
-/*EGENEFILE eGene File */
-var EGENEFILE string
+/*GENEIDTONAMEFILE gene ID to name conversion File */
+var GENEIDTONAMEFILE string
 
 /*WRITESNPTOBED write significant SNP to bed file */
 var WRITESNPTOBED bool
@@ -64,9 +64,6 @@ var CELLIDCOMPLDICT map[string]bool
 
 /*EGENEDICT cell ID<->pos */
 var EGENEDICT map[string]string
-
-/*SNVPEAKLIST cell ID<->pos */
-var SNVPEAKLIST map[string][]string
 
 /*NBCELLS number of cells in the clusters */
 var NBCELLS int
@@ -119,7 +116,7 @@ func main() {
 	flag.StringVar(&CELLIDFNAME, "xgi", "", "cluster specific cell barcodes ")
 	flag.StringVar(&CELLIDCOMPLFNAME, "xgi_compl", "", "All cell barcodes ")
 	flag.StringVar(&GENEFILE, "gene_file", "", "Cluster-specific Gene file ")
-	flag.StringVar(&EGENEFILE, "GWAS_egene", "", "GWAS egene file used for gene name conversion (gene_id\tgene_name) ")
+	flag.StringVar(&GENEIDTONAMEFILE, "gene_ID_to_name", "", "File used for gene name conversion (gene_id\tgene_name) ")
 	flag.Var(&SNPFILES, "GWAS_gene_pair", "name of one or multiple GWAS files (-GWAS_gene_pair <fname1> -GWAS_gene_pair <fname2>)")
 	flag.StringVar(&OUTFILE, "out", "", "Name of the output file")
 
@@ -133,8 +130,6 @@ func main() {
 		log.Fatal(fmt.Printf("!!!! Error -peak option must be provided\n"))
 	case GENEFILE == "":
 		log.Fatal(fmt.Printf("!!!! Error -gene_file option must be provided\n"))
-	case EGENEFILE == "":
-		log.Fatal(fmt.Printf("!!!! Error -GWAS_egene must be provided\n"))
 	case CELLIDFNAME == "":
 		log.Fatal(fmt.Printf("!!!! Error -xgi must be provided\n"))
 	case CELLIDCOMPLFNAME == "":
@@ -210,6 +205,7 @@ func scanBed() {
 	sort.Strings(keys)
 
 	writer.Write([]byte("#"))
+	writer.Write([]byte("eQTL_linkage\t"))
 	_, err = writer.Write([]byte(strings.Join(keys, "\t")))
 	utils.Check(err)
 	writer.Write([]byte("Score Normed Cluster\t"))
@@ -218,6 +214,7 @@ func scanBed() {
 	writer.Write([]byte("Nb. cell Compl.\t\n"))
 
 	firstKey := keys[0]
+	count := 0
 
 	for key := range countDicts[firstKey] {
 		buffer.WriteString(key)
@@ -243,7 +240,10 @@ func scanBed() {
 		_, err = writer.Write(buffer.Bytes())
 		utils.Check(err)
 		buffer.Reset()
+		count++
 	}
+
+	fmt.Printf("Number of eQTL enhancer-genes detected: %d\n", count)
 }
 
 
@@ -401,8 +401,13 @@ func createGeneArray() {
 				"Error cannot split line: %s in more than 2 part \n", line))
 		}
 
-		score, err = strconv.ParseFloat(split[1], 64)
-		utils.Check(err)
+		score, err = strconv.ParseFloat(strings.Trim(split[len(split) - 1], " \n\t\r"), 64)
+
+		if err != nil {
+			fmt.Printf("Error with line: %s number: %s\n", line, split[1])
+			score = 0
+
+		}
 
 		count++
 
@@ -417,10 +422,21 @@ func createRefGeneDict() {
 	var split []string
 	var line string
 
-	scanner, file := utils.ReturnReader(EGENEFILE, 0)
-	defer utils.CloseFile(file)
+	if len(GENEDICT) == 0 {
+		panic(fmt.Sprintf("Error: GENEDICT must contain at least one gene from %s", GENEFILE))
+	}
 
 	EGENEDICT = make(map[string]string)
+
+	if GENEIDTONAMEFILE == "" {
+		for gene := range GENEDICT {
+			EGENEDICT[gene] = gene
+		}
+		return
+	}
+
+	scanner, file := utils.ReturnReader(GENEIDTONAMEFILE, 0)
+	defer utils.CloseFile(file)
 
 	scanner.Scan()
 
@@ -513,6 +529,11 @@ func createSNPIntervalTree() {
 		defer fmt.Printf("File: %s written\n", fname)
 	}
 
+	if len(PEAKCHRINTERVALDICT) == 0 {
+		panic(fmt.Sprintf("Error peak intervals seem empty from file: %s\n", PEAKFILE))
+
+	}
+
 	CHRINTERVALDICT = make(map[string]*interval.IntTree)
 
 	geneUintDict := make(map[string]uintptr)
@@ -546,7 +567,7 @@ func createSNPIntervalTree() {
 			}
 
 			if gene, isInside = EGENEDICT[split[1]];!isInside {
-				log.Fatal(fmt.Sprintf("Error gene: %s %s not in ref file:%s\n", split[1], gene, EGENEFILE))
+				log.Fatal(fmt.Sprintf("Error gene: %s %s not in ref file:%s\n", split[1], gene, GENEIDTONAMEFILE))
 
 			}
 
