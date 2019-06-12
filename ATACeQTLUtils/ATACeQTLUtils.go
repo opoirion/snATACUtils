@@ -29,7 +29,10 @@ var OUTFILE string
 /*GENEFILE Specific gene file */
 var GENEFILE string
 
-/*SNPFILES multiple input files for GWAS SNP-genes */
+/*SEP separator used to split the SNV-SNV link file */
+var SEP string
+
+/*SNPFILES multiple input files for eQTL SNP-genes */
 var SNPFILES utils.ArrayFlags
 
 /*GENEIDTONAMEFILE gene ID to name conversion File */
@@ -47,13 +50,25 @@ var CHRINTERVALDICT map[string]*interval.IntTree
 /*PEAKCHRINTERVALDICT chr ID <-> interval tree */
 var PEAKCHRINTERVALDICT map[string]*interval.IntTree
 
-/*SNPDICT chrID -> SNV pos -> score */
-var SNPDICT map[string]map[int]float64
 
+/*snpID Internal structure used to represent an SNP */
 type snpID struct {
 	chrID string
 	pos int
 }
+
+
+/*item Internal structure used to sort map */
+type item struct {
+	key string
+	value float64
+}
+
+/*SNPTOEXCLUDE snpID -> bool */
+var SNPTOEXCLUDE map[snpID]bool
+
+/*SNPDICT chrID <string> -> genomic pos <int> -> score <float64> */
+var SNPDICT map[string]map[int]float64
 
 /*SNPIDTOSNPDICT dbSNP ID -> pos score  */
 var SNPIDTOSNPDICT map[string]snpID
@@ -70,7 +85,7 @@ var GENEUINTDICT map[uintptr]string
 /*PEAKUNINTDICT genename <string> -> score <float> */
 var PEAKUNINTDICT map[uintptr]string
 
-/*CELLIDEQTLDICT genename <string> -> score <float> */
+/*CELLIDEQTLDICT  <string> -> <string> -> bool */
 var CELLIDEQTLDICT map[string]map[string]bool
 
 /*CELLIDDICT cell ID<->pos */
@@ -88,29 +103,29 @@ var NBCELLS int
 /*NBCELLSCOMPL cell */
 var NBCELLSCOMPL int
 
-/*CELLIDFNAME cell ID<->pos */
+/*CELLIDFNAME file name */
 var CELLIDFNAME string
 
-/*CELLIDCOMPLFNAME cell ID<->pos */
+/*CELLIDCOMPLFNAME file name */
 var CELLIDCOMPLFNAME string
 
-/*LDLINKFNAME cell ID<->pos */
+/*LDLINKFNAME file name */
 var LDLINKFNAME string
+
+/*LDFILE file name */
+var LDFILE string
 
 /*SNPPADDING Padding for SNP inclusion */
 var SNPPADDING int
+
+/*PEAKPADDING Padding for peak */
+var PEAKPADDING int
 
 /*PERFORMEQTL perform eQTL analysis */
 var PERFORMEQTL bool
 
 /*CREATEDLGROUP create DL group analysis */
 var CREATEDLGROUP bool
-
-
-type item struct {
-	key string
-	value float64
-}
 
 /*IntInterval Integer-specific intervals used for intervalTree*/
 type IntInterval struct {
@@ -142,22 +157,25 @@ func (i IntInterval) String() string {
 
 func main() {
 	flag.BoolVar(&WRITESNPTOBED, "write_snp", false, "Write potential SNPs to a bed file")
-	flag.IntVar(&SNPPADDING, "padding", 0, "Padding added before and after SNP location for SNP inclusion")
+	flag.IntVar(&SNPPADDING, "padding_snp", 0, "Padding added before and after SNP location for SNP inclusion")
+	flag.IntVar(&PEAKPADDING, "padding_peak", 0, "Padding added before and after peak coordinates")
 	flag.StringVar(&BEDFILENAME, "bed", "", "name of the bed file")
 	flag.StringVar(&PEAKFILE, "peak_file", "", "Cluster-specific Peak file ")
 	flag.StringVar(&DBSNPFILE, "dbSNP", "", "dbSNP file ")
 	flag.StringVar(&CELLIDFNAME, "xgi", "", "cluster specific cell barcodes ")
 	flag.StringVar(&CELLIDCOMPLFNAME, "xgi_compl", "", "All cell barcodes ")
 	flag.StringVar(&GENEFILE, "gene_file", "", "Cluster-specific Gene file ")
+	flag.StringVar(&SEP, "sep", " ", "Separator used to split the SNV-SNV link file ")
+	flag.StringVar(&LDFILE, "ld_file", "", "LD file. Each line represents a LD group with SNP sorted using their p-values. The first SNP of each line is considered as the top SNP for each group. The rest of the SNPs will be discarded if found.")
 	flag.StringVar(&LDLINKFNAME, "ld_pair", "", "LD file. Each line is a SNV-SNV (<dbSNP1><space><dbSNP2>) link representing a linkage disiquilibrium")
 	flag.StringVar(&GENEIDTONAMEFILE, "gene_ID_to_name", "", "File used for gene name conversion (gene_id<tab>gene_name) ")
-	flag.Var(&SNPFILES, "GWAS_gene_pair", "name of one or multiple GWAS files (-GWAS_gene_pair <fname1> -GWAS_gene_pair <fname2>)")
+	flag.Var(&SNPFILES, "eQTL_gene_pair", "name of one or multiple eQTL files (-eQTL_gene_pair <fname1> -eQTL_gene_pair <fname2>)")
 	flag.StringVar(&OUTFILE, "out", "", "Name of the output file")
 	flag.BoolVar(&PERFORMEQTL, "analysis", false, `perform eQTL analysis
-                        USAGE: ATACeQTLUtils -analysis -xgi <fname> -xgi_compl <fname> -bed <fname> -peak_file <fname> -gene_file <fname> -GWAS_gene_pair <fname> (optionnal: -out <string> -gene_ID_to_name <fname>)`)
+                        USAGE: ATACeQTLUtils -analysis -xgi <fname> -xgi_compl <fname> -bed <fname> -peak_file <fname> -gene_file <fname> -eQTL_gene_pair <fname> (optionnal: -out <string> -gene_ID_to_name <fname> -ld_file)`)
 
 	flag.BoolVar(&CREATEDLGROUP, "create_dl_group", false, `create DL group
-                        USAGE: ATACeQTLUtils -create_dl_group  -GWAS_gene_pair <fname> -dbSNP <fname> -dl_pair <string> (-out <string>)`)
+                        USAGE: ATACeQTLUtils -create_dl_group  -eQTL_gene_pair <fname> -dbSNP <fname> -dl_pair <string> (-out <string>)`)
 
 	flag.Parse()
 
@@ -181,7 +199,7 @@ func createDLGroup() {
 	case DBSNPFILE == "":
 		log.Fatal(fmt.Printf("!!!! Error -dbSNP_file option must be provided\n"))
 	case len(SNPFILES) == 0:
-		log.Fatal(fmt.Printf("!!!! Error at least one -GWAS_gene_pair must be provided\n"))
+		log.Fatal(fmt.Printf("!!!! Error at least one -eQTL_gene_pair must be provided\n"))
 	case OUTFILE == "":
 		OUTFILE = fmt.Sprintf("%s.DL_group", DBSNPFILE)
 	}
@@ -190,12 +208,117 @@ func createDLGroup() {
 
 	OUTFILE = OUTFILE[:len(OUTFILE)-len(ext)]
 
-	scanGWASFile()
+	scanEQTLFile()
 	scanDBSNPFile()
 	writeUnknownSNP()
 	scanDLFile()
 }
 
+
+func performEQTLAnalsysis() {
+
+	switch {
+
+	case BEDFILENAME == "":
+		log.Fatal(fmt.Printf("!!!! Error -bed option must be provided\n"))
+	case PEAKFILE == "":
+		log.Fatal(fmt.Printf("!!!! Error -peak option must be provided\n"))
+	case GENEFILE == "":
+		log.Fatal(fmt.Printf("!!!! Error -gene_file option must be provided\n"))
+	case CELLIDFNAME == "":
+		log.Fatal(fmt.Printf("!!!! Error -xgi must be provided\n"))
+	case CELLIDCOMPLFNAME == "":
+		log.Fatal(fmt.Printf("!!!! Error -xgi_compl must be provided\n"))
+	case len(SNPFILES) == 0:
+		log.Fatal(fmt.Printf("!!!! Error at least one -eQTL_gene_pair must be provided\n"))
+	case OUTFILE == "":
+		OUTFILE = fmt.Sprintf("%s.eQTL.tsv", BEDFILENAME)
+
+	}
+
+	tStart := time.Now()
+
+	if LDFILE != "" {
+		//Load LD group
+		loadRefLDFile()
+	}
+	//Create and init cell ID dicts
+	loadCellIDDicts()
+	//Create Ref Gene Array
+	createGeneArray()
+	//Create gene ID <-> gene name dict
+	createRefGeneDict()
+	//Create peak interval tree
+	createPeakIntervalTree()
+	//Create SNP interval tree
+	createSNPIntervalTree()
+	//Scan the bed files
+	scanBed()
+	tDiff := time.Since(tStart)
+	fmt.Printf("done in time: %f s \n", tDiff.Seconds())
+}
+
+
+func loadRefLDFile() {
+	var pos int
+	var err error
+	var line, chrID, key string
+	var split, split2 []string
+	var snp  snpID
+
+	snpToKeep := make(map[snpID]bool)
+	SNPTOEXCLUDE = make(map[snpID]bool)
+
+	scanner, file := utils.ReturnReader(LDFILE, 0)
+	defer utils.CloseFile(file)
+	tStart := time.Now()
+
+	for scanner.Scan() {
+		line = scanner.Text()
+		split = strings.Split(line, "\t")
+
+		split2 = strings.Split(split[0], "_")
+
+		if len(split2) != 2 {
+			panic(fmt.Sprintf("Error: SNV: %s\n", split[0]))
+		}
+
+		chrID = split2[0]
+		pos, err = strconv.Atoi(split2[1])
+		utils.Check(err)
+		snp.chrID = chrID
+		snp.pos = pos
+
+		snpToKeep[snp] = true
+
+		for _, key = range split[1:] {
+
+			split2 = strings.Split(key, "_")
+
+			if len(split2) != 2 {
+				panic(fmt.Sprintf("Error: SNV: %s\n", key))
+			}
+
+			chrID = split2[0]
+			pos, err = strconv.Atoi(split2[1])
+			utils.Check(err)
+			snp.chrID = chrID
+			snp.pos = pos
+
+			SNPTOEXCLUDE[snp] = true
+
+		}
+	}
+
+	for snp = range snpToKeep {
+		delete(SNPTOEXCLUDE, snp)
+	}
+
+	tDiff := time.Since(tStart)
+	fmt.Printf("Number of top SNP linked to LD groups %d. Number of excluded SNPs %d \n",
+		len(snpToKeep), len(SNPTOEXCLUDE))
+	fmt.Printf("Ref DL file loaded in time: %f s \n", tDiff.Seconds())
+}
 
 func scanDLFile() {
 	var line, snp1, snp2 string
@@ -218,7 +341,7 @@ func scanDLFile() {
 
 	for scanner.Scan() {
 		line = scanner.Text()
-		split = strings.Split(line, " ")
+		split = strings.Split(line, SEP)
 
 		if len(split) < 2 {
 			fmt.Printf("Error unable to split the line in two! line: %s\n", line)
@@ -435,7 +558,7 @@ func scanDBSNPFile() {
 }
 
 
-func scanGWASFile() {
+func scanEQTLFile() {
 	var line, chrID string
 	var split, snv []string
 	var pos, count int
@@ -464,21 +587,16 @@ func scanGWASFile() {
 
 			snv = strings.Split(split[0], "_")
 			pos, err = strconv.Atoi(snv[1])
-			chrID = snv[0]
+			utils.Check(err)
 
-			if err != nil {
-				panic(fmt.Sprintf("Error with line: %s and conversion: %sx\n", line, snv[1]))
-			}
+			chrID = snv[0]
 
 			if _, isInside = SNPDICT[chrID];!isInside {
 				SNPDICT[chrID] = make(map[int]float64)
 			}
 
 			score, err = strconv.ParseFloat(split[6], 64)
-
-			if err != nil {
-				panic(fmt.Sprintf("Error with line: %s and SCORE: %s\n", line, split[6]))
-			}
+			utils.Check(err)
 
 			SNPDICT[chrID][pos] = score
 			count++
@@ -487,45 +605,7 @@ func scanGWASFile() {
 
 	fmt.Printf("Number of eQTL entries: %d\n", count)
 	tDiff := time.Since(tStart)
-	fmt.Printf("Scanning GWAS file done in time: %f s \n", tDiff.Seconds())
-}
-
-func performEQTLAnalsysis() {
-
-	switch {
-
-	case BEDFILENAME == "":
-		log.Fatal(fmt.Printf("!!!! Error -bed option must be provided\n"))
-	case PEAKFILE == "":
-		log.Fatal(fmt.Printf("!!!! Error -peak option must be provided\n"))
-	case GENEFILE == "":
-		log.Fatal(fmt.Printf("!!!! Error -gene_file option must be provided\n"))
-	case CELLIDFNAME == "":
-		log.Fatal(fmt.Printf("!!!! Error -xgi must be provided\n"))
-	case CELLIDCOMPLFNAME == "":
-		log.Fatal(fmt.Printf("!!!! Error -xgi_compl must be provided\n"))
-	case len(SNPFILES) == 0:
-		log.Fatal(fmt.Printf("!!!! Error at least one -GWAS_gene_pair must be provided\n"))
-	case OUTFILE == "":
-		OUTFILE = fmt.Sprintf("%s.eQTL.tsv", BEDFILENAME)
-
-	}
-
-	tStart := time.Now()
-	//Create and init cell ID dicts
-	loadCellIDDicts()
-	//Create Ref Gene Array
-	createGeneArray()
-	//Create gene ID <-> gene name dict
-	createRefGeneDict()
-	//Create peak interval tree
-	createPeakIntervalTree()
-	//Create SNP interval tree
-	createSNPIntervalTree()
-	//Scan the bed files
-	scanBed()
-	tDiff := time.Since(tStart)
-	fmt.Printf("done in time: %f s \n", tDiff.Seconds())
+	fmt.Printf("Scanning eQTL file done in time: %f s \n", tDiff.Seconds())
 }
 
 
@@ -855,8 +935,8 @@ func createPeakIntervalTree() {
 		utils.Check(err)
 
 		inter = IntInterval{
-			Start:start,
-			End: end,
+			Start:start + PEAKPADDING,
+			End: end + PEAKPADDING,
 			UID: uintptr(count),
 		}
 
@@ -889,6 +969,9 @@ func createSNPIntervalTree() {
 	var intervals []interval.IntInterface
 	var snpBedFile io.WriteCloser
 	var buffer bytes.Buffer
+	var snp snpID
+
+	checkRefSNP := LDFILE != ""
 
 	if WRITESNPTOBED {
 		ext := path.Ext(OUTFILE)
@@ -945,6 +1028,15 @@ func createSNPIntervalTree() {
 			chrID = snv[0]
 			start, err = strconv.Atoi(snv[1])
 			utils.Check(err)
+
+			if checkRefSNP {
+				snp.pos = start
+				snp.chrID = chrID
+
+				if SNPTOEXCLUDE[snp] {
+					continue snpFileLoop
+				}
+			}
 
 			end = start + SNPPADDING
 			start = start - SNPPADDING
