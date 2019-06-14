@@ -936,7 +936,7 @@ func createPeakIntervalTree() {
 
 		inter = IntInterval{
 			Start:start + PEAKPADDING,
-			End: end + PEAKPADDING,
+			End: end - PEAKPADDING,
 			UID: uintptr(count),
 		}
 
