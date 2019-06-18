@@ -53,10 +53,10 @@ var SEED int
 /*READSARRAY  cell->nb reads array*/
 var READSARRAY []float64
 
-/*BUFFERARRAY  cell->nb reads array*/
+/*BUFFERARRAY  thread ID->buffer*/
 var BUFFERARRAY []bytes.Buffer
 
-/*THREADSCHANNEL  cell->nb reads array*/
+/*THREADSCHANNEL  thread ID->channel*/
 var THREADSCHANNEL chan int
 
 /*MUTEX  global mutex*/
@@ -98,6 +98,8 @@ func main() {
 		}
 
 		simulateBedFiles(BEDFILENAMES)
+	default:
+		fmt.Printf("USAGE: ATACSimUtils -simulate -nb <int> -mean <float> std <float> -bed <bedfile> (-threads <int> -out <string> -tag <string>)")
 	}
 }
 
@@ -147,6 +149,8 @@ func simulateOneBedFile(bedfilename, outputfile string, nbLines , it int) {
 	threadID := <-THREADSCHANNEL
 	lineID := 0
 
+	fmt.Printf("Iterating through %s...\n", bedfilename)
+
 	for bedReader.Scan() {
 		BUFFERLINEARRAY[threadID][lineID] = bedReader.Text()
 
@@ -165,6 +169,7 @@ func simulateOneBedFile(bedfilename, outputfile string, nbLines , it int) {
 	WAITING.Wait()
 
 	tDiff := time.Now().Sub(tStart)
+	fmt.Printf("File: %s written!\n", outputfile)
 	fmt.Printf("Simulating one bed done in time: %f s \n", tDiff.Seconds())
 }
 
@@ -181,7 +186,7 @@ func processOneRead(lines * [BUFFERSIZE]string, writer * io.WriteCloser, threadI
 		split = strings.Split(lines[pos], "\t")
 
 		for i = 0; i < len(READSARRAY); i++ {
-			randNum = float64(fastrand.Uint32n(100000)) / 100000.0
+			randNum = float64(fastrand.Uint32n(1000000)) / 1000000.0
 
 			if READSARRAY[i] > randNum {
 				write = true
@@ -215,7 +220,7 @@ func processOneRead(lines * [BUFFERSIZE]string, writer * io.WriteCloser, threadI
 func initNbReads(it int, nbLines int) {
 	rand.Seed(int64(SEED + it))
 
-	READSARRAY = make([]float64, CELLNB, CELLNB)
+	READSARRAY = make([]float64, CELLNB)
 	nbLinesFloat := float64(nbLines)
 
 	for i :=0;i < len(READSARRAY);i++ {

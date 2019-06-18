@@ -44,6 +44,9 @@ var DBSNPFILE string
 /*WRITESNPTOBED write significant SNP to bed file */
 var WRITESNPTOBED bool
 
+/*USESNPASID Use SNP as id rather than peaks */
+var USESNPASID bool
+
 /*CHRINTERVALDICT chr ID <-> interval tree */
 var CHRINTERVALDICT map[string]*interval.IntTree
 
@@ -171,8 +174,9 @@ func main() {
 	flag.StringVar(&GENEIDTONAMEFILE, "gene_ID_to_name", "", "File used for gene name conversion (gene_id<tab>gene_name) ")
 	flag.Var(&SNPFILES, "eQTL_gene_pair", "name of one or multiple eQTL files (-eQTL_gene_pair <fname1> -eQTL_gene_pair <fname2>)")
 	flag.StringVar(&OUTFILE, "out", "", "Name of the output file")
+	flag.BoolVar(&USESNPASID, "use_snp_id", false, "use SNP ID rather than peaks as ID")
 	flag.BoolVar(&PERFORMEQTL, "analysis", false, `perform eQTL analysis
-                        USAGE: ATACeQTLUtils -analysis -xgi <fname> -xgi_compl <fname> -bed <fname> -peak_file <fname> -gene_file <fname> -eQTL_gene_pair <fname> (optionnal: -out <string> -gene_ID_to_name <fname> -ld_file)`)
+                        USAGE: ATACeQTLUtils -analysis -xgi <fname> -xgi_compl <fname> -bed <fname> -peak_file <fname> -eQTL_gene_pair <fname> (optionnal: -out <string> -gene_ID_to_name <fname> -ld_file -gene_file <fname>)`)
 
 	flag.BoolVar(&CREATEDLGROUP, "create_dl_group", false, `create DL group
                         USAGE: ATACeQTLUtils -create_dl_group  -eQTL_gene_pair <fname> -dbSNP <fname> -dl_pair <string> (-out <string>)`)
@@ -188,33 +192,6 @@ func main() {
 }
 
 
-func createDLGroup() {
-
-	SNPDICT = make(map[string]map[int]float64)
-	SNPIDTOSNPDICT = make(map[string]snpID)
-	SNPTOSNPIDDICT = make(map[snpID]string)
-
-	switch {
-
-	case DBSNPFILE == "":
-		log.Fatal(fmt.Printf("!!!! Error -dbSNP_file option must be provided\n"))
-	case len(SNPFILES) == 0:
-		log.Fatal(fmt.Printf("!!!! Error at least one -eQTL_gene_pair must be provided\n"))
-	case OUTFILE == "":
-		OUTFILE = fmt.Sprintf("%s.DL_group", DBSNPFILE)
-	}
-
-	ext := path.Ext(OUTFILE)
-
-	OUTFILE = OUTFILE[:len(OUTFILE)-len(ext)]
-
-	scanEQTLFile()
-	scanDBSNPFile()
-	writeUnknownSNP()
-	scanDLFile()
-}
-
-
 func performEQTLAnalsysis() {
 
 	switch {
@@ -223,8 +200,6 @@ func performEQTLAnalsysis() {
 		log.Fatal(fmt.Printf("!!!! Error -bed option must be provided\n"))
 	case PEAKFILE == "":
 		log.Fatal(fmt.Printf("!!!! Error -peak option must be provided\n"))
-	case GENEFILE == "":
-		log.Fatal(fmt.Printf("!!!! Error -gene_file option must be provided\n"))
 	case CELLIDFNAME == "":
 		log.Fatal(fmt.Printf("!!!! Error -xgi must be provided\n"))
 	case CELLIDCOMPLFNAME == "":
@@ -244,8 +219,12 @@ func performEQTLAnalsysis() {
 	}
 	//Create and init cell ID dicts
 	loadCellIDDicts()
-	//Create Ref Gene Array
-	createGeneArray()
+
+	if GENEFILE != "" {
+		//Create Ref Gene Array
+		createGeneArray()
+	}
+
 	//Create gene ID <-> gene name dict
 	createRefGeneDict()
 	//Create peak interval tree
@@ -306,7 +285,6 @@ func loadRefLDFile() {
 			snp.pos = pos
 
 			SNPTOEXCLUDE[snp] = true
-
 		}
 	}
 
@@ -320,195 +298,6 @@ func loadRefLDFile() {
 	fmt.Printf("Ref DL file loaded in time: %f s \n", tDiff.Seconds())
 }
 
-func scanDLFile() {
-	var line, snp1, snp2 string
-	var split []string
-	var isInside bool
-	var snp snpID
-	var score float64
-	var snpItem item
-	var count int
-
-	snpScores := make([]item, 0, len(SNPIDTOSNPDICT))
-
-	usedSnp := make(map[string]bool)
-	snpGroup := make(map[string][]string)
-
-	scanner, file := utils.ReturnReader(LDLINKFNAME, 0)
-	defer utils.CloseFile(file)
-
-	tStart := time.Now()
-
-	for scanner.Scan() {
-		line = scanner.Text()
-		split = strings.Split(line, SEP)
-
-		if len(split) < 2 {
-			fmt.Printf("Error unable to split the line in two! line: %s\n", line)
-			continue
-		}
-
-		snp1 = split[0]
-		snp2 = split[1]
-
-		if _, isInside = SNPIDTOSNPDICT[snp1]; !isInside {
-			continue
-		}
-
-		if _, isInside = SNPIDTOSNPDICT[snp2]; !isInside {
-			continue
-		}
-
-		snp = SNPIDTOSNPDICT[snp1]
-		score = SNPDICT[snp.chrID][snp.pos]
-
-		if _, isInside = usedSnp[snp1]; !isInside {
-			usedSnp[snp1] = true
-
-			snpItem.key = snp1
-			snpItem.value = score
-
-			snpScores = append(snpScores, snpItem)
-		}
-
-		count++
-		snpGroup[snp1] = append(snpGroup[snp1], snp2)
-	}
-
-	tDiff := time.Since(tStart)
-	fmt.Printf("Scanning of LD file done in time: %f s \n", tDiff.Seconds())
-	fmt.Printf("Number of links intersecting with used SNP %d\n", count)
-
-	processScanDLResults(snpScores, &snpGroup)
-
-}
-
-
-func processScanDLResults(snpScores []item, snpGroup * map[string][]string) {
-
-	var snp1, snp2 string
-	var snpItem item
-	var snp snpID
-	var isInside bool
-	var count1, count2 int
-	var buffer1 bytes.Buffer
-	var buffer2 bytes.Buffer
-	var keys []string
-
-	file1 := fmt.Sprintf("%s.dbSNPID.tsv", OUTFILE)
-	file2 := fmt.Sprintf("%s.genomicID.tsv", OUTFILE)
-
-	usedSnp := make(map[string]bool)
-
-	fmt.Printf("Sorting...\n")
-	tStart := time.Now()
-	sort.Slice(snpScores, func(i, j int) bool {
-		return snpScores[i].value > snpScores[j].value
-	})
-	tDiff := time.Since(tStart)
-	fmt.Printf("Sorting done in time: %f s \n", tDiff.Seconds())
-
-	for _, snpItem = range snpScores {
-		snp1 = snpItem.key
-
-		if _, isInside = usedSnp[snp1]; isInside {
-			continue
-		}
-
-		for _, snp2 = range (*snpGroup)[snp1] {
-			usedSnp[snp2] = true
-		}
-
-		usedSnp[snp1] = true
-		keys = append(keys, snp1)
-	}
-
-	writer1 := utils.ReturnWriter(file1)
-	defer utils.CloseFile(writer1)
-
-	writer2 := utils.ReturnWriter(file2)
-	defer utils.CloseFile(writer2)
-
-	for _, snp1 = range keys {
-		buffer1.WriteString(snp1)
-		count1++
-		count2++
-
-		snp = SNPIDTOSNPDICT[snp1]
-		buffer2.WriteString(snp.chrID)
-		buffer2.WriteRune('_')
-		buffer2.WriteString(strconv.Itoa(snp.pos))
-
-		for _, snp2 = range (*snpGroup)[snp1] {
-			buffer1.WriteRune('\t')
-			buffer1.WriteString(snp2)
-
-			snp = SNPIDTOSNPDICT[snp2]
-			buffer2.WriteRune('\t')
-			buffer2.WriteString(snp.chrID)
-			buffer2.WriteRune('_')
-			buffer2.WriteString(strconv.Itoa(snp.pos))
-
-			count2++
-		}
-
-		buffer1.WriteRune('\n')
-		buffer2.WriteRune('\n')
-
-	}
-
-	_, err := writer1.Write(buffer1.Bytes())
-	utils.Check(err)
-
-	_, err = writer2.Write(buffer2.Bytes())
-	utils.Check(err)
-
-
-	buffer1.Reset()
-	buffer2.Reset()
-
-	fmt.Printf("Number of DL group found: %d\n", count1)
-	fmt.Printf("Number of SNP inside found: %d\n", count2)
-	fmt.Printf("File %s written!\n", file1)
-	fmt.Printf("File %s written!\n", file2)
-}
-
-/*writeUnknownSNP Write SNP not found in dbSNP */
-func writeUnknownSNP() {
-	var isInside bool
-	var buffer bytes.Buffer
-	var snp snpID
-	var count, pos int
-
-	fout := fmt.Sprintf("%s.unknownSNP.tsv", OUTFILE)
-	tStart := time.Now()
-
-	writer := utils.ReturnWriter(fout)
-
-	for chrID := range SNPDICT {
-		snp.chrID = chrID
-
-		for pos = range SNPDICT[chrID] {
-			snp.pos = pos
-
-			if _, isInside = SNPTOSNPIDDICT[snp];!isInside {
-				buffer.WriteString(snp.chrID)
-				buffer.WriteRune('\t')
-				buffer.WriteString(strconv.Itoa(snp.pos))
-				buffer.WriteRune('\n')
-				count++
-			}
-		}
-		writer.Write(buffer.Bytes())
-		buffer.Reset()
-	}
-
-	fmt.Printf("Number of unknown SNP %d\n", count)
-	tDiff := time.Since(tStart)
-	fmt.Printf("File: %s written in time: %f s \n", fout, tDiff.Seconds())
-	fmt.Printf("Unknown SNP written in %s\n", fout)
-
-}
 
 func scanDBSNPFile() {
 	var line, chrID, dbSNPID string
@@ -555,57 +344,6 @@ func scanDBSNPFile() {
 	tDiff := time.Since(tStart)
 	fmt.Printf("Scanning dbSNP file done in time: %f s \n", tDiff.Seconds())
 	fmt.Printf("Number of sbSNP entries found: %d\n", count)
-}
-
-
-func scanEQTLFile() {
-	var line, chrID string
-	var split, snv []string
-	var pos, count int
-	var err error
-	var score float64
-	var isInside bool
-
-	tStart := time.Now()
-
-	for _, fname := range SNPFILES{
-
-		fmt.Printf("Scanning %s ...\n", fname)
-
-		scanner, file := utils.ReturnReader(fname, 0)
-		defer utils.CloseFile(file)
-		scanner.Scan()
-
-		for scanner.Scan() {
-			line = scanner.Text()
-			split = strings.Split(line, "\t")
-
-			if len(split) < 12 {
-				log.Fatal(fmt.Sprintf(
-					"Error cannot split line: %s in more than 12 part using\t\n", split))
-			}
-
-			snv = strings.Split(split[0], "_")
-			pos, err = strconv.Atoi(snv[1])
-			utils.Check(err)
-
-			chrID = snv[0]
-
-			if _, isInside = SNPDICT[chrID];!isInside {
-				SNPDICT[chrID] = make(map[int]float64)
-			}
-
-			score, err = strconv.ParseFloat(split[6], 64)
-			utils.Check(err)
-
-			SNPDICT[chrID][pos] = score
-			count++
-		}
-	}
-
-	fmt.Printf("Number of eQTL entries: %d\n", count)
-	tDiff := time.Since(tStart)
-	fmt.Printf("Scanning eQTL file done in time: %f s \n", tDiff.Seconds())
 }
 
 
@@ -769,7 +507,7 @@ func processOneRead(
 	var intervalsSNV, intervalsPeaks []interval.IntInterface
 	var pos, pos2 int
 	var gene, snvID, peakID, eQTLID string
-	var startSnv int
+	var startSnv, endSnv int
 	var buffer bytes.Buffer
 	var isInside bool
 
@@ -786,7 +524,9 @@ func processOneRead(
 
 	for pos = range intervalsSNV {
 		gene = GENEUINTDICT[intervalsSNV[pos].ID()]
+
 		startSnv = intervalsSNV[pos].Range().Start
+
 		buffer.WriteString(chrID)
 		buffer.WriteRune('_')
 		buffer.WriteString(strconv.Itoa(startSnv))
@@ -796,14 +536,28 @@ func processOneRead(
 		if _, isInside = CELLIDEQTLDICT[cellID][snvID];!isInside {
 			CELLIDEQTLDICT[cellID][snvID] = true
 
+			intervalLoop:
 			for pos2 = range intervalsPeaks {
 
-				peakID = PEAKUNINTDICT[intervalsPeaks[pos2].ID()]
+				switch {
+				case USESNPASID:
+					endSnv = intervalsSNV[pos].Range().End
 
-				buffer.WriteString(peakID)
-				buffer.WriteRune('_')
-				buffer.WriteRune('_')
-				buffer.WriteString(gene)
+					buffer.WriteString("chr")
+					buffer.WriteString(snvID)
+					buffer.WriteRune('_')
+					buffer.WriteString(strconv.Itoa(endSnv))
+					buffer.WriteString("__")
+					buffer.WriteString(gene)
+
+				default:
+					peakID = PEAKUNINTDICT[intervalsPeaks[pos2].ID()]
+
+					buffer.WriteString(peakID)
+					buffer.WriteRune('_')
+					buffer.WriteRune('_')
+					buffer.WriteString(gene)
+				}
 
 				eQTLID = buffer.String()
 				buffer.Reset()
@@ -823,6 +577,10 @@ func processOneRead(
 					} else {
 						(*countDicts)["Cell number cluster"][eQTLID]++
 					}
+				}
+
+				if USESNPASID {
+					break intervalLoop
 				}
 			}
 		}
@@ -871,10 +629,6 @@ func createRefGeneDict() {
 	var split []string
 	var line string
 
-	if len(GENEDICT) == 0 {
-		panic(fmt.Sprintf("Error: GENEDICT must contain at least one gene from %s", GENEFILE))
-	}
-
 	EGENEDICT = make(map[string]string)
 
 	if GENEIDTONAMEFILE == "" {
@@ -884,6 +638,7 @@ func createRefGeneDict() {
 		return
 	}
 
+	isGeneList := GENEFILE != ""
 	scanner, file := utils.ReturnReader(GENEIDTONAMEFILE, 0)
 	defer utils.CloseFile(file)
 
@@ -893,7 +648,9 @@ func createRefGeneDict() {
 		line = scanner.Text()
 		split = strings.Split(line, "\t")
 
-		if _, isInside := GENEDICT[split[1]];!isInside {
+		_, isInside := GENEDICT[split[1]]
+
+		if  isGeneList && !isInside {
 			continue
 		}
 
@@ -963,7 +720,7 @@ func createSNPIntervalTree() {
 	var line, gene, chrID, fname string
 	var split, snv []string
 	var err error
-	var count, count2, start, end int
+	var count, count2, count3, start, end int
 	var isInside bool
 	var inter IntInterval
 	var intervals []interval.IntInterface
@@ -972,6 +729,8 @@ func createSNPIntervalTree() {
 	var snp snpID
 
 	checkRefSNP := LDFILE != ""
+
+	isRefGeneList := len(GENEDICT) != 0
 
 	if WRITESNPTOBED {
 		ext := path.Ext(OUTFILE)
@@ -1014,12 +773,19 @@ func createSNPIntervalTree() {
 					"Error cannot split line: %s in more than 12 part using\t\n", split))
 			}
 
-			if _, isInside = EGENEDICT[split[1]];!isInside {
-				continue snpFileLoop
-			}
+			gene, isInside = EGENEDICT[split[1]]
 
-			if gene, isInside = EGENEDICT[split[1]];!isInside {
-				log.Fatal(fmt.Sprintf("Error gene: %s %s not in ref file:%s\n", split[1], gene, GENEIDTONAMEFILE))
+			switch {
+
+			case !isInside:
+				continue snpFileLoop
+
+			case !isRefGeneList:
+				if _, isInside = geneUintDict[gene]; !isInside {
+					geneUintDict[gene] = uintptr(count3)
+					GENEUINTDICT[uintptr(count3)] = gene
+					count3++
+				}
 
 			}
 
