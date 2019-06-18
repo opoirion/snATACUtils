@@ -20,9 +20,6 @@ import(
 )
 
 
-/*BEDFILENAME bed file name (input) */
-var BEDFILENAME string
-
 /*BEDFILENAMES multiple input files */
 var BEDFILENAMES utils.ArrayFlags
 
@@ -65,6 +62,9 @@ var MUTEX sync.Mutex
 /*WAITING  waiting group*/
 var WAITING * sync.WaitGroup
 
+/*COMBINE combine simulations into one unique bed output*/
+var COMBINE bool
+
 /*BUFFERSIZE  buffer size*/
 const BUFFERSIZE = 50000
 
@@ -73,20 +73,20 @@ var BUFFERLINEARRAY [][BUFFERSIZE]string
 
 
 func main() {
-	flag.StringVar(&BEDFILENAME, "bed", "", "name of the bed file")
 	flag.StringVar(&TAGNAME, "tag", "", "tag name for the simulated cells")
-	flag.Var(&BEDFILENAMES, "beds", "name of several bed files")
+	flag.Var(&BEDFILENAMES, "bed", "name of several bed files")
 	flag.IntVar(&THREADNB, "threads", 1, "threads concurrency")
 	flag.IntVar(&SEED, "seed", 2019, "Seed used for random processes")
 	flag.IntVar(&CELLNB, "nb", 5000, "Number of cells to generate")
 	flag.Float64Var(&MEAN, "mean", 4000, "Average nb. of reads per cell used")
 	flag.Float64Var(&STD, "std", 2000, "Std. of the nb. of reads per cell used")
 	flag.StringVar(&FILENAMEOUT, "out", "", "name/tag the output file(s)")
+	flag.BoolVar(&COMBINE, "combine", false, "combine simulation results to create one unique simulated bed")
 	flag.BoolVar(&SIMULATEBED, "simulate", false, `Simulate scATAC-Seq bed files
                       USAGE: ATACSimUtils -simulate -nb <int> -mean <float> std <float> -bed <bedfile> (-threads <int> -out <string> -tag <string>)`)
 	flag.Parse()
 
-	BEDFILENAMES = append(BEDFILENAMES, BEDFILENAME)
+	WAITING = &sync.WaitGroup{}
 
 	switch{
 	case SIMULATEBED:
@@ -97,16 +97,42 @@ func main() {
 			FILENAMEOUT = "simulated"
 		}
 
-		simulateBedFiles(BEDFILENAMES)
+		switch {
+		case COMBINE:
+			simulateCombinedBedFiles(BEDFILENAMES)
+		default:
+			simulateBedFiles(BEDFILENAMES)
+		}
+
 	default:
 		fmt.Printf("USAGE: ATACSimUtils -simulate -nb <int> -mean <float> std <float> -bed <bedfile> (-threads <int> -out <string> -tag <string>)")
 	}
 }
 
 
+func simulateCombinedBedFiles(bedfilenames []string) {
+	var nbLines int
+
+	if FILENAMEOUT == "" {
+		log.Fatal("Error -out flag must be provided")
+	}
+
+	nbLinesTotal := 0
+
+	for pos, bedfilename := range bedfilenames {
+		fmt.Printf("Estimating number of reads for File %d: %s...\n", pos + 1, bedfilename)
+		nbLines = countNbLines(bedfilename)
+		nbLinesTotal += nbLines
+		fmt.Printf("Nb reads: %d\n", nbLines)
+	}
+
+	initNbReads(0, nbLinesTotal)
+
+	simulatewithMultipleBedFile(bedfilenames, FILENAMEOUT, nbLinesTotal)
+}
+
 func simulateBedFiles(bedfilenames []string) {
 	outputfile := FILENAMEOUT
-	WAITING = &sync.WaitGroup{}
 
 	for pos, bedfilename := range bedfilenames {
 		fmt.Printf("Simulating File nb %d: %s...\n", pos + 1, bedfilename)
@@ -116,12 +142,11 @@ func simulateBedFiles(bedfilenames []string) {
 		if len(bedfilenames) > 1 {
 			ext := path.Ext(bedfilename)
 			outputfile = fmt.Sprintf("%s.%s%s",
-				FILENAMEOUT[:len(FILENAMEOUT) - len(ext)],
-				outputfile, ext)
+				bedfilename[:len(bedfilename) - len(ext)],
+				FILENAMEOUT, ext)
 		}
 
 		simulateOneBedFile(bedfilename, outputfile, nbLines, pos)
-		fmt.Printf("File: %s written!\n", outputfile)
 	}
 }
 
@@ -137,7 +162,7 @@ func simulateOneBedFile(bedfilename, outputfile string, nbLines , it int) {
 	THREADSCHANNEL = make(chan int, THREADNB)
 
 	writer := utils.ReturnWriter(outputfile)
-	defer writer.Close()
+	defer utils.CloseFile(writer)
 
 	for i:=0;i<THREADNB;i++ {
 		THREADSCHANNEL <- i
@@ -145,11 +170,11 @@ func simulateOneBedFile(bedfilename, outputfile string, nbLines , it int) {
 
 
 	bedReader, file := utils.ReturnReader(bedfilename, 0)
-	defer file.Close()
+	defer utils.CloseFile(file)
 	threadID := <-THREADSCHANNEL
 	lineID := 0
 
-	fmt.Printf("Iterating through %s...\n", bedfilename)
+	fmt.Printf("Iterating through bedfile...\n")
 
 	for bedReader.Scan() {
 		BUFFERLINEARRAY[threadID][lineID] = bedReader.Text()
@@ -168,10 +193,59 @@ func simulateOneBedFile(bedfilename, outputfile string, nbLines , it int) {
 	go processOneRead(&BUFFERLINEARRAY[threadID], &writer, threadID, lineID)
 	WAITING.Wait()
 
-	tDiff := time.Now().Sub(tStart)
+	tDiff := time.Since(tStart)
 	fmt.Printf("File: %s written!\n", outputfile)
 	fmt.Printf("Simulating one bed done in time: %f s \n", tDiff.Seconds())
 }
+
+
+func simulatewithMultipleBedFile(bedfilenames []string, outputfile string, nbLines int) {
+	tStart := time.Now()
+
+	BUFFERARRAY = make([]bytes.Buffer, THREADNB)
+	BUFFERLINEARRAY = make([][BUFFERSIZE]string, THREADNB)
+	THREADSCHANNEL = make(chan int, THREADNB)
+
+	writer := utils.ReturnWriter(outputfile)
+	defer utils.CloseFile(writer)
+
+	for i:=0;i<THREADNB;i++ {
+		THREADSCHANNEL <- i
+	}
+
+	for _, bedfilename := range bedfilenames {
+
+		bedReader, file := utils.ReturnReader(bedfilename, 0)
+		threadID := <-THREADSCHANNEL
+		lineID := 0
+
+		fmt.Printf("Iterating through bedfile: %s...\n", bedfilename)
+
+		for bedReader.Scan() {
+			BUFFERLINEARRAY[threadID][lineID] = bedReader.Text()
+
+			lineID++
+
+			if lineID >= BUFFERSIZE {
+				WAITING.Add(1)
+				go processOneRead(&BUFFERLINEARRAY[threadID], &writer, threadID, lineID)
+				lineID = 0
+				threadID = <-THREADSCHANNEL
+			}
+		}
+
+		WAITING.Add(1)
+		go processOneRead(&BUFFERLINEARRAY[threadID], &writer, threadID, lineID)
+		WAITING.Wait()
+
+		utils.CloseFile(file)
+	}
+
+	tDiff := time.Since(tStart)
+	fmt.Printf("File: %s written!\n", outputfile)
+	fmt.Printf("Simulating one bed done in time: %f s \n", tDiff.Seconds())
+}
+
 
 func processOneRead(lines * [BUFFERSIZE]string, writer * io.WriteCloser, threadID, lineEnd int) {
 	defer WAITING.Done()
@@ -218,13 +292,16 @@ func processOneRead(lines * [BUFFERSIZE]string, writer * io.WriteCloser, threadI
 
 
 func initNbReads(it int, nbLines int) {
+
 	rand.Seed(int64(SEED + it))
 
 	READSARRAY = make([]float64, CELLNB)
 	nbLinesFloat := float64(nbLines)
 
 	for i :=0;i < len(READSARRAY);i++ {
-		READSARRAY[i] = (rand.NormFloat64() * STD + MEAN) / nbLinesFloat
+
+		r := rand.NormFloat64()
+		READSARRAY[i] = (r * STD + MEAN) / nbLinesFloat
 	}
 }
 
@@ -232,7 +309,7 @@ func initNbReads(it int, nbLines int) {
 func countNbLines(bedfile string) int {
 	bedReader, file := utils.ReturnReader(bedfile, 0)
 
-	defer file.Close()
+	defer utils.CloseFile(file)
 	nbLines := 0
 
 	for bedReader.Scan() {
