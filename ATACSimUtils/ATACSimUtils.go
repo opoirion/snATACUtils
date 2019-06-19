@@ -65,6 +65,9 @@ var WAITING * sync.WaitGroup
 /*COMBINE combine simulations into one unique bed output*/
 var COMBINE bool
 
+/*EQUALPROP Equal proportion of reads from each subpopulation*/
+var EQUALPROP bool
+
 /*BUFFERSIZE  buffer size*/
 const BUFFERSIZE = 50000
 
@@ -82,6 +85,7 @@ func main() {
 	flag.Float64Var(&STD, "std", 2000, "Std. of the nb. of reads per cell used")
 	flag.StringVar(&FILENAMEOUT, "out", "", "name/tag the output file(s)")
 	flag.BoolVar(&COMBINE, "combine", false, "combine simulation results to create one unique simulated bed")
+	flag.BoolVar(&EQUALPROP, "prop", false, "use equal proportions of reads from each subpopulation")
 	flag.BoolVar(&SIMULATEBED, "simulate", false, `Simulate scATAC-Seq bed files
                       USAGE: ATACSimUtils -simulate -nb <int> -mean <float> std <float> -bed <bedfile> (-threads <int> -out <string> -tag <string>)`)
 	flag.Parse()
@@ -119,14 +123,15 @@ func simulateCombinedBedFiles(bedfilenames []string) {
 
 	nbLinesTotal := 0
 
-	for pos, bedfilename := range bedfilenames {
-		fmt.Printf("Estimating number of reads for File %d: %s...\n", pos + 1, bedfilename)
-		nbLines = countNbLines(bedfilename)
-		nbLinesTotal += nbLines
-		fmt.Printf("Nb reads: %d\n", nbLines)
-	}
+	if !EQUALPROP {
+		for _, bedfilename := range bedfilenames {
+			nbLines = countNbLines(bedfilename)
+			nbLinesTotal += nbLines
+			fmt.Printf("Nb reads: %d\n", nbLines)
+		}
 
-	initNbReads(0, nbLinesTotal)
+		initNbReads(0, nbLinesTotal, MEAN)
+	}
 
 	simulatewithMultipleBedFile(bedfilenames, FILENAMEOUT, nbLinesTotal)
 }
@@ -135,7 +140,6 @@ func simulateBedFiles(bedfilenames []string) {
 	outputfile := FILENAMEOUT
 
 	for pos, bedfilename := range bedfilenames {
-		fmt.Printf("Simulating File nb %d: %s...\n", pos + 1, bedfilename)
 		nbLines := countNbLines(bedfilename)
 		fmt.Printf("Nb reads: %d\n", nbLines)
 
@@ -155,7 +159,7 @@ func simulateOneBedFile(bedfilename, outputfile string, nbLines , it int) {
 	tStart := time.Now()
 
 	fmt.Printf("Initating random number of reads per cell...\n")
-	initNbReads(it, nbLines)
+	initNbReads(it, nbLines, MEAN)
 
 	BUFFERARRAY = make([]bytes.Buffer, THREADNB)
 	BUFFERLINEARRAY = make([][BUFFERSIZE]string, THREADNB)
@@ -214,6 +218,11 @@ func simulatewithMultipleBedFile(bedfilenames []string, outputfile string, nbLin
 	}
 
 	for _, bedfilename := range bedfilenames {
+
+		if EQUALPROP {
+			nbLines := countNbLines(bedfilename)
+			initNbReads(0, nbLines, MEAN / float64(len(bedfilenames)))
+		}
 
 		bedReader, file := utils.ReturnReader(bedfilename, 0)
 		threadID := <-THREADSCHANNEL
@@ -291,7 +300,7 @@ func processOneRead(lines * [BUFFERSIZE]string, writer * io.WriteCloser, threadI
 }
 
 
-func initNbReads(it int, nbLines int) {
+func initNbReads(it int, nbLines int, mean float64) {
 
 	rand.Seed(int64(SEED + it))
 
@@ -301,12 +310,13 @@ func initNbReads(it int, nbLines int) {
 	for i :=0;i < len(READSARRAY);i++ {
 
 		r := rand.NormFloat64()
-		READSARRAY[i] = (r * STD + MEAN) / nbLinesFloat
+		READSARRAY[i] = (r * STD + mean) / nbLinesFloat
 	}
 }
 
 
 func countNbLines(bedfile string) int {
+	fmt.Printf("Estimating number of reads for File: %s...\n", bedfile)
 	bedReader, file := utils.ReturnReader(bedfile, 0)
 
 	defer utils.CloseFile(file)
