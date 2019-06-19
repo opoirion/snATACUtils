@@ -286,7 +286,6 @@ func processOneRead(lines * [BUFFERSIZE]string, writer * io.WriteCloser, threadI
 				BUFFERARRAY[threadID].WriteRune('\n')
 			}
 		}
-
 	}
 
 	if write {
