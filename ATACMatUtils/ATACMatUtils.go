@@ -15,10 +15,9 @@ import(
 	"strconv"
 	"time"
 	"bytes"
-	"io"
 	"sync"
-	"github.com/jinzhu/copier"
 )
+
 
 /*INFILES multiple input files */
 var INFILES utils.ArrayFlags
@@ -50,23 +49,11 @@ var CELLIDCOUNT map[string]int
 /*CELLIDDICT cell ID<->pos */
 var CELLIDDICT map[string]uint
 
-/*PEAKIDDICT peak ID<->pos */
-var PEAKIDDICT map[string]uint
-
-/*CHRINTERVALDICT chr ID <-> interval tree */
-var CHRINTERVALDICT map[string]*interval.IntTree
-
-/*CHRINTERVALDICTTHREAD threadNB -> chr ID -> pos */
-var CHRINTERVALDICTTHREAD map[int]map[string]*interval.IntTree
-
 /*MUTEX global mutex */
 var MUTEX *sync.Mutex
 
 /*CELLMUTEXDICT feature pos<->sync.Mutex */
 var CELLMUTEXDICT map[uint]*sync.Mutex
-
-/*INTERVALMAPPING peak ID pos <->pos */
-var INTERVALMAPPING map[uintptr]string
 
 /*BOOLSPARSEMATRIX cell x feature sparse matrix  */
 var BOOLSPARSEMATRIX map[uint]map[uint]bool
@@ -79,34 +66,6 @@ var THREADNB int
 
 /*BUFFERSIZE buffer size for multithreading */
 const BUFFERSIZE = 1000000
-
-//IntInterval Integer-specific intervals
-type IntInterval struct {
-	Start, End int
-	UID        uintptr
-	Payload    interface{}
-}
-
-
-//Overlap rule for two Interval
-func (i IntInterval) Overlap(b interval.IntRange) bool {
-	// Search for intersection
-	return i.End >= b.Start && i.Start <= b.End
-}
-
-//ID Return the ID of Interval
-func (i IntInterval) ID() uintptr {
-	return i.UID
-}
-//Range Return the range of Interval
-func (i IntInterval) Range() interval.IntRange {
-	return interval.IntRange{i.Start, i.End}
-}
-
-//String Return the string re[ of Interval
-func (i IntInterval) String() string {
-	return fmt.Sprintf("(%d, %d) id: %d ####\n", i.Start, i.End, i.ID())
-}
 
 
 func main() {
@@ -161,7 +120,7 @@ func main() {
 		}
 	}
 
-	tDiff := time.Now().Sub(tStart)
+	tDiff := time.Since(tStart)
 	fmt.Printf("done in time: %f s \n", tDiff.Seconds())
 }
 
@@ -173,18 +132,19 @@ func computeReadsInPeaksForCell(){
 		loadCellIDDict(CELLSIDFNAME)
 	}
 
-	loadPeaks(PEAKFILE)
-	createPeakIntervalTree()
+	utils.LoadPeaks(PEAKFILE)
+	utils.CreatePeakIntervalTree()
 
 	CELLIDCOUNT = make(map[string]int)
 
 	fmt.Printf("init mutexes...\n")
 	initMutexDict()
 	fmt.Printf("init threading...\n")
-	initIntervalDictsThreading()
+	utils.InitIntervalDictsThreading(THREADNB)
 	createReadInPeakOneFileThreading(BEDFILENAME)
 	writeCellCounter(FILENAMEOUT)
 }
+
 
 func initBoolSparseMatrix() {
 	BOOLSPARSEMATRIX = make(map[uint]map[uint]bool)
@@ -194,20 +154,21 @@ func initBoolSparseMatrix() {
 	}
 }
 
+
 func createBoolSparseMatrix(){
 	fmt.Printf("load indexes...\n")
 	loadCellIDDict(CELLSIDFNAME)
-	loadPeaks(PEAKFILE)
+	utils.LoadPeaks(PEAKFILE)
 
 	initBoolSparseMatrix()
-	createPeakIntervalTree()
+	utils.CreatePeakIntervalTree()
 
 	switch{
 	case THREADNB > 1:
 		fmt.Printf("init mutexes...\n")
 		initMutexDict()
 		fmt.Printf("init threading...\n")
-		initIntervalDictsThreading()
+		utils.InitIntervalDictsThreading(THREADNB)
 		fmt.Printf("launching sparse matrices creation...\n")
 		createBoolSparseMatrixOneFileThreading(BEDFILENAME)
 	default:
@@ -227,29 +188,16 @@ func initMutexDict() {
 	}
 }
 
-func initIntervalDictsThreading() {
-	CHRINTERVALDICTTHREAD = make(map[int]map[string]*interval.IntTree)
-
-	for i := 0;i< THREADNB;i++ {
-		CHRINTERVALDICTTHREAD[i] = make(map[string]*interval.IntTree)
-
-		for key, tree := range CHRINTERVALDICT {
-			CHRINTERVALDICTTHREAD[i][key] = &interval.IntTree{}
-			copier.Copy(CHRINTERVALDICTTHREAD[i][key], tree)
-		}
-	}
-}
 
 func writeBoolMatrixToFile(outfile string) {
 	fmt.Printf("writing to output file...\n")
 
 	var buffer bytes.Buffer
 	var cellPos, featPos uint
-	var writer io.WriteCloser
 
-	writer = utils.ReturnWriter(outfile)
+	writer := utils.ReturnWriter(outfile)
 
-	defer writer.Close()
+	defer utils.CloseFile(writer)
 
 	for cellPos = range BOOLSPARSEMATRIX {
 		for featPos = range BOOLSPARSEMATRIX[cellPos] {
@@ -271,11 +219,10 @@ func writeBoolMatrixToFile(outfile string) {
 func writeCellCounter(outfile string) {
 	var buffer bytes.Buffer
 	var cellID string
-	var writer io.WriteCloser
 
-	writer = utils.ReturnWriter(outfile)
+	writer := utils.ReturnWriter(outfile)
 
-	defer writer.Close()
+	defer utils.CloseFile(writer)
 
 	for cellID = range CELLIDCOUNT {
 		buffer.WriteString(cellID)
@@ -315,14 +262,14 @@ func mergeCOOFile(filename string) {
 
 	scanner, f = utils.ReturnReader(filename, 0)
 
-	defer f.Close()
+	defer utils.CloseFile(f)
 
 	for scanner.Scan() {
 		split = strings.Split(scanner.Text(), SEP)
 		start, err = strconv.Atoi(split[0])
-		check(err)
+		utils.Check(err)
 		stop, err = strconv.Atoi(split[1])
-		check(err)
+		utils.Check(err)
 
 		BOOLSPARSEMATRIX[uint(start)][uint(stop)] = true
 	}
@@ -344,7 +291,7 @@ func createBoolSparseMatrixOneFileThreading(bedfilename string) {
 
 	bedReader, file := utils.ReturnReader(BEDFILENAME, 0)
 
-	defer file.Close()
+	defer utils.CloseFile(file)
 
 	scanBed:
 	for bedReader.Scan() {
@@ -407,7 +354,7 @@ func createReadInPeakOneFileThreading(bedfilename string) {
 
 	bedReader, file := utils.ReturnReader(BEDFILENAME, 0)
 
-	defer file.Close()
+	defer utils.CloseFile(file)
 
 	for bedReader.Scan() {
 		bufferPointer[bufferIt] = bedReader.Text()
@@ -484,20 +431,21 @@ func updateReadInPeakThread(bufferLine * [BUFFERSIZE]string, bufferStart ,buffer
 		}
 
 		start, err = strconv.Atoi(split[1])
-		check(err)
+		utils.Check(err)
 
 		end, err = strconv.Atoi(split[2])
-		check(err)
+		utils.Check(err)
 
-		if _, isInside = CHRINTERVALDICT[split[0]];!isInside {
+		if _, isInside = utils.CHRINTERVALDICT[split[0]];!isInside {
 			continue
 		}
 
-		intervals = CHRINTERVALDICTTHREAD[threadnb][split[0]].Get(IntInterval{Start: start, End: end})
+		intervals = utils.CHRINTERVALDICTTHREAD[threadnb][split[0]].Get(
+			utils.IntInterval{Start: start, End: end})
 
 		MUTEX.Lock()
 
-		for _ = range intervals {
+		for range intervals {
 			CELLIDCOUNT[split[3]]++
 		}
 
@@ -526,21 +474,22 @@ func updateBoolSparseMatrixOneThread(bufferLine * [BUFFERSIZE]string, bufferStar
 		}
 
 		start, err = strconv.Atoi(split[1])
-		check(err)
+		utils.Check(err)
 
 		end, err = strconv.Atoi(split[2])
-		check(err)
+		utils.Check(err)
 
-		if _, isInside = CHRINTERVALDICT[split[0]];!isInside {
+		if _, isInside = utils.CHRINTERVALDICT[split[0]];!isInside {
 			continue
 		}
 
-		intervals = CHRINTERVALDICTTHREAD[threadnb][split[0]].Get(IntInterval{Start: start, End: end})
+		intervals = utils.CHRINTERVALDICTTHREAD[threadnb][split[0]].Get(
+			utils.IntInterval{Start: start, End: end})
 
 		CELLMUTEXDICT[cellPos].Lock()
 
 		for _, int = range intervals {
-			featPos = PEAKIDDICT[INTERVALMAPPING[int.ID()]]
+			featPos = utils.PEAKIDDICT[utils.INTERVALMAPPING[int.ID()]]
 			BOOLSPARSEMATRIX[cellPos][featPos] = true
 		}
 
@@ -561,7 +510,7 @@ func createBoolSparseMatrixOneFile(bedfilename string) {
 
 	bedReader, file := utils.ReturnReader(BEDFILENAME, 0)
 
-	defer file.Close()
+	defer utils.CloseFile(file)
 
 	for bedReader.Scan() {
 		line = bedReader.Text()
@@ -574,19 +523,20 @@ func createBoolSparseMatrixOneFile(bedfilename string) {
 		}
 
 		start, err = strconv.Atoi(split[1])
-		check(err)
+		utils.Check(err)
 
 		end, err = strconv.Atoi(split[2])
-		check(err)
+		utils.Check(err)
 
-		if _, isInside = CHRINTERVALDICT[split[0]];!isInside {
+		if _, isInside = utils.CHRINTERVALDICT[split[0]];!isInside {
 			continue
 		}
 
-		intervals = CHRINTERVALDICT[split[0]].Get(IntInterval{Start: start, End: end})
+		intervals = utils.CHRINTERVALDICT[split[0]].Get(
+			utils.IntInterval{Start: start, End: end})
 
 		for _, interval = range intervals {
-			featPos = PEAKIDDICT[INTERVALMAPPING[interval.ID()]]
+			featPos = utils.PEAKIDDICT[utils.INTERVALMAPPING[interval.ID()]]
 
 			BOOLSPARSEMATRIX[cellPos][featPos] = true
 		}
@@ -598,8 +548,8 @@ func createBoolSparseMatrixOneFile(bedfilename string) {
 /*loadCellIDDict ...*/
 func loadCellIDDict(fname string) {
 	f, err := os.Open(fname)
-	check(err)
-	defer f.Close()
+	utils.Check(err)
+	defer utils.CloseFile(f)
 	scanner := bufio.NewScanner(f)
 	var count uint
 
@@ -610,76 +560,5 @@ func loadCellIDDict(fname string) {
 		line := scanner.Text()
 		CELLIDDICT[line] = count
 		count++
-	}
-}
-
-/*loadPeaks ...*/
-func loadPeaks(fname string) {
-	var scanner *bufio.Scanner
-	var f *os.File
-
-	scanner, f = utils.ReturnReader(fname, 0)
-
-	defer f.Close()
-
-
-	var count uint
-
-	PEAKIDDICT = make(map[string]uint)
-	count = 0
-
-	for scanner.Scan() {
-		line := scanner.Text()
-		PEAKIDDICT[line] = count
-		count++
-	}
-}
-
-/*createPeakIntervalTree ...*/
-func createPeakIntervalTree() {
-	var split []string
-	var chroStr string
-
-	var start, end int
-	var err error
-	var isInside bool
-
-	fmt.Printf("create peak interval tree...\n")
-	tStart := time.Now()
-
-	CHRINTERVALDICT = make(map[string]*interval.IntTree)
-	INTERVALMAPPING = make(map[uintptr]string)
-
-	for key, pos := range PEAKIDDICT {
-		split = strings.Split(key, "\t")
-		chroStr = split[0]
-
-		start, err = strconv.Atoi(split[1])
-		check(err)
-
-		end, err = strconv.Atoi(split[2])
-		check(err)
-
-		int := IntInterval{
-			Start: start, End: end}
-		int.UID = uintptr(uintptr(pos))
-
-		if _, isInside = CHRINTERVALDICT[chroStr];!isInside {
-			CHRINTERVALDICT[chroStr] = &interval.IntTree{}
-		}
-
-		err = CHRINTERVALDICT[chroStr].Insert(int, false)
-		check(err)
-
-		INTERVALMAPPING[int.ID()] = key
-	}
-
-	tDiff := time.Now().Sub(tStart)
-	fmt.Printf("Create peak index done in time: %f s \n", tDiff.Seconds())
-}
-
-func check(err error) {
-	if err != nil {
-		log.Fatal(err)
 	}
 }

@@ -18,6 +18,31 @@ import (
 	originalbzip2  "compress/bzip2"
 )
 
+
+/*Filename type used to check if files exists */
+type Filename string
+
+/*Set ... */
+func (i *Filename) Set(filename string) error {
+	if _, err := os.Stat(filename); err != nil {
+		panic(fmt.Sprintf("!!!!Error %s with file: %s\n", err, filename))
+	}
+
+	*i =  Filename(filename)
+	return nil
+}
+
+
+func (i *Filename) String() string {
+	return string(*i)
+}
+
+
+/*ReturnReader Return reader for file */
+func (i *Filename) ReturnReader(startingLine int) (*bufio.Scanner, *os.File) {
+	return ReturnReader(string(*i), startingLine)
+}
+
 type closer interface {
 	Close() error
 }
@@ -34,6 +59,7 @@ type Pair struct {
 /*PairList ...*/
 type PairList []Pair
 
+// Len
 func (p PairList) Len() int { return len(p) }
 func (p PairList) Less(i, j int) bool { return p[i].Value < p[j].Value }
 func (p PairList) Swap(i, j int){ p[i], p[j] = p[j], p[i] }
