@@ -422,7 +422,7 @@ func chi2ScoreOneThread(chi2Array * [SMALLBUFFERSIZE]uintptr, waiting * sync.Wai
 
 			count++
 
-			if count >= BUFFERSIZE {
+			if count >= SMALLBUFFERSIZE {
 				MUTEX.Lock()
 				for i := 0; i < count;i++ {
 					CHI2SCORE[results[i].cluster] = append(CHI2SCORE[results[i].cluster], results[i])
