@@ -545,7 +545,7 @@ func createBoolSparseMatrixOneFile(bedfilename string) {
 
 
 
-/*loadCellIDDict ...*/
+/*loadCellIDDict load cell id to map[string] -> id <uint>*/
 func loadCellIDDict(fname string) {
 	f, err := os.Open(fname)
 	utils.Check(err)

@@ -1,4 +1,4 @@
-package ATACdemultiplexUtils
+package atacdemultiplexutils
 
 
 import (
@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"github.com/jinzhu/copier"
 )
+
 
 //IntInterval Integer-specific intervals
 type IntInterval struct {

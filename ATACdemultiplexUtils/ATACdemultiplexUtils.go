@@ -1,4 +1,4 @@
-package ATACdemultiplexUtils
+package atacdemultiplexutils
 
 import (
 	"bufio"
