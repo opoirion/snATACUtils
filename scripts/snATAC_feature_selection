@@ -1,0 +1,214 @@
+#!/usr/bin/env python
+
+from os.path import isfile
+
+from argparse import ArgumentParser
+
+from scipy.stats import fisher_exact
+from scipy.stats import chi2_contingency
+
+from sys import stdout
+
+from multiprocessing.pool import Pool
+
+from time import time
+
+from os import popen
+
+
+ARGPARSER = ArgumentParser(description='Feature scoring using contingency table', prefix_chars='-')
+
+
+ARGPARSER.add_argument('-contingency_table',
+                       required=False,
+                       help="""Contingency tables file. Each line represents a feature and its associated contingency table [[n11, n12],[n21, n22]]:
+                row: <feature name>\t<additional columns>\t...\tn11\n12\tn21\tn22\n""",
+                       type=str,
+                       default='',
+                       metavar='<str>')
+
+ARGPARSER.add_argument('-test',
+                       required=False,
+                       help='Type of test performed (chi2 or fisher_exact)',
+                       type=str,
+                       default='fisher_exact',
+                       metavar="['fisher', 'chi2']")
+
+ARGPARSER.add_argument('-out',
+                       required=False,
+                       help='Output file',
+                       type=str,
+                       default='',
+                       metavar='<str>')
+
+ARGPARSER.add_argument('-sep',
+                       required=False,
+                       help='separator (default: \t',
+                       type=str,
+                       default='\t',
+                       metavar='<str> (default: \t')
+
+ARGPARSER.add_argument('-threads',
+                       required=False,
+                       help='Thread nb',
+                       type=int,
+                       default=1,
+                       metavar='<int>')
+
+ARGPARSER.add_argument('-verbose',
+                       required=False,
+                       help='Verbose level',
+                       type=int,
+                       default=0,
+                       metavar='<int>')
+
+ARGPARSER.add_argument('-header',
+                       required=False,
+                       help='Use input header',
+                       type=int,
+                       default=1,
+                       metavar='<int>')
+
+
+
+
+ARGS = ARGPARSER.parse_args()
+
+assert(isfile(ARGS.contingency_table))
+assert(ARGS.test in ['fisher', 'chi2'])
+
+
+if not ARGS.out:
+    out, ext = ARGS.contingency_table.rsplit('.', 1)
+    ARGS.out = '{0}.{1}.{2}'.format(out, ARGS.test, ext)
+
+
+def main():
+    """ """
+    t_start = time()
+
+    f_res = open(ARGS.out, 'w')
+
+    if ARGS.test == "fisher":
+        func = _fisher_parallel
+
+    elif ARGS.test == "chi2":
+        func = _chi2_parallel
+
+    input_list = []
+    lenlines = int(popen('cat {0}|wc -l'.format(ARGS.contingency_table)).read())
+    print("Number of contingency tables: {0}".format(lenlines))
+
+    count = 0
+    chunk = lenlines / (ARGS.threads )
+    inputs = []
+    threadnb = ARGS.threads - 2
+
+    if threadnb < 0:
+        threadnb = 0
+
+    header = None
+
+    f_in = open(ARGS.contingency_table)
+
+    if ARGS.header:
+        header = f_in.readline().strip().split(ARGS.sep)
+        f_res.write(ARGS.sep.join(header[:-4]))
+        f_res.write('\tpvalue\n')
+
+    for line in f_in:
+        inputs.append(line)
+        count += 1
+
+        if count >= chunk:
+            input_list.append((threadnb, inputs))
+            inputs = []
+            count = 0
+            threadnb -= 1
+
+    input_list.append((threadnb, inputs))
+
+    pool = Pool(len(input_list))
+    print("Number of threads launched: {0}".format(len(input_list)))
+
+    threadresults = pool.map(func, input_list)
+    nbtotal = 0
+
+    for results in threadresults:
+        nbtotal += len(results)
+
+        for line in results:
+            if line:
+                f_res.write(line)
+
+    print("\n{2} statistical analysis done in: {1} s\n File {0} written!".format(
+        ARGS.out, time() - t_start, ARGS.test))
+
+
+def _fisher_parallel(inputs):
+    """
+    execute fisher test for one line of format:
+    row: <feature name>\t<additional columns>\t...\tn11\n12\tn21\tn22\n
+
+    return:
+    string: <feature name>\t<additional columns>\t...\tpvalue\n
+    """
+    results = []
+    count = 0.0
+    length = len(inputs[1])
+    threadID = inputs[0]
+
+    for line in inputs[1]:
+        if line[0] == '#':
+            continue
+
+        line = line.strip().split(ARGS.sep)
+
+        n11, n12, n21, n22 = int(line[-4]), int(line[-3]), int(line[-2]), int(line[-1])
+        _, pvalue = fisher_exact([[n11, n12], [n21, n22]])
+
+        results.append(ARGS.sep.join(line[:-4]) + ARGS.sep + str(pvalue) + '\n')
+        count += 1
+
+        if ARGS.verbose and threadID == 0:
+            stdout.write('\r {0} % done        '.format(100 * count / length))
+            stdout.flush()
+
+    return results
+
+
+def _chi2_parallel(inputs):
+    """
+    execute fisher test for one line of format:
+    row: <feature name>\t<additional columns>\t...\tn11\n12\tn21\tn22\n
+
+    return:
+    string: <feature name>\t<additional columns>\t...\tpvalue\n
+    """
+    results = []
+    count = 0.0
+    length = len(inputs[1])
+    threadID = inputs[0]
+
+    for line in inputs[1]:
+        if line[0] == '#':
+            continue
+
+        line = line.strip().split(ARGS.sep)
+
+        n11, n12, n21, n22 = int(line[-4]), int(line[-3]), int(line[-2]), int(line[-1])
+        _, pvalue, _, _ = chi2_contingency([[n11, n12], [n21, n22]])
+
+        results.append(ARGS.sep.join(line[:-4]) + ARGS.sep + str(pvalue) + '\n')
+        count += 1
+
+        if ARGS.verbose and threadID == 0:
+            stdout.write('\r {0} % done        '.format(100 * count / length))
+            stdout.flush()
+
+    return results
+
+
+
+if __name__ == '__main__':
+    main()
