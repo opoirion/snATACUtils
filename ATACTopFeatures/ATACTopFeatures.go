@@ -502,7 +502,7 @@ func processBufferArray(lineArray * [BUFFERSIZE]string, nbLines, threadnb int, w
 
 
 func computeChi2Score() {
-	fmt.Printf("Computing chi2 exact test: %s\n", BEDFILENAME)
+	fmt.Printf("Computing chi2 exact test...\n")
 	THREADSCHANNEL = make(chan int, THREADNB)
 	var peakID uintptr
 
