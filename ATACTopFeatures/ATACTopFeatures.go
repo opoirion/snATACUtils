@@ -14,6 +14,7 @@ import (
 	stats "github.com/glycerine/golang-fisher-exact"
 	"sort"
 	"bytes"
+	"path"
 )
 
 
@@ -41,14 +42,20 @@ var PEAKFILE utils.Filename
 /*CLUSTERFILE cluster file name (input) */
 var CLUSTERFILE utils.Filename
 
+/*FEATUREPVALUEFILE Input file for MULTIPLETESTS option analysis */
+var FEATUREPVALUEFILE utils.Filename
+
 /*FILENAMEOUT  output file name output */
 var FILENAMEOUT string
 
 /*CHI2ANALYSIS do chi2 analysis*/
 var CHI2ANALYSIS bool
 
-/*CONTINGENCYTABLE do chi2 analysis*/
-var CONTINGENCYTABLE bool
+/*CREATECONTINGENCY do chi2 analysis*/
+var CREATECONTINGENCY bool
+
+/*MULTIPLETESTS perform multiple tests correction using contingency tables file as input*/
+var MULTIPLETESTS bool
 
 /*THREADNB number of threads for reading the bam file */
 var THREADNB int
@@ -100,17 +107,32 @@ func main() {
 	flag.Var(&BEDFILENAME, "bed", "name of the bed file")
 	flag.Var(&PEAKFILE, "peak", "File containing peaks")
 	flag.Var(&CLUSTERFILE, "cluster", "File containing cluster")
+	flag.Var(&FEATUREPVALUEFILE, "ptable", `File containing pvalue for each interval feature
+                row scheme: <chromosome>\t<start>\t<stop>\t<cluster ID>\t<pvalue>\n`)
 	flag.StringVar(&FILENAMEOUT, "out", "", "name the output file(s)")
 	flag.IntVar(&THREADNB, "threads", 1, "threads concurrency")
 	flag.Float64Var(&ALPHA, "alpha", 0.05, "Decision threshold")
 	flag.BoolVar(&WRITEALL, "write_all", false, "Write all features including the not significant ones")
 	flag.BoolVar(&CHI2ANALYSIS, "chi2", false, `perform chi2 analysis with multiple test correction
-                USAGE: ATACTopFeatures -chi2 -bed <fname> -peak <fname> -cluster <fname> (optionnal -out <string> -threads <int> -alpha <float>)`)
+                USAGE: ATACTopFeatures -chi2 -bed <fname> -peak <fname> -cluster <fname> (optionnal -out <string> -threads <int> -alpha <float> -write_all)`)
 
-	flag.BoolVar(&CONTINGENCYTABLE, "contingency_table", false, `Write contingency table for each feature and each cluster
-                USAGE: ATACTopFeatures -chi2 -bed <fname> -peak <fname> -cluster <fname> (optionnal -out <string> -threads <int>)`)
+	flag.BoolVar(&CREATECONTINGENCY, "create_contingency", false, `Create contingency table for each feature and each cluster
+                USAGE: ATACTopFeatures -create_contingency -bed <fname> -peak <fname> -cluster <fname> (optionnal -out <string> -threads <int>)`)
+
+	flag.BoolVar(&MULTIPLETESTS, "pvalue_correction", false, `correct feature pvalue for multiple tests performed or each cluster
+                USAGE: ATACTopFeatures -pvalue_correction -ptable <fname> (optionnal -out <string> -threads <int> -alpha <float> -write_all)`)
 
 	flag.Parse()
+
+	switch {
+	case MULTIPLETESTS:
+		if FEATUREPVALUEFILE == "" {
+			log.Fatal("-ptable must be provided!\n")
+		}
+
+		launchMultipleTestAnalysis()
+		return
+	}
 
 	switch {
 	case BEDFILENAME == "":
@@ -125,7 +147,7 @@ func main() {
 
 	switch {
 
-	case CONTINGENCYTABLE:
+	case CREATECONTINGENCY:
 		createContingencyTable()
 	case CHI2ANALYSIS:
 		launchChi2Analysis()
@@ -133,22 +155,28 @@ func main() {
 }
 
 
-func initBoolSparseMatrix() {
-	var peakKey uintptr
-
-	BOOLSPARSEMATRIX = make(map[uintptr]map[string]bool)
-
-	for peakKey = range PEAKMAPPING {
-		BOOLSPARSEMATRIX[peakKey] = make(map[string]bool)
+func launchMultipleTestAnalysis() {
+	if FILENAMEOUT == "" {
+		ext := path.Ext(FEATUREPVALUEFILE.String())
+		FILENAMEOUT = fmt.Sprintf("%s.pvalue_corrected.tsv",
+			FEATUREPVALUEFILE[:len(FEATUREPVALUEFILE)-len(ext)])
 	}
+
+	loadPvalueTable()
+	sortPvalueScore()
+	performCorrectionAfterSorting()
+	writePvalueCorrectedTable()
 }
+
 
 func createContingencyTable() {
 	BUFFERARRAY = make([][BUFFERSIZE]string, THREADNB)
 	BUFFERRESARRAY = make([][BUFFERSIZE]boolsparsematfeature, THREADNB)
 
 	if FILENAMEOUT == "" {
-		FILENAMEOUT = fmt.Sprintf("%s.contingency_table.tsv\n", BEDFILENAME)
+		ext := path.Ext(BEDFILENAME.String())
+		FILENAMEOUT = fmt.Sprintf("%s.contingency_table.tsv",
+			BEDFILENAME[:len(BEDFILENAME)-len(ext)])
 	}
 
 	loadCellClusterIDAndInitMaps()
@@ -170,7 +198,9 @@ func launchChi2Analysis() {
 	BUFFERRESARRAY = make([][BUFFERSIZE]boolsparsematfeature, THREADNB)
 
 	if FILENAMEOUT == "" {
-		FILENAMEOUT = fmt.Sprintf("%s.chi2.tsv\n", BEDFILENAME)
+		ext := path.Ext(BEDFILENAME.String())
+		FILENAMEOUT = fmt.Sprintf("%s.chi2.tsv",
+			BEDFILENAME[:len(BEDFILENAME)-len(ext)])
 	}
 
 	loadCellClusterIDAndInitMaps()
@@ -183,8 +213,73 @@ func launchChi2Analysis() {
 	computeChi2Score()
 	go clearSparseMat()
 	performMultipleTestCorrection()
-	writeOutput()
+	writePvalueCorrectedTable()
 
+}
+
+
+func loadPvalueTable() {
+	var line string
+	var split []string
+	var peaki peakFeature
+	var peaks peak
+	var err error
+	var isInside bool
+	var count uintptr
+	var pvalue float64
+
+	tStart := time.Now()
+
+	CHI2SCORE = make(map[string][]peakFeature)
+	PEAKMAPPING = make(map[uintptr]peak)
+
+	peakset := make(map[peak]uintptr)
+
+	scanner, file := FEATUREPVALUEFILE.ReturnReader(0)
+	defer utils.CloseFile(file)
+
+	for scanner.Scan() {
+		line = scanner.Text()
+		if line[0] == '#' {
+			continue
+		}
+
+		split = strings.Split(line, "\t")
+
+		_, err = strconv.Atoi(split[1])
+		utils.Check(err)
+
+		_, err = strconv.Atoi(split[2])
+		utils.Check(err)
+
+		peaks = peak{split[0], split[1], split[2]}
+
+		if _, isInside = peakset[peaks];!isInside {
+			peakset[peaks] = count
+			PEAKMAPPING[count] = peaks
+			count++
+		}
+
+		peaki.id  = peakset[peaks]
+		peaki.cluster = split[3]
+		pvalue, err = strconv.ParseFloat(split[4], 64)
+		utils.Check(err)
+		peaki.pvalue = pvalue
+		CHI2SCORE[peaki.cluster] = append(CHI2SCORE[peaki.cluster], peaki)
+	}
+
+	tDiff := time.Since(tStart)
+	fmt.Printf("Table %s loaded in: %f s \n", FEATUREPVALUEFILE, tDiff.Seconds())
+}
+
+func initBoolSparseMatrix() {
+	var peakKey uintptr
+
+	BOOLSPARSEMATRIX = make(map[uintptr]map[string]bool)
+
+	for peakKey = range PEAKMAPPING {
+		BOOLSPARSEMATRIX[peakKey] = make(map[string]bool)
+	}
 }
 
 
@@ -406,7 +501,7 @@ func chi2ScoreOneThread(chi2Array * [SMALLBUFFERSIZE]uintptr, waiting * sync.Wai
 			results[count].id = peakID
 			results[count].cluster = cluster
 
-			if CONTINGENCYTABLE {
+			if CREATECONTINGENCY {
 				results[count].n11 = value
 				results[count].n12 = CLUSTERSUM[cluster]
 				results[count].n21 = peakTotal - value
@@ -463,11 +558,11 @@ func recoverChiScore(n11, n12, n21, n22 int) {
 }
 
 func performMultipleTestCorrection() {
-	sortChi2Score()
+	sortPvalueScore()
 	performCorrectionAfterSorting()
 }
 
-func sortChi2Score() {
+func sortPvalueScore() {
 	tStart := time.Now()
 	THREADSCHANNEL = make(chan int, THREADNB)
 
@@ -524,7 +619,7 @@ func performCorrectionAfterSorting() {
 	fmt.Printf("Correction done in time: %f s \n", tDiff.Seconds())
 }
 
-func writeOutput() {
+func writePvalueCorrectedTable() {
 	var buffer bytes.Buffer
 	var peakl peak
 	var err error
