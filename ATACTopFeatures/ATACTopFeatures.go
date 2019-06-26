@@ -764,7 +764,15 @@ func writeContingencyTable() {
 	defer utils.CloseFile(writer)
 	tStart := time.Now()
 
-	buffer.WriteString("#chr\tstart\tstop\tcluster\tn11\tn12\tn21\tn22\n")
+	writeSymbol := PEAKSYMBOLFILE != ""
+
+	buffer.WriteString("#chr\tstart\tstop\tcluster")
+
+	if writeSymbol {
+		buffer.WriteString("\tsymbol")
+	}
+
+	buffer.WriteString("\tn11\tn12\tn21\tn22\n")
 
 	clusters := []string{}
 
@@ -786,6 +794,12 @@ func writeContingencyTable() {
 			buffer.WriteString(peakl[2])
 			buffer.WriteRune('\t')
 			buffer.WriteString(peaki.cluster)
+
+			if writeSymbol {
+				buffer.WriteRune('\t')
+				buffer.WriteString(PEAKSYMBOLDICT[peakl])
+			}
+
 			buffer.WriteRune('\t')
 			buffer.WriteString(strconv.Itoa(peaki.n11))
 			buffer.WriteRune('\t')
