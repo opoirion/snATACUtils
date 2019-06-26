@@ -738,17 +738,18 @@ func writePvalueCorrectedTable() {
 			buffer.WriteString(peakl[2])
 			buffer.WriteRune('\t')
 			buffer.WriteString(peaki.cluster)
+
+			if writeSymbol {
+				buffer.WriteRune('\t')
+				buffer.WriteString(PEAKSYMBOLDICT[peakl])
+			}
+
 			buffer.WriteRune('\t')
 			buffer.WriteString(fmt.Sprintf("%e", peaki.pvalue))
 			buffer.WriteRune('\t')
 			buffer.WriteString(fmt.Sprintf("%e", peaki.qvalue))
 			buffer.WriteRune('\t')
 			buffer.WriteString(strconv.FormatBool(isSignificant))
-
-			if writeSymbol {
-				buffer.WriteRune('\t')
-				buffer.WriteString(PEAKSYMBOLDICT[peakl])
-			}
 
 			buffer.WriteRune('\n')
 		}
