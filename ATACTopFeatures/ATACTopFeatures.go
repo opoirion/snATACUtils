@@ -15,6 +15,8 @@ import (
 	"sort"
 	"bytes"
 	"path"
+	"bufio"
+	"os"
 )
 
 
@@ -44,6 +46,9 @@ var CLUSTERFILE utils.Filename
 
 /*FEATUREPVALUEFILE Input file for MULTIPLETESTS option analysis */
 var FEATUREPVALUEFILE utils.Filename
+
+/*PEAKSYMBOLFILE peak symbol file */
+var PEAKSYMBOLFILE utils.Filename
 
 /*FILENAMEOUT  output file name output */
 var FILENAMEOUT string
@@ -102,10 +107,15 @@ var MUTEX sync.Mutex
 /*WRITEALL Write all features even the not significant one*/
 var WRITEALL bool
 
+/*PEAKSYMBOLDICT map[peak]symbol */
+var PEAKSYMBOLDICT map[peak]string
+
 
 func main() {
 	flag.Var(&BEDFILENAME, "bed", "name of the bed file")
 	flag.Var(&PEAKFILE, "peak", "File containing peaks")
+	flag.Var(&PEAKSYMBOLFILE, "symbol", `File containing symbols (such as gene name) for peak file.
+     Each row should either contain one symbol per line and matches the peaks from -peak OR option2:<symbol>\t<chromosome>\t<start>\t<stop>\n`)
 	flag.Var(&CLUSTERFILE, "cluster", "File containing cluster")
 	flag.Var(&FEATUREPVALUEFILE, "ptable", `File containing pvalue for each interval feature
                 row scheme: <chromosome>\t<start>\t<stop>\t<cluster ID>\t<pvalue>\n`)
@@ -162,6 +172,7 @@ func launchMultipleTestAnalysis() {
 			FEATUREPVALUEFILE[:len(FEATUREPVALUEFILE)-len(ext)])
 	}
 
+	loadSymbolFile()
 	loadPvalueTable()
 	sortPvalueScore()
 	performCorrectionAfterSorting()
@@ -179,6 +190,7 @@ func createContingencyTable() {
 			BEDFILENAME[:len(BEDFILENAME)-len(ext)])
 	}
 
+	loadSymbolFile()
 	loadCellClusterIDAndInitMaps()
 	utils.LoadPeaks(PEAKFILE.String())
 	utils.CreatePeakIntervalTree()
@@ -203,6 +215,7 @@ func launchChi2Analysis() {
 			BEDFILENAME[:len(BEDFILENAME)-len(ext)])
 	}
 
+	loadSymbolFile()
 	loadCellClusterIDAndInitMaps()
 	utils.LoadPeaks(PEAKFILE.String())
 	utils.CreatePeakIntervalTree()
@@ -215,6 +228,60 @@ func launchChi2Analysis() {
 	performMultipleTestCorrection()
 	writePvalueCorrectedTable()
 
+}
+
+
+func loadSymbolFile() {
+	var scannerPeak *bufio.Scanner
+	var filePeak *os.File
+	var split, split2 []string
+	var peakl peak
+	var symbol string
+
+	if PEAKSYMBOLFILE == "" {
+		return
+	}
+
+	PEAKSYMBOLDICT = make(map[peak]string)
+
+	isOption1 := true
+
+	if PEAKFILE == "" {
+		isOption1 = false
+	} else {
+		scannerPeak, filePeak = PEAKFILE.ReturnReader(0)
+		defer utils.CloseFile(filePeak)
+	}
+
+	scanner, file := PEAKSYMBOLFILE.ReturnReader(0)
+	defer utils.CloseFile(file)
+
+	for scanner.Scan() {
+		split = strings.Split(scanner.Text(), "\t")
+
+		if len(split) == 4 {
+			isOption1 = false
+		}
+
+		if !isOption1 && len(split) != 4 {
+			panic(fmt.Sprintf(
+				"Error line %s from symbol file should be <symbol>\t<chromosome>\t<start>\t<stop>\n",
+				split))
+		}
+
+		symbol = split[0]
+
+		if isOption1 {
+			scannerPeak.Scan()
+			split2 = strings.Split(scannerPeak.Text(), "\t")
+			peakl = peak{split2[0], split2[1], split2[2]}
+
+		} else {
+			peakl = peak{split[1], split2[2], split2[3]}
+		}
+
+		PEAKSYMBOLDICT[peakl] = symbol
+	}
 }
 
 
@@ -625,11 +692,19 @@ func writePvalueCorrectedTable() {
 	var err error
 	var isSignificant bool
 
+	writeSymbol := PEAKSYMBOLFILE != ""
+
 	writer := utils.ReturnWriter(FILENAMEOUT)
 	defer utils.CloseFile(writer)
 	tStart := time.Now()
 
-	buffer.WriteString("#chr\tstart\tstop\tcluster\tpvalue\tqvalue\tsignificant\n")
+	buffer.WriteString("#chr\tstart\tstop\tcluster\tpvalue\tqvalue\tsignificant")
+
+	if writeSymbol {
+		buffer.WriteString("\tsymbol")
+	}
+
+	buffer.WriteRune('\n')
 
 	clusters := []string{}
 
@@ -662,6 +737,12 @@ func writePvalueCorrectedTable() {
 			buffer.WriteString(fmt.Sprintf("%e", peaki.qvalue))
 			buffer.WriteRune('\t')
 			buffer.WriteString(strconv.FormatBool(isSignificant))
+
+			if writeSymbol {
+				buffer.WriteRune('\t')
+				buffer.WriteString(PEAKSYMBOLDICT[peakl])
+			}
+
 			buffer.WriteRune('\n')
 		}
 
