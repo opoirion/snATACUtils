@@ -238,11 +238,11 @@ func loadSymbolFile() {
 	var peakl peak
 	var symbol string
 
+	PEAKSYMBOLDICT = make(map[peak]string)
+
 	if PEAKSYMBOLFILE == "" {
 		return
 	}
-
-	PEAKSYMBOLDICT = make(map[peak]string)
 
 	isOption1 := true
 
@@ -286,10 +286,10 @@ func loadSymbolFile() {
 
 
 func loadPvalueTable() {
-	var line string
+	var line, symbol string
 	var split []string
 	var peaki peakFeature
-	var peaks peak
+	var peakl peak
 	var err error
 	var isInside bool
 	var count uintptr
@@ -305,6 +305,8 @@ func loadPvalueTable() {
 	scanner, file := FEATUREPVALUEFILE.ReturnReader(0)
 	defer utils.CloseFile(file)
 
+	isSymbolFile := PEAKSYMBOLFILE != ""
+
 	for scanner.Scan() {
 		line = scanner.Text()
 		if line[0] == '#' {
@@ -319,20 +321,25 @@ func loadPvalueTable() {
 		_, err = strconv.Atoi(split[2])
 		utils.Check(err)
 
-		peaks = peak{split[0], split[1], split[2]}
+		peakl = peak{split[0], split[1], split[2]}
 
-		if _, isInside = peakset[peaks];!isInside {
-			peakset[peaks] = count
-			PEAKMAPPING[count] = peaks
+		if _, isInside = peakset[peakl];!isInside {
+			peakset[peakl] = count
+			PEAKMAPPING[count] = peakl
 			count++
 		}
 
-		peaki.id  = peakset[peaks]
+		peaki.id  = peakset[peakl]
 		peaki.cluster = split[3]
-		pvalue, err = strconv.ParseFloat(split[4], 64)
+		pvalue, err = strconv.ParseFloat(split[len(split) - 1], 64)
 		utils.Check(err)
 		peaki.pvalue = pvalue
 		CHI2SCORE[peaki.cluster] = append(CHI2SCORE[peaki.cluster], peaki)
+
+		if !isSymbolFile && len(split) == 6 {
+			symbol = split[4]
+			PEAKSYMBOLDICT[peakl] = symbol
+		}
 	}
 
 	tDiff := time.Since(tStart)
@@ -692,7 +699,7 @@ func writePvalueCorrectedTable() {
 	var err error
 	var isSignificant bool
 
-	writeSymbol := PEAKSYMBOLFILE != ""
+	writeSymbol := len(PEAKSYMBOLDICT) != 0
 
 	writer := utils.ReturnWriter(FILENAMEOUT)
 	defer utils.CloseFile(writer)
@@ -764,7 +771,7 @@ func writeContingencyTable() {
 	defer utils.CloseFile(writer)
 	tStart := time.Now()
 
-	writeSymbol := PEAKSYMBOLFILE != ""
+	writeSymbol := len(PEAKSYMBOLDICT) != 0
 
 	buffer.WriteString("#chr\tstart\tstop\tcluster")
 

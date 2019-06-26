@@ -16,7 +16,7 @@ from time import time
 from os import popen
 
 
-ARGPARSER = ArgumentParser(description='Feature scoring using contingency table', prefix_chars='-')
+ARGPARSER = ArgumentParser(description='Feature scoring using contingency table created using ATACTopFeatures (require scipy)', prefix_chars='-')
 
 
 ARGPARSER.add_argument('-contingency_table',
@@ -165,7 +165,7 @@ def _fisher_parallel(inputs):
         line = line.strip().split(ARGS.sep)
 
         n11, n12, n21, n22 = int(line[-4]), int(line[-3]), int(line[-2]), int(line[-1])
-        _, pvalue = fisher_exact([[n11, n12], [n21, n22]])
+        _, pvalue = fisher_exact([[n11, n12], [n21, n22]], alternative='greater')
 
         results.append(ARGS.sep.join(line[:-4]) + ARGS.sep + str(pvalue) + '\n')
         count += 1
@@ -198,6 +198,10 @@ def _chi2_parallel(inputs):
 
         n11, n12, n21, n22 = int(line[-4]), int(line[-3]), int(line[-2]), int(line[-1])
         _, pvalue, _, _ = chi2_contingency([[n11, n12], [n21, n22]])
+
+        # Alternative greater
+        if float(n11) / n12 < float(n21) / n22:
+            pvalue = 1.0 - pvalue
 
         results.append(ARGS.sep.join(line[:-4]) + ARGS.sep + str(pvalue) + '\n')
         count += 1
