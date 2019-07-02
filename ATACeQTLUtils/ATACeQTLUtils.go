@@ -18,16 +18,16 @@ import (
 
 
 /*BEDFILENAME bed file name (input) */
-var BEDFILENAME string
+var BEDFILENAME utils.Filename
 
 /*PEAKFILE file containg cluster-specific peaks */
-var PEAKFILE string
+var PEAKFILE utils.Filename
 
 /*OUTFILE output file */
 var OUTFILE string
 
 /*GENEFILE Specific gene file */
-var GENEFILE string
+var GENEFILE utils.Filename
 
 /*SEP separator used to split the SNV-SNV link file */
 var SEP string
@@ -36,10 +36,10 @@ var SEP string
 var SNPFILES utils.ArrayFlags
 
 /*GENEIDTONAMEFILE gene ID to name conversion File */
-var GENEIDTONAMEFILE string
+var GENEIDTONAMEFILE utils.Filename
 
 /*DBSNPFILE db SNP file  */
-var DBSNPFILE string
+var DBSNPFILE utils.Filename
 
 /*WRITESNPTOBED write significant SNP to bed file */
 var WRITESNPTOBED bool
@@ -82,7 +82,7 @@ var SNPTOSNPIDDICT map[snpID]string
 /*GENEDICT genename <string> -> score <float> */
 var GENEDICT map[string]float64
 
-/*GENEUINTDICT genename <string> -> score <float> */
+/*GENEUINTDICT gene ID -> gene name */
 var GENEUINTDICT map[uintptr]string
 
 /*PEAKUNINTDICT genename <string> -> score <float> */
@@ -97,8 +97,8 @@ var CELLIDDICT map[string]bool
 /*CELLIDCOMPLDICT cell ID<->pos */
 var CELLIDCOMPLDICT map[string]bool
 
-/*EGENEDICT cell ID<->pos */
-var EGENEDICT map[string]string
+/*REFGENEDICT cell ID<->pos */
+var REFGENEDICT map[string]string
 
 /*NBCELLS number of cells in the clusters */
 var NBCELLS int
@@ -107,16 +107,16 @@ var NBCELLS int
 var NBCELLSCOMPL int
 
 /*CELLIDFNAME file name */
-var CELLIDFNAME string
+var CELLIDFNAME utils.Filename
 
 /*CELLIDCOMPLFNAME file name */
-var CELLIDCOMPLFNAME string
+var CELLIDCOMPLFNAME utils.Filename
 
 /*LDLINKFNAME file name */
-var LDLINKFNAME string
+var LDLINKFNAME utils.Filename
 
 /*LDFILE file name */
-var LDFILE string
+var LDFILE utils.Filename
 
 /*SNPPADDING Padding for SNP inclusion */
 var SNPPADDING int
@@ -127,8 +127,14 @@ var PEAKPADDING int
 /*PERFORMEQTL perform eQTL analysis */
 var PERFORMEQTL bool
 
+/*PERFORMGLOBALEQTL perform eQTL analysis */
+var PERFORMGLOBALEQTL bool
+
 /*CREATEDLGROUP create DL group analysis */
 var CREATEDLGROUP bool
+
+/*FEATUREPVALUEFILE Input file for MULTIPLETESTS option analysis */
+var FEATUREPVALUEFILE utils.Filename
 
 /*IntInterval Integer-specific intervals used for intervalTree*/
 type IntInterval struct {
@@ -162,30 +168,37 @@ func main() {
 	flag.BoolVar(&WRITESNPTOBED, "write_snp", false, "Write potential SNPs to a bed file")
 	flag.IntVar(&SNPPADDING, "padding_snp", 0, "Padding added before and after SNP location for SNP inclusion")
 	flag.IntVar(&PEAKPADDING, "padding_peak", 0, "Padding added before and after peak coordinates")
-	flag.StringVar(&BEDFILENAME, "bed", "", "name of the bed file")
-	flag.StringVar(&PEAKFILE, "peak_file", "", "Cluster-specific Peak file ")
-	flag.StringVar(&DBSNPFILE, "dbSNP", "", "dbSNP file ")
-	flag.StringVar(&CELLIDFNAME, "xgi", "", "cluster specific cell barcodes ")
-	flag.StringVar(&CELLIDCOMPLFNAME, "xgi_compl", "", "All cell barcodes ")
-	flag.StringVar(&GENEFILE, "gene_file", "", "Cluster-specific Gene file ")
+	flag.Var(&BEDFILENAME, "bed", "name of the bed file")
+	flag.Var(&PEAKFILE, "peak", "Cluster-specific Peak file ")
+	flag.Var(&DBSNPFILE, "dbSNP", "dbSNP file ")
+	flag.Var(&CELLIDFNAME, "xgi", "cluster specific cell barcodes ")
+	flag.Var(&CELLIDCOMPLFNAME, "xgi_compl", "All cell barcodes ")
+	flag.Var(&FEATUREPVALUEFILE, "ptable", `File containing pvalue for each interval feature
+                row scheme: <chromosome>\t<start>\t<stop>\t<cluster ID>\t<pvalue>\n`)
+	flag.Var(&GENEFILE, "gene", "Cluster-specific Gene file ")
 	flag.StringVar(&SEP, "sep", " ", "Separator used to split the SNV-SNV link file ")
-	flag.StringVar(&LDFILE, "ld_file", "", "LD file. Each line represents a LD group with SNP sorted using their p-values. The first SNP of each line is considered as the top SNP for each group. The rest of the SNPs will be discarded if found.")
-	flag.StringVar(&LDLINKFNAME, "ld_pair", "", "LD file. Each line is a SNV-SNV (<dbSNP1><space><dbSNP2>) link representing a linkage disiquilibrium")
-	flag.StringVar(&GENEIDTONAMEFILE, "gene_ID_to_name", "", "File used for gene name conversion (gene_id<tab>gene_name) ")
-	flag.Var(&SNPFILES, "eQTL_gene_pair", "name of one or multiple eQTL files (-eQTL_gene_pair <fname1> -eQTL_gene_pair <fname2>)")
+	flag.Var(&LDFILE, "ld", "LD file. Each line represents a LD group with SNP sorted using their p-values. The first SNP of each line is considered as the top SNP for each group. The rest of the SNPs will be discarded if found.")
+	flag.Var(&LDLINKFNAME, "ld_pair", "LD file. Each line is a SNV-SNV (<dbSNP1><space><dbSNP2>) link representing a linkage disiquilibrium")
+	flag.Var(&CLUSTERGENEFILE, "cluster_gene", "File indicating significant genes per cluster:<cluster ID>\t<file>\n ")
+	flag.Var(&GENEIDTONAMEFILE, "gene_ID_to_name", "File used for gene name conversion (gene_id<tab>gene_name) ")
+	flag.Var(&SNPFILES, "eQTL", "name of one or multiple eQTL files (-eQTL <fname1> -eQTL <fname2>)")
 	flag.StringVar(&OUTFILE, "out", "", "Name of the output file")
 	flag.BoolVar(&USESNPASID, "use_snp_id", false, "use SNP ID rather than peaks as ID")
+	flag.BoolVar(&PERFORMGLOBALEQTL, "global", false, `perform eQTL analysis
+                        USAGE: ATACeQTLUtils -global -ptable <fname> -eQTL <fname> -cluster_gene <fname> -gene_ID_to_name <fname`)
 	flag.BoolVar(&PERFORMEQTL, "analysis", false, `perform eQTL analysis
-                        USAGE: ATACeQTLUtils -analysis -xgi <fname> -xgi_compl <fname> -bed <fname> -peak_file <fname> -eQTL_gene_pair <fname> (optionnal: -out <string> -gene_ID_to_name <fname> -ld_file -gene_file <fname>)`)
+                        USAGE: ATACeQTLUtils -analysis -xgi <fname> -xgi_compl <fname> -bed <fname> -peak <fname> -eQTL <fname> (optionnal: -out <string> -gene_ID_to_name <fname> -ld -gene <fname>)`)
 
 	flag.BoolVar(&CREATEDLGROUP, "create_dl_group", false, `create DL group
-                        USAGE: ATACeQTLUtils -create_dl_group  -eQTL_gene_pair <fname> -dbSNP <fname> -dl_pair <string> (-out <string>)`)
+                        USAGE: ATACeQTLUtils -create_dl_group  -eQTL <fname> -dbSNP <fname> -dl_pair <string> (-out <string>)`)
 
 	flag.Parse()
 
 	switch {
 	case PERFORMEQTL:
 		performEQTLAnalsysis()
+	case PERFORMGLOBALEQTL:
+		performGlobalEQTLAnalsysis()
 	case CREATEDLGROUP:
 		createDLGroup()
 	}
@@ -205,7 +218,7 @@ func performEQTLAnalsysis() {
 	case CELLIDCOMPLFNAME == "":
 		log.Fatal(fmt.Printf("!!!! Error -xgi_compl must be provided\n"))
 	case len(SNPFILES) == 0:
-		log.Fatal(fmt.Printf("!!!! Error at least one -eQTL_gene_pair must be provided\n"))
+		log.Fatal(fmt.Printf("!!!! Error at least one -eQTL must be provided\n"))
 	case OUTFILE == "":
 		OUTFILE = fmt.Sprintf("%s.eQTL.tsv", BEDFILENAME)
 
@@ -248,7 +261,7 @@ func loadRefLDFile() {
 	snpToKeep := make(map[snpID]bool)
 	SNPTOEXCLUDE = make(map[snpID]bool)
 
-	scanner, file := utils.ReturnReader(LDFILE, 0)
+	scanner, file := LDFILE.ReturnReader(0)
 	defer utils.CloseFile(file)
 	tStart := time.Now()
 
@@ -307,7 +320,7 @@ func scanDBSNPFile() {
 	var isInside bool
 	var snp snpID
 
-	scanner, file := utils.ReturnReader(DBSNPFILE, 0)
+	scanner, file := DBSNPFILE.ReturnReader(0)
 	defer utils.CloseFile(file)
 
 	tStart := time.Now()
@@ -350,10 +363,10 @@ func scanDBSNPFile() {
 func loadCellIDDicts() {
 	CELLIDEQTLDICT = make(map[string]map[string]bool)
 
-	CELLIDDICT = utils.LoadCellIDDict(CELLIDFNAME)
+	CELLIDDICT = utils.LoadCellIDDict(CELLIDFNAME.String())
 	NBCELLS = len(CELLIDDICT)
 
-	CELLIDCOMPLDICT = utils.LoadCellIDDict(CELLIDCOMPLFNAME)
+	CELLIDCOMPLDICT = utils.LoadCellIDDict(CELLIDCOMPLFNAME.String())
 
 	for key := range CELLIDCOMPLDICT {
 		if _, isInside := CELLIDEQTLDICT[key];!isInside {
@@ -380,7 +393,7 @@ func scanBed() {
 	var keys []string
 	var scoreNCl, scoreNCompl float64
 
-	countDicts := scanOneBedFile(BEDFILENAME)
+	countDicts := scanOneBedFile(BEDFILENAME.String())
 	writer := utils.ReturnWriter(OUTFILE)
 	defer utils.CloseFile(writer)
 	defer fmt.Printf("file: %s written\n", OUTFILE)
@@ -449,7 +462,7 @@ func scanOneBedFile(bedfile string) map[string]map[string]int  {
 	countDicts["Cell number cluster"] = make(map[string]int)
 	countDicts["Cell number compl."] = make(map[string]int)
 
-	bedReader, file := utils.ReturnReader(BEDFILENAME, 0)
+	bedReader, file := BEDFILENAME.ReturnReader(0)
 	defer utils.CloseFile(file)
 
 	bedLoop:
@@ -594,7 +607,7 @@ func createGeneArray() {
 	var err error
 	var count int
 
-	scanner, file := utils.ReturnReader(GENEFILE, 0)
+	scanner, file := GENEFILE.ReturnReader(0)
 	defer utils.CloseFile(file)
 
 	GENEDICT = make(map[string]float64)
@@ -629,17 +642,17 @@ func createRefGeneDict() {
 	var split []string
 	var line string
 
-	EGENEDICT = make(map[string]string)
+	REFGENEDICT = make(map[string]string)
 
 	if GENEIDTONAMEFILE == "" {
 		for gene := range GENEDICT {
-			EGENEDICT[gene] = gene
+			REFGENEDICT[gene] = gene
 		}
 		return
 	}
 
 	isGeneList := GENEFILE != ""
-	scanner, file := utils.ReturnReader(GENEIDTONAMEFILE, 0)
+	scanner, file := GENEIDTONAMEFILE.ReturnReader(0)
 	defer utils.CloseFile(file)
 
 	scanner.Scan()
@@ -654,7 +667,7 @@ func createRefGeneDict() {
 			continue
 		}
 
-		EGENEDICT[split[0]] = split[1]
+		REFGENEDICT[split[0]] = split[1]
 	}
 
 }
@@ -672,7 +685,7 @@ func createPeakIntervalTree() {
 	PEAKCHRINTERVALDICT = make(map[string]*interval.IntTree)
 	PEAKUNINTDICT = make(map[uintptr]string)
 
-	scanner, file := utils.ReturnReader(PEAKFILE, 0)
+	scanner, file := PEAKFILE.ReturnReader(0)
 	defer utils.CloseFile(file)
 
 	for scanner.Scan() {
@@ -773,7 +786,7 @@ func createSNPIntervalTree() {
 					"Error cannot split line: %s in more than 12 part using\t\n", split))
 			}
 
-			gene, isInside = EGENEDICT[split[1]]
+			gene, isInside = REFGENEDICT[split[1]]
 
 			switch {
 
