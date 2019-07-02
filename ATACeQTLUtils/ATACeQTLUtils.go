@@ -53,6 +53,9 @@ var CHRINTERVALDICT map[string]*interval.IntTree
 /*PEAKCHRINTERVALDICT chr ID <-> interval tree */
 var PEAKCHRINTERVALDICT map[string]*interval.IntTree
 
+/*GENETOEQTLCOUNT gene Key to number of eQTL*/
+var GENETOEQTLCOUNT map[string]int
+
 
 /*snpID Internal structure used to represent an SNP */
 type snpID struct {
@@ -743,6 +746,8 @@ func createSNPIntervalTree() {
 
 	checkRefSNP := LDFILE != ""
 
+	GENETOEQTLCOUNT = make(map[string]int)
+
 	isRefGeneList := len(GENEDICT) != 0
 
 	if WRITESNPTOBED {
@@ -861,6 +866,8 @@ func createSNPIntervalTree() {
 			err = CHRINTERVALDICT[chrID].Insert(inter, false)
 			utils.Check(err)
 			count++
+			GENETOEQTLCOUNT[gene]++
+
 		}
 
 		utils.CloseFile(file)

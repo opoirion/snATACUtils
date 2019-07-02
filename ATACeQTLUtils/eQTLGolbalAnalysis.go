@@ -19,22 +19,29 @@ import (
 /*CLUSTERGENEFILE file name */
 var CLUSTERGENEFILE utils.Filename
 
-/*EQTLCOUNT <eQTL> count*/
-var EQTLCOUNT map[string]int
+/*CLUSTERRNASPECIFICEQTL <cluster> count*/
+var CLUSTERRNASPECIFICEQTL map[string]int
 
-/*EQTLRESTCOUNT <eQTL> count*/
+/*EQTLRESTCOUNT <cluster> count*/
 var EQTLRESTCOUNT map[string]int
 
-/*PEAKRESTOUTSIDECOUNT <eQTL> count*/
+/*PEAKRESTOUTSIDECOUNT <cluster> count*/
 var PEAKRESTOUTSIDECOUNT map[string]int
 
-/*PEAKRESTCOUNT <eQTL> count*/
+/*PEAKRESTCOUNT <cluster> count*/
 var PEAKRESTCOUNT map[string]int
+
+/*CLUSTERSPECIFICCOUNT <cluster> count*/
+var CLUSTERSPECIFICCOUNT map[string]int
+
+/*TOTALRNAEQTLCOUNT <cluster> count*/
+var TOTALRNAEQTLCOUNT map[string]int
 
 /*CLUSTERGENEDICT map[clusterID]map[gene]bool*/
 var CLUSTERGENEDICT map[string]map[string]bool
 
-
+/*TOTALNUMBEREQTL ...*/
+var TOTALNUMBEREQTL int
 
 
 func performGlobalEQTLAnalsysis() {
@@ -64,7 +71,9 @@ func performGlobalEQTLAnalsysis() {
 	PEAKRESTOUTSIDECOUNT = make(map[string]int)
 	PEAKRESTCOUNT = make(map[string]int)
 	EQTLRESTCOUNT = make(map[string]int)
-	EQTLCOUNT = make(map[string]int)
+	CLUSTERRNASPECIFICEQTL = make(map[string]int)
+	CLUSTERSPECIFICCOUNT = make(map[string]int)
+	TOTALRNAEQTLCOUNT = make(map[string]int)
 
 	if LDFILE != "" {
 		//Load LD group
@@ -77,17 +86,34 @@ func performGlobalEQTLAnalsysis() {
 	createSNPIntervalTree()
 	createRefGeneDict()
 	scanPtable()
+	scanPeaks()
+	countForNonRNAeQTLCount()
 	writeGlobaleQTLOutput()
 }
 
+
+func countForNonRNAeQTLCount() {
+	var gene, cluster string
+
+	for gene = range GENETOEQTLCOUNT {
+		TOTALNUMBEREQTL += GENETOEQTLCOUNT[gene]
+	}
+
+	for cluster = range CLUSTERGENEDICT {
+		for gene = range CLUSTERGENEDICT[cluster] {
+			TOTALRNAEQTLCOUNT[cluster] += GENETOEQTLCOUNT[gene]
+		}
+	}
+}
 
 func writeGlobaleQTLOutput() {
 	writer := utils.ReturnWriter(OUTFILE)
 	defer utils.CloseFile(writer)
 	var buffer bytes.Buffer
+	var n11, n12, n21, n22 int
 
 	buffer.WriteString(
-		"ClusterID\tCluster-eQTL\tCluster-Peak\tBackground-EQTL\tBackground-Peak\tchi2 p-value\n")
+		"ClusterID\tCluster-RNA-eQTL\tCluster-eQTL\tpeak-EQTL\tnon-cluster-eQTL\tchi2 p-value\n")
 
 	clusterList := []string{}
 
@@ -98,12 +124,16 @@ func writeGlobaleQTLOutput() {
 	sort.Strings(clusterList)
 
 	for _, cluster := range clusterList {
-		_, pvalue :=  stats.ChiSquareTest(EQTLCOUNT[cluster], PEAKRESTCOUNT[cluster],
-			EQTLRESTCOUNT[cluster], PEAKRESTOUTSIDECOUNT[cluster], true)
+		n11 = CLUSTERRNASPECIFICEQTL[cluster]
+		n12 = TOTALRNAEQTLCOUNT[cluster]
+		n21 = CLUSTERSPECIFICCOUNT[cluster] - n11
+		n22 = TOTALNUMBEREQTL - n12
+
+		_, pvalue :=  stats.ChiSquareTest(n11, n12,
+			n21, n22, true)
 
 		buffer.WriteString(fmt.Sprintf("%s\t%d\t%d\t%d\t%d\t%f\n",
-			cluster, EQTLCOUNT[cluster], PEAKRESTCOUNT[cluster],
-			EQTLRESTCOUNT[cluster], PEAKRESTOUTSIDECOUNT[cluster], pvalue))
+			cluster, n11, n12, n21, n22, pvalue))
 
 	}
 
@@ -115,7 +145,7 @@ func writeGlobaleQTLOutput() {
 
 func scanPtable() {
 	var split []string
-	var chro, cluster, cluster2, gene string
+	var chro, cluster, gene string
 	var start, end int
 	var err error
 	var intervals []interval.IntInterface
@@ -147,30 +177,72 @@ func scanPtable() {
 		intervals = CHRINTERVALDICT[chro].Get(IntInterval{
 			Start:start, End:end})
 
-		for cluster2 = range CLUSTERGENEDICT {
-			cluster2 = strings.Trim(cluster2, " ")
+		PEAKRESTCOUNT[cluster]++
+		CLUSTERSPECIFICCOUNT[cluster] += len(intervals)
+
+		for _, interval = range intervals {
+			gene = GENEUINTDICT[interval.ID()]
+
+			if CLUSTERGENEDICT[cluster][gene] {
+				CLUSTERRNASPECIFICEQTL[cluster]++
+			}
+		}
+	}
+}
+
+
+func scanPeaks() {
+	var split []string
+	var start, end int
+	var chro, cluster, gene string
+
+	var intervals []interval.IntInterface
+	var interval interval.IntInterface
+	var isInside bool
+	var err error
+
+	scanner, file := PEAKFILE.ReturnReader(0)
+	defer utils.CloseFile(file)
+
+	for scanner.Scan() {
+
+		split = strings.Split(scanner.Text(), "\t")
+		chro = split[0][3:]
+
+		start, err = strconv.Atoi(split[1])
+		utils.Check(err)
+
+		end, err = strconv.Atoi(split[2])
+		utils.Check(err)
+
+		if _, isInside = CHRINTERVALDICT[chro];!isInside {
+			continue
+		}
+
+		intervals = CHRINTERVALDICT[chro].Get(IntInterval{
+			Start:start, End:end})
+
+		for cluster = range CLUSTERGENEDICT {
+			cluster = strings.Trim(cluster, " ")
+			PEAKRESTOUTSIDECOUNT[cluster]++
+
 			for _, interval = range intervals {
 				gene = GENEUINTDICT[interval.ID()]
 
-				switch cluster2 {
+				switch cluster {
 				case cluster:
-					if CLUSTERGENEDICT[cluster][gene] {
-						EQTLCOUNT[cluster]++
-					}
-
-					PEAKRESTCOUNT[cluster]++
-				default:
 					if CLUSTERGENEDICT[cluster][gene] {
 						EQTLRESTCOUNT[cluster]++
 					}
 
-					PEAKRESTOUTSIDECOUNT[cluster]++
 				}
 
 			}
 
 		}
+
 	}
+
 }
 
 
@@ -194,6 +266,7 @@ func loadClusterGeneDict() {
 		}
 
 		cluster, fname = split[0], utils.Filename(split[1])
+		cluster = strings.Trim(cluster, " ")
 
 		loadOneGeneFile(fname, cluster)
 	}
