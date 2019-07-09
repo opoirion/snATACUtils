@@ -145,7 +145,7 @@ func scanDLFile() {
 	usedSnp := make(map[string]bool)
 	snpGroup := make(map[string][]string)
 
-	scanner, file := utils.ReturnReader(LDLINKFNAME, 0)
+	scanner, file := LDLINKFNAME.ReturnReader(0)
 	defer utils.CloseFile(file)
 
 	tStart := time.Now()
