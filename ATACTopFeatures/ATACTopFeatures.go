@@ -192,7 +192,7 @@ func createContingencyTable() {
 
 	loadSymbolFile()
 	loadCellClusterIDAndInitMaps()
-	utils.LoadPeaks(PEAKFILE.String())
+	utils.LoadPeaks(PEAKFILE)
 	utils.CreatePeakIntervalTree()
 	utils.InitIntervalDictsThreading(THREADNB)
 	createPeakMappingDict()
@@ -217,7 +217,7 @@ func launchChi2Analysis() {
 
 	loadSymbolFile()
 	loadCellClusterIDAndInitMaps()
-	utils.LoadPeaks(PEAKFILE.String())
+	utils.LoadPeaks(PEAKFILE)
 	utils.CreatePeakIntervalTree()
 	utils.InitIntervalDictsThreading(THREADNB)
 	createPeakMappingDict()

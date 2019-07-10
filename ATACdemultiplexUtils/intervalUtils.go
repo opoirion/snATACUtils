@@ -101,11 +101,11 @@ func CreatePeakIntervalTree() {
 
 
 /*LoadPeaks load peak file and return peak peak id -> dict*/
-func LoadPeaks(fname string) {
+func LoadPeaks(fname Filename) {
 	var scanner *bufio.Scanner
 	var file *os.File
 
-	scanner, file = ReturnReader(fname, 0)
+	scanner, file = fname.ReturnReader(0)
 
 	defer CloseFile(file)
 

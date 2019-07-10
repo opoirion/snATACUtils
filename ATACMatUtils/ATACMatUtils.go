@@ -23,16 +23,19 @@ import(
 var INFILES utils.ArrayFlags
 
 /*BEDFILENAME bed file name (input) */
-var BEDFILENAME string
+var BEDFILENAME utils.Filename
 
 /*PEAKFILE bed file name (input) */
-var PEAKFILE string
+var PEAKFILE utils.Filename
 
 /*CELLSIDFNAME file name file with ordered cell IDs (one ID per line) */
-var CELLSIDFNAME string
+var CELLSIDFNAME utils.Filename
 
 /*CREATECOOMATRIX create COO sparse matrix */
 var CREATECOOMATRIX bool
+
+/*CREATEBINMATRIX create BIN sparse matrix */
+var CREATEBINMATRIX bool
 
 /*READINPEAK read in peak */
 var READINPEAK bool
@@ -69,15 +72,20 @@ const BUFFERSIZE = 1000000
 
 
 func main() {
+	flag.IntVar(&BINSIZE, "bin_size", 5000, "Size of the bin for bin matrix")
 	flag.StringVar(&FILENAMEOUT, "out", "", "name of the output file")
-	flag.StringVar(&BEDFILENAME, "bed", "", "name of the bed file")
+	flag.Var(&BEDFILENAME, "bed", "name of the bed file")
 	flag.Var(&INFILES, "in", "name of the input file(s)")
-	flag.StringVar(&PEAKFILE, "ygi", "", "name of the bed file containing the region of interest( i.e. PEAK )")
-	flag.StringVar(&CELLSIDFNAME, "xgi", "", "name of the file containing the ordered list of cell IDs (one ID per line)")
+	flag.Var(&PEAKFILE, "ygi", "name of the bed file containing the region of interest( i.e. PEAK )")
+	flag.Var(&CELLSIDFNAME, "xgi", "name of the file containing the ordered list of cell IDs (one ID per line)")
 	flag.StringVar(&SEP, "delimiter", "\t", "delimiter used to write the output file (default \t)")
 	flag.BoolVar(&CREATECOOMATRIX, "coo", false,
 		`transform one (-bed) or multiple (use multiple -beds option) into a boolean sparse matrix in COO format
                 USAGE: ATACMatTools -coo -bed  <bedFile> -ygi <bedFile> -xgi <fname>`)
+
+	flag.BoolVar(&CREATEBINMATRIX, "bin", false,
+		`transform one (-bed) or multiple (use multiple -beds option) into a bin (using float) sparse matrix in COO format. If ygi provided, reads intersecting these bin are ignored
+                USAGE: ATACMatTools -bin -bed  <bedFile> (optionnal -ygi <bedFile> -xgi <fname>)`)
 	flag.BoolVar(&MERGEOUTPUTS, "merge", false,
 		`merge multiple matrices results into one output file
                 USAGE: ATACMatTools -coo -merge -xgi <fname> -in <matrixFile1> -in <matrixFile2> ...`)
@@ -87,19 +95,25 @@ func main() {
 	flag.IntVar(&THREADNB, "threads", 1, "threads concurrency")
 	flag.Parse()
 
+	tag := "coo"
+
+	if CREATEBINMATRIX {
+		tag = "bin"
+	}
+
 	switch {
 	case FILENAMEOUT == "" && len(INFILES) > 0:
-		FILENAMEOUT = fmt.Sprintf("%s.coo.gz", INFILES[0])
+		FILENAMEOUT = fmt.Sprintf("%s.%s.gz", INFILES[0], tag)
 	case FILENAMEOUT == "" && BEDFILENAME != "":
-		FILENAMEOUT = fmt.Sprintf("%s.coo.gz", BEDFILENAME)
+		FILENAMEOUT = fmt.Sprintf("%s.%s.gz", BEDFILENAME, tag)
 	case FILENAMEOUT == "":
-		FILENAMEOUT = fmt.Sprintf("output.coo.gz")
+		FILENAMEOUT = fmt.Sprintf("output.%s.gz", tag)
 	}
 
 	tStart := time.Now()
 
 	switch {
-	case CREATECOOMATRIX || READINPEAK:
+	case CREATECOOMATRIX || READINPEAK || CREATEBINMATRIX:
 		switch {
 		case CELLSIDFNAME == "" && !READINPEAK:
 			log.Fatal("Error -xgi file must be provided!")
@@ -111,7 +125,9 @@ func main() {
 			mergeCOOFiles(INFILES)
 		case BEDFILENAME == "":
 			log.Fatal("Error at least one bed file must be provided!")
-		case PEAKFILE == "":
+		case CREATEBINMATRIX:
+			createBinSparseMatrix()
+		case PEAKFILE == "" && !(CREATECOOMATRIX || READINPEAK):
 			log.Fatal("Error peak file -ygi (bed format) must be provided!")
 		case READINPEAK:
 			computeReadsInPeaksForCell()
@@ -277,7 +293,7 @@ func mergeCOOFile(filename string) {
 
 
 /*createBoolSparseMatrixOneFileThreading ceate the bool Sparse Matrix for one bed file using multi-threading*/
-func createBoolSparseMatrixOneFileThreading(bedfilename string) {
+func createBoolSparseMatrixOneFileThreading(bedfilename utils.Filename) {
 	var nbReads uint
 	var bufferLine1 [BUFFERSIZE]string
 	var bufferLine2 [BUFFERSIZE]string
@@ -289,7 +305,7 @@ func createBoolSparseMatrixOneFileThreading(bedfilename string) {
 	var bufferIt int
 	var waiting sync.WaitGroup
 
-	bedReader, file := utils.ReturnReader(BEDFILENAME, 0)
+	bedReader, file := bedfilename.ReturnReader(0)
 
 	defer utils.CloseFile(file)
 
@@ -340,7 +356,7 @@ func createBoolSparseMatrixOneFileThreading(bedfilename string) {
 	}
 }
 
-func createReadInPeakOneFileThreading(bedfilename string) {
+func createReadInPeakOneFileThreading(bedfilename utils.Filename) {
 	var nbReads uint
 	var bufferLine1 [BUFFERSIZE]string
 	var bufferLine2 [BUFFERSIZE]string
@@ -352,7 +368,7 @@ func createReadInPeakOneFileThreading(bedfilename string) {
 	isBuffer1 := true
 	bufferPointer = &bufferLine1
 
-	bedReader, file := utils.ReturnReader(BEDFILENAME, 0)
+	bedReader, file := bedfilename.ReturnReader(0)
 
 	defer utils.CloseFile(file)
 
@@ -497,7 +513,7 @@ func updateBoolSparseMatrixOneThread(bufferLine * [BUFFERSIZE]string, bufferStar
 	}
 }
 
-func createBoolSparseMatrixOneFile(bedfilename string) {
+func createBoolSparseMatrixOneFile(bedfilename utils.Filename) {
 	var line string
 	var split []string
 	var isInside bool
@@ -508,7 +524,7 @@ func createBoolSparseMatrixOneFile(bedfilename string) {
 	var interval interval.IntInterface
 	var cellPos,featPos uint
 
-	bedReader, file := utils.ReturnReader(BEDFILENAME, 0)
+	bedReader, file := bedfilename.ReturnReader(0)
 
 	defer utils.CloseFile(file)
 
@@ -546,11 +562,9 @@ func createBoolSparseMatrixOneFile(bedfilename string) {
 
 
 /*loadCellIDDict load cell id to map[string] -> id <uint>*/
-func loadCellIDDict(fname string) {
-	f, err := os.Open(fname)
-	utils.Check(err)
-	defer utils.CloseFile(f)
-	scanner := bufio.NewScanner(f)
+func loadCellIDDict(fname utils.Filename) {
+	scanner, file := fname.ReturnReader(0)
+	defer utils.CloseFile(file)
 	var count uint
 
 	CELLIDDICT = make(map[string]uint)
