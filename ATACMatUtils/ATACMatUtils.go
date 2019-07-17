@@ -40,6 +40,9 @@ var CREATEBINMATRIX bool
 /*READINPEAK read in peak */
 var READINPEAK bool
 
+/*NORM normalise bin matrix */
+var NORM bool
+
 /*MERGEOUTPUTS merge output files */
 var MERGEOUTPUTS bool
 
@@ -83,9 +86,11 @@ func main() {
 		`transform one (-bed) or multiple (use multiple -beds option) into a boolean sparse matrix in COO format
                 USAGE: ATACMatTools -coo -bed  <bedFile> -ygi <bedFile> -xgi <fname>`)
 
+	flag.BoolVar(&NORM, "norm", false, "Normalize bin matrix per read depth for each cell")
+
 	flag.BoolVar(&CREATEBINMATRIX, "bin", false,
 		`transform one (-bed) or multiple (use multiple -beds option) into a bin (using float) sparse matrix in COO format. If ygi provided, reads intersecting these bin are ignored
-                USAGE: ATACMatTools -bin -bed  <bedFile> (optionnal -ygi <bedFile> -xgi <fname>)`)
+                USAGE: ATACMatTools -bin -bed  <bedFile> (optionnal -ygi <bedFile> -xgi <fname>) -norm`)
 	flag.BoolVar(&MERGEOUTPUTS, "merge", false,
 		`merge multiple matrices results into one output file
                 USAGE: ATACMatTools -coo -merge -xgi <fname> -in <matrixFile1> -in <matrixFile2> ...`)

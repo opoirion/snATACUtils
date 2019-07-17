@@ -15,7 +15,11 @@ type binPos struct {
 	index int
 }
 
+/*BININDEX dict for bin index: map[bin]index */
 var BININDEX map[binPos]uint
+
+/*TOTALREADSCELL dict for total number of reads per cell map[cellID]total */
+var TOTALREADSCELL map[uint]float64
 
 /*BINSPARSEMATRIX map[cellID]map[bin]float64*/
 var BINSPARSEMATRIX map[uint]map[uint]float64
@@ -58,6 +62,10 @@ func scanBedFileForBinMat() {
 	bedReader, file := BEDFILENAME.ReturnReader(0)
 	defer utils.CloseFile(file)
 
+	if NORM {
+		TOTALREADSCELL = make(map[uint]float64)
+	}
+
 	for bedReader.Scan() {
 		line = bedReader.Text()
 		split = strings.Split(line, "\t")
@@ -79,6 +87,10 @@ func scanBedFileForBinMat() {
 			BININDEX[bin] = count
 			binList = append(binList, bin)
 			count++
+		}
+
+		if NORM {
+			TOTALREADSCELL[cellID]++
 		}
 
 		BINSPARSEMATRIX[cellID][featureID]++
@@ -115,6 +127,8 @@ func writeBinList(binList []binPos) {
 		buffer.WriteRune('\n')
 	}
 
+	writer.Write(buffer.Bytes())
+
 	fmt.Printf("File %s written!\n", outfname)
 }
 
@@ -140,6 +154,11 @@ func writeBinMatrixToFile(outfile string) {
 			buffer.WriteString(SEP)
 
 			binValue = BINSPARSEMATRIX[cellPos][index]
+
+			if NORM {
+				binValue = binValue / TOTALREADSCELL[cellPos]
+			}
+
 			buffer.WriteString(fmt.Sprintf("%f\n", binValue))
 
 			writer.Write(buffer.Bytes())
@@ -149,5 +168,5 @@ func writeBinMatrixToFile(outfile string) {
 
 	fmt.Printf("file: %s created!\n", outfile)
 	tDiff := time.Since(tStart)
-	fmt.Printf("done in time: %f s \n", tDiff.Seconds())
+	fmt.Printf("Writting done in time: %f s \n", tDiff.Seconds())
 }
