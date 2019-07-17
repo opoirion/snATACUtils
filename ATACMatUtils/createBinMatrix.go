@@ -159,7 +159,8 @@ func writeBinMatrixToFile(outfile string) {
 				binValue = binValue / TOTALREADSCELL[cellPos]
 			}
 
-			buffer.WriteString(fmt.Sprintf("%f\n", binValue))
+			buffer.WriteString(strconv.FormatFloat(binValue, 'f', 10, 64))
+			buffer.WriteRune('\n')
 
 			writer.Write(buffer.Bytes())
 			buffer.Reset()
