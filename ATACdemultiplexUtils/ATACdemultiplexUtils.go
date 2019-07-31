@@ -458,13 +458,16 @@ func LoadCellIDDict(fname string) map[string]bool {
 	Check(err)
 	defer CloseFile(f)
 	scanner := bufio.NewScanner(f)
+	var cellID string
 
 	celliddict := make(map[string]bool)
 
 	for scanner.Scan() {
-		line := strings.Split(scanner.Text(), "\t")[0]
+		cellID = scanner.Text()
+		cellID = strings.ReplaceAll(cellID, " ", "\t")
+		cellID = strings.Split(cellID, "\t")[0]
 
-		celliddict[line] = true
+		celliddict[cellID] = true
 	}
 	return celliddict
 }
