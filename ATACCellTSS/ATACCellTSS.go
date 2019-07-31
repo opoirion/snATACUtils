@@ -62,7 +62,7 @@ var TSSFLANKSEARCH int
 var THREADNB int
 
 /*BUFFERSIZE buffer size for multithreading */
-const BUFFERSIZE = 1000000
+const BUFFERSIZE = 100000
 
 /*BUFFERARRAY buffer array storing lines of bed files*/
 var BUFFERARRAY[][BUFFERSIZE]string
