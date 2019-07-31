@@ -187,7 +187,7 @@ func main() {
 	flag.Var(&SNPFILES, "eQTL", "name of one or multiple eQTL files (-eQTL <fname1> -eQTL <fname2>)")
 	flag.StringVar(&OUTFILE, "out", "", "Name of the output file")
 	flag.BoolVar(&USESNPASID, "use_snp_id", false, "use SNP ID rather than peaks as ID")
-	flag.BoolVar(&PERFORMGLOBALEQTL, "global", false, `perform eQTL analysis
+	flag.BoolVar(&PERFORMGLOBALEQTL, "global", false, `perform global eQTL analysis
                         USAGE: ATACeQTLUtils -global -ptable <fname> -eQTL <fname> -cluster_gene <fname> -gene_ID_to_name <fname`)
 	flag.BoolVar(&PERFORMEQTL, "analysis", false, `perform eQTL analysis
                         USAGE: ATACeQTLUtils -analysis -xgi <fname> -xgi_compl <fname> -bed <fname> -peak <fname> -eQTL <fname> (optionnal: -out <string> -gene_ID_to_name <fname> -ld -gene <fname>)`)
