@@ -445,7 +445,8 @@ func SortLogfile(filename string, separator string, outfname string,
 		outfile.WriteString(fmt.Sprintf("%s%s%d\n", el.Key, separator, el.Value))
 		buff++
 		if buff > 100000{
-			outfile.Sync()
+			err = outfile.Sync()
+			Check(err)
 			buff = 0
 		}
 	}
@@ -455,13 +456,13 @@ func SortLogfile(filename string, separator string, outfname string,
 func LoadCellIDDict(fname string) map[string]bool {
 	f, err := os.Open(fname)
 	Check(err)
-	defer f.Close()
+	defer CloseFile(f)
 	scanner := bufio.NewScanner(f)
 
 	celliddict := make(map[string]bool)
 
 	for scanner.Scan() {
-		line := scanner.Text()
+		line := strings.Split(scanner.Text(), "\t")[0]
 
 		celliddict[line] = true
 	}
@@ -471,7 +472,7 @@ func LoadCellIDDict(fname string) map[string]bool {
 /*CountNbLines count nb lines in a file*/
 func CountNbLines(filename string) int {
 	reader, file := ReturnReader(filename, 0)
-	defer file.Close()
+	defer CloseFile(file)
 
 	nbLines := 0
 
