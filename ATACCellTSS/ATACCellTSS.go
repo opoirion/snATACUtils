@@ -74,7 +74,9 @@ var MUTEX sync.Mutex
 func main() {
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, `USAGE: ATACCellTSS -bed <filename> -ygi/tss <filename> -xgi <filename>
-(optionnal -out <string> -flank <int> -smoothing <int> -boundary <int> -flank_size).\n\n`)
+                    (optionnal -out <string> -flank <int> -smoothing <int> -boundary <int> -flank_size).
+
+`)
 		 flag.PrintDefaults()
 	}
 
