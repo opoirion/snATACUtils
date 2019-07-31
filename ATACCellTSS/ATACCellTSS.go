@@ -86,7 +86,7 @@ func main() {
 	flag.Var(&CELLSIDFNAME, "xgi", "name of the file containing the ordered list of cell IDs (one ID per line)")
 	flag.StringVar(&FILENAMEOUT, "out", "", "name of the output file")
 	flag.IntVar(&FLANKSIZE, "flank", 100, "flank size at the end and begining of the TSS regions")
-	flag.IntVar(&TSSREGION, "boundary", 1000, "TSS boundary size at the end and begining of the TSS (used only when -tss is provided)")
+	flag.IntVar(&TSSREGION, "boundary", 2000, "TSS boundary size at the end and begining of the TSS (used only when -tss is provided)")
 	flag.IntVar(&SMOOTHINGWINDOW, "smoothing", 50, "Smoothing window size")
 	flag.IntVar(&TSSFLANKSEARCH, "tss_flank", 50, "search hightest TSS values to define TSS score using this flank size arround TSS")
 	flag.IntVar(&THREADNB, "threads", 1, "threads concurrency")
@@ -109,13 +109,13 @@ func main() {
 
 	MUTEX = sync.Mutex{}
 
-	initCellDicts()
-
 	if PEAKFILE != "" {
 		utils.LoadPeaks(PEAKFILE)
 	} else {
 		loadTSS(TSSFILE)
 	}
+
+	initCellDicts()
 
 	utils.CreatePeakIntervalTree()
 	utils.InitIntervalDictsThreading(THREADNB)
@@ -150,6 +150,8 @@ func loadTSS(tssFile utils.Filename) {
 		buffer.WriteString(strconv.Itoa(start - TSSREGION))
 		buffer.WriteRune('\t')
 		buffer.WriteString(strconv.Itoa(start + TSSREGION))
+		buffer.WriteRune('\t')
+		buffer.WriteString(split[3])
 		buffer.WriteRune('\n')
 
 		utils.PEAKIDDICT[buffer.String()] = count
@@ -166,11 +168,11 @@ func initCellDicts() {
 	BASECOVERAGE = make(map[string][]int)
 	CELLTSS = make(map[string]float64)
 
-	if PEAKFILE != "" {
+	TSSREGION = assertPeakRegionHaveSameLengths()
 
-	} else {
-		TSSREGION = assertPeakRegionHaveSameLengths()
-	}
+	// if PEAKFILE != "" {
+	// 	TSSREGION = assertPeakRegionHaveSameLengths()
+	// }
 
 	length = 2 * TSSREGION - 2 * FLANKSIZE
 
@@ -193,19 +195,22 @@ func initCellDicts() {
 
 }
 
+
 func assertPeakRegionHaveSameLengths() (tssregion int){
 	var peak string
 	var split []string
 	var start, end int
 	var err error
 
+	tssregion = 0
+
 	for peak = range utils.PEAKIDDICT {
-		split = strings.Split(peak,"\t")
+		split = strings.Split(peak, "\t")
 
 		start, err = strconv.Atoi(split[1])
 		utils.Check(err)
 
-		end, err = strconv.Atoi(split[2])
+		end, err = strconv.Atoi(strings.Trim(split[2], "\n"))
 		utils.Check(err)
 
 		if tssregion == 0 {
@@ -222,6 +227,7 @@ Error for TSS region: %s, expected to have a size of %d, found %d instead \n`,
 
 	return tssregion / 2
 }
+
 
 func scanBedFile() {
 	var count, thread int
@@ -245,16 +251,16 @@ func scanBedFile() {
 		BUFFERARRAY[thread][count] = scanner.Text()
 		count++
 
-		if count > BUFFERSIZE {
+		if count >= BUFFERSIZE {
 			waiting.Add(1)
-			processOneBuffer(&BUFFERARRAY[thread], thread, count, freeThreads, &waiting)
+			go processOneBuffer(&BUFFERARRAY[thread], thread, count, freeThreads, &waiting)
 			count = 0
 			thread = <- freeThreads
 		}
 	}
 
 	waiting.Add(1)
-	processOneBuffer(&BUFFERARRAY[thread], thread, count, freeThreads, &waiting)
+	go processOneBuffer(&BUFFERARRAY[thread], thread, count, freeThreads, &waiting)
 	waiting.Wait()
 
 	tDiff := time.Since(tStart)
@@ -304,7 +310,7 @@ func processOneBuffer(
 			for j = start; j < end;j++ {
 				index = j - (itrg.Start + FLANKSIZE)
 				switch {
-				case index > 0 && index < indexLimit:
+				case index >= 0 && index < indexLimit:
 					BASECOVERAGE[cellID][index]++
 				case index < 0 && -FLANKSIZE < index:
 					FLANKCOVERAGE[cellID]++

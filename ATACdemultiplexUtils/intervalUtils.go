@@ -77,7 +77,7 @@ func CreatePeakIntervalTree() {
 		start, err = strconv.Atoi(split[1])
 		Check(err)
 
-		end, err = strconv.Atoi(split[2])
+		end, err = strconv.Atoi(strings.Trim(split[2], "\n"))
 		Check(err)
 
 		int := IntInterval{
