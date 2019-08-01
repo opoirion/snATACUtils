@@ -299,6 +299,10 @@ func processOneBuffer(
 		end, err = strconv.Atoi(split[2])
 		utils.Check(err)
 
+		if _, isInside = utils.CHRINTERVALDICTTHREAD[thread][chro];!isInside {
+			continue
+		}
+
 		intervals = utils.CHRINTERVALDICTTHREAD[thread][chro].Get(
 			utils.IntInterval{Start: start, End: end})
 
