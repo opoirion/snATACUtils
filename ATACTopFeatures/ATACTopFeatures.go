@@ -112,6 +112,25 @@ var PEAKSYMBOLDICT map[peak]string
 
 
 func main() {
+	flag.Usage = func() {
+		fmt.Fprintf(os.Stderr, `
+#################### MODULE TO INFER SIGNIFICANT CLUSTER PEAKS ########################
+
+"""full individual chi2 computation for each peak with FDR correction using Benjamini-Hochberg correction. Not recommended because using golang suboptimal chi2 implementation"""
+USAGE: ATACTopFeatures -chi2 -bed <fname> -peak <fname> -cluster <fname> (optionnal -out <string> -threads <int> -alpha <float> -write_all)
+
+"""Create contingency table for each feature and each cluster"""
+USAGE: ATACTopFeatures -create_contingency -bed <fname> -peak <fname> -cluster <fname> (optionnal -out <string> -threads <int>)
+
+"""correct feature pvalue for multiple tests performed or each cluster"""
+USAGE: ATACTopFeatures -pvalue_correction -ptable <fname> (optionnal -out <string> -threads <int> -alpha <float> -write_all)
+
+
+`)
+		 flag.PrintDefaults()
+	}
+
+
 	flag.Var(&BEDFILENAME, "bed", "name of the bed file")
 	flag.Var(&PEAKFILE, "peak", "File containing peaks")
 	flag.Var(&PEAKSYMBOLFILE, "symbol", `File containing symbols (such as gene name) for peak file.
@@ -123,14 +142,9 @@ func main() {
 	flag.IntVar(&THREADNB, "threads", 1, "threads concurrency")
 	flag.Float64Var(&ALPHA, "alpha", 0.05, "Decision threshold")
 	flag.BoolVar(&WRITEALL, "write_all", false, "Write all features including the not significant ones")
-	flag.BoolVar(&CHI2ANALYSIS, "chi2", false, `perform chi2 analysis with multiple test correction
-                USAGE: ATACTopFeatures -chi2 -bed <fname> -peak <fname> -cluster <fname> (optionnal -out <string> -threads <int> -alpha <float> -write_all)`)
-
-	flag.BoolVar(&CREATECONTINGENCY, "create_contingency", false, `Create contingency table for each feature and each cluster
-                USAGE: ATACTopFeatures -create_contingency -bed <fname> -peak <fname> -cluster <fname> (optionnal -out <string> -threads <int>)`)
-
-	flag.BoolVar(&MULTIPLETESTS, "pvalue_correction", false, `correct feature pvalue for multiple tests performed or each cluster
-                USAGE: ATACTopFeatures -pvalue_correction -ptable <fname> (optionnal -out <string> -threads <int> -alpha <float> -write_all)`)
+	flag.BoolVar(&CHI2ANALYSIS, "chi2", false, `perform chi2 analysis with multiple test correction`)
+	flag.BoolVar(&CREATECONTINGENCY, "create_contingency", false, `Create contingency table for each feature and each cluster`)
+	flag.BoolVar(&MULTIPLETESTS, "pvalue_correction", false, `correct feature pvalue for multiple tests performed or each cluster`)
 
 	flag.Parse()
 

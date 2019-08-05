@@ -17,6 +17,7 @@ import(
 	"strconv"
 	"time"
 	"math/rand"
+	"os"
 )
 
 
@@ -76,6 +77,18 @@ var BUFFERLINEARRAY [][BUFFERSIZE]string
 
 
 func main() {
+
+	flag.Usage = func() {
+		fmt.Fprintf(os.Stderr, `
+#################### MODULE TO CREATE SIMULATED SINGLE CELL ATAC BED FILE ########################
+
+USAGE: ATACSimUtils -simulate -nb <int> -mean <float> std <float> -bed <bedfile> (-threads <int> -out <string> -tag <string>)
+
+
+`)
+		 flag.PrintDefaults()
+	}
+
 	flag.StringVar(&TAGNAME, "tag", "", "tag name for the simulated cells")
 	flag.Var(&BEDFILENAMES, "bed", "name of several bed files")
 	flag.IntVar(&THREADNB, "threads", 1, "threads concurrency")
@@ -86,8 +99,7 @@ func main() {
 	flag.StringVar(&FILENAMEOUT, "out", "", "name/tag the output file(s)")
 	flag.BoolVar(&COMBINE, "combine", false, "combine simulation results to create one unique simulated bed")
 	flag.BoolVar(&EQUALPROP, "prop", false, "use equal proportions of reads from each subpopulation")
-	flag.BoolVar(&SIMULATEBED, "simulate", false, `Simulate scATAC-Seq bed files
-                      USAGE: ATACSimUtils -simulate -nb <int> -mean <float> std <float> -bed <bedfile> (-threads <int> -out <string> -tag <string>)`)
+	flag.BoolVar(&SIMULATEBED, "simulate", false, `Simulate scATAC-Seq bed files`)
 	flag.Parse()
 
 	WAITING = &sync.WaitGroup{}
