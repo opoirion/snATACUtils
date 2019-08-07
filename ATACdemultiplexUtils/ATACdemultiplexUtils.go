@@ -472,6 +472,31 @@ func LoadCellIDDict(fname string) map[string]bool {
 	return celliddict
 }
 
+
+/*LoadCellDictsToIndex create cell ID index dict */
+func LoadCellDictsToIndex(fname Filename) map[string]int {
+
+	scanner, f := fname.ReturnReader(0)
+	defer CloseFile(f)
+
+	var cellID string
+	var index int
+
+	celliddict := make(map[string]int)
+
+	for scanner.Scan() {
+		cellID = scanner.Text()
+		cellID = strings.ReplaceAll(cellID, " ", "\t")
+		cellID = strings.Split(cellID, "\t")[0]
+
+		celliddict[cellID] = index
+		index++
+	}
+
+	return celliddict
+}
+
+
 /*CountNbLines count nb lines in a file*/
 func CountNbLines(filename string) int {
 	reader, file := ReturnReader(filename, 0)

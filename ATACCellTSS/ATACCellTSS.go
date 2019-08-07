@@ -20,16 +20,16 @@ import(
 
 
 /*BASECOVERAGE map[cell][]count */
-var BASECOVERAGE map[string][]int
+var BASECOVERAGE [][]int
 
 /*FLANKCOVERAGE map[cell]count */
-var FLANKCOVERAGE map[string]int
+var FLANKCOVERAGE []int
 
 /*CELLTSS map[cell]tss */
 var CELLTSS map[string]float64
 
 /*CELLDICT map[cell]bool */
-var CELLDICT map[string]bool
+var CELLDICT map[string]int
 
 /*BEDFILENAME bed file name (input) */
 var BEDFILENAME utils.Filename
@@ -160,12 +160,13 @@ func loadTSS(tssFile utils.Filename) {
 	}
 }
 
-func initCellDicts() {
-	var length int
 
-	CELLDICT = utils.LoadCellIDDict(CELLSIDFNAME.String())
-	FLANKCOVERAGE = make(map[string]int)
-	BASECOVERAGE = make(map[string][]int)
+func initCellDicts() {
+	var length, index int
+
+	CELLDICT = utils.LoadCellDictsToIndex(CELLSIDFNAME)
+	FLANKCOVERAGE = make([]int, len(CELLDICT))
+	BASECOVERAGE = make([][]int, len(CELLDICT))
 	CELLTSS = make(map[string]float64)
 
 	TSSREGION = assertPeakRegionHaveSameLengths()
@@ -189,8 +190,8 @@ func initCellDicts() {
 	fmt.Printf("TSS region length: %d actual screening window size for TSS score: %d\n",
 		TSSREGION, length)
 
-	for cell := range CELLDICT {
-		BASECOVERAGE[cell] = make([]int, length)
+	for _, index = range CELLDICT {
+		BASECOVERAGE[index] = make([]int, length)
 	}
 
 }
@@ -272,8 +273,8 @@ func processOneBuffer(
 	thread, limit int,
 	freeThreads chan int, waiting *sync.WaitGroup) {
 	var split []string
-	var chro, cellID string
-	var start, end, j, index int
+	var chro string
+	var start, end, j, index, cellID int
 	var err error
 	var isInside bool
 	var intervals []interval.IntInterface
@@ -287,9 +288,8 @@ func processOneBuffer(
 	for i := 0; i < limit; i++ {
 		split = strings.Split(bufferarray[i], "\t")
 		chro = split[0]
-		cellID = split[3]
 
-		if _, isInside = CELLDICT[cellID];!isInside {
+		if cellID, isInside = CELLDICT[split[3]];!isInside {
 			continue
 		}
 
@@ -387,8 +387,8 @@ func normaliseCountMatrix() {
 
 func normaliseCountMatrixOneThread(cellIDList []string, waiting *sync.WaitGroup) {
 	var flankNorm, tss, maxTss float64
-	var cellID string
-	var i, j int
+	var cellName string
+	var i, j, cellID int
 
 	defer waiting.Done()
 
@@ -396,7 +396,8 @@ func normaliseCountMatrixOneThread(cellIDList []string, waiting *sync.WaitGroup)
 	halfflank := SMOOTHINGWINDOW / 2
 	tssPos := TSSREGION - FLANKSIZE
 
-	for _, cellID = range cellIDList {
+	for _, cellName = range cellIDList {
+		cellID = CELLDICT[cellName]
 		flankNorm = float64(FLANKCOVERAGE[cellID] + 1) / 200
 		maxTss = 0
 
@@ -414,13 +415,13 @@ func normaliseCountMatrixOneThread(cellIDList []string, waiting *sync.WaitGroup)
 			}
 		}
 
-		tssDict[cellID] = maxTss / (flankNorm)
+		tssDict[cellName] = maxTss / (flankNorm)
 	}
 
 	MUTEX.Lock()
 
-	for cellID, maxTss = range tssDict {
-		CELLTSS[cellID] = maxTss
+	for cellName, maxTss = range tssDict {
+		CELLTSS[cellName] = maxTss
 	}
 
 	MUTEX.Unlock()
