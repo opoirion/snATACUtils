@@ -1,12 +1,11 @@
 package main
 
 import (
-	"bufio"
-	"os";
 	"log";
 	"strings";
 	"fmt";
 	"strconv"
+	utils "gitlab.com/Grouumf/ATACdemultiplex/ATACdemultiplexUtils"
 
 )
 
@@ -27,19 +26,13 @@ func loadIndexes(fnameList []string, dict * map[string]map[string]bool, reportNa
 		return
 	}
 
+	usedreadsfname := fmt.Sprintf("%s/used_barcodes%s.txt", OUTPUT_PATH, reportName)
+	usedreadsf := utils.ReturnWriter(usedreadsfname)
+	defer utils.CloseFile(usedreadsf)
+
 	for _, fname := range(fnameList){
-
-		file_open, err := os.OpenFile(fname, 0, 0)
-
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		reader := bufio.NewReader(file_open)
-		scanner := bufio.NewScanner(reader)
-
-		usedreadsf, err := os.Create(fmt.Sprintf("%s/used_barcodes%s.txt", OUTPUT_PATH, reportName))
-		Check(err)
+		scanner, file := utils.ReturnReader(fname, 0)
+		defer utils.CloseFile(file)
 
 	loop:
 		for scanner.Scan() {
@@ -80,12 +73,14 @@ func loadIndexes(fnameList []string, dict * map[string]map[string]bool, reportNa
 			if len(INDEXESRANGE[tagid]) > 0 {
 				if INDEXESRANGE[tagid][countdict[tagid]] {
 					(*dict)[tagid][tagstring] = true
-					usedreadsf.WriteString(fmt.Sprintf("%s\t%s\t%d\n", tagid, tagstring, countdict[tagid]))
+					usedreadsf.Write(
+						[]byte(fmt.Sprintf("%s\t%s\t%d\n", tagid, tagstring, countdict[tagid])))
 				}
 
 			} else {
 				(*dict)[tagid][tagstring] = true
-				usedreadsf.WriteString(fmt.Sprintf("%s\t%s\t%d\n", tagid, tagstring, countdict[tagid]))
+				usedreadsf.Write(
+					[]byte(fmt.Sprintf("%s\t%s\t%d\n", tagid, tagstring, countdict[tagid])))
 			}
 		}
 	}

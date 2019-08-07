@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"io"
 	"os"
-	"log"
 	"bytes"
 	"path"
 	"github.com/dsnet/compress/bzip2"
@@ -162,10 +161,8 @@ func ReturnWriterForBzipfile(fname string) (*bzip2.Writer) {
 /*ReturnReaderForBzipfileOld ... */
 func ReturnReaderForBzipfileOld(fname string, seekPos int) (*bufio.Scanner, *os.File) {
 	fileOpen, err := os.OpenFile(fname, 0, 0)
+	Check(err)
 
-	if err != nil {
-		log.Fatal(err)
-	}
 	config := new(bzip2.ReaderConfig)
 
 	readerOs := bufio.NewReader(fileOpen)
@@ -203,10 +200,7 @@ func ReturnReader(fname string, startingLine int) (*bufio.Scanner, *os.File) {
 /*ReturnReaderForGzipfile ... */
 func ReturnReaderForGzipfile(fname string, startingLine int) (*bufio.Scanner, *os.File) {
 	fileOpen, err := os.OpenFile(fname, 0, 0)
-
-	if err != nil {
-		log.Fatal(err)
-	}
+	Check(err)
 
 	readerOs := bufio.NewReader(fileOpen)
 	readerBzip, _ := gzip.NewReader(readerOs)
@@ -225,10 +219,7 @@ func ReturnReaderForBzipfilePureGo(fname string, startingLine int) (*bufio.Scann
 	buffer := make([]byte, BUFFERSIZE)
 
 	fileOpen, err := os.OpenFile(fname, 0, 0)
-
-	if err != nil {
-		log.Fatal(err)
-	}
+	Check(err)
 
 	readerOs := bufio.NewReader(fileOpen)
 	readerBzip := originalbzip2.NewReader(readerOs)
@@ -320,10 +311,7 @@ func scanUntilStartingLine(scanner * bufio.Scanner, nbLine int) {
 /*returnBzipReader ... */
 func returnBzipReader(fname string) (io.Reader, *os.File) {
 	fileOpen, err := os.OpenFile(fname, 0, 0)
-
-	if err != nil {
-		log.Fatal(err)
-	}
+	Check(err)
 
 	readerOs := bufio.NewReader(fileOpen)
 	readerBzip := originalbzip2.NewReader(readerOs)
