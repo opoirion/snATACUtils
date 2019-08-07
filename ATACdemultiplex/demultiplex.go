@@ -32,6 +32,8 @@ var FASTQ_I2 string
 var NB_THREADS int
 /*TAGLENGTH ...*/
 var TAGLENGTH int
+/*TAGLENGTH_I5 ...*/
+var TAGLENGTH_I5 int
 /*MAX_NB_READS ...*/
 var MAX_NB_READS int
 /*COMPRESSION_MODE ...*/
@@ -181,6 +183,9 @@ func main() {
 	flag.IntVar(&TAGLENGTH, "taglength", 8,
 		`<OPTIONAL> number of nucleotides to consider at the end
  and begining if no barcode file is provided or if -all_barcodes option is used for some index types (default 8)`)
+	flag.IntVar(&TAGLENGTH_I5, "taglength_i5", 0,
+		`<OPTIONAL> number of nucleotides to consider for i5 tags
+		if no barcode file is provided or if -all_barcodes option is used for some index types (default: taglength)`)
 	flag.IntVar(&MAX_NB_READS, "max_nb_reads", 0,
 		"<OPTIONAL> max number of reads to process (default 0 => None)")
 	flag.StringVar(&INDEX_REPLICATE_R1, "index_replicate_r1", "",
@@ -219,7 +224,12 @@ func main() {
 	}
 
 	for _, indexType := range(ALLBARCODES) {
-		LENGTHDIC[indexType] = TAGLENGTH
+		if indexType == "i5" && TAGLENGTH_I5 > 0 {
+			LENGTHDIC[indexType] = TAGLENGTH_I5
+		} else {
+			LENGTHDIC[indexType] = TAGLENGTH
+		}
+
 		USEALLBARCODES[indexType] = true
 	}
 
@@ -247,7 +257,7 @@ func main() {
 			log.Fatal("Cannot set up index_no_replicate with either index_replicate_r1 or index_replicate_r2")
 		}
 
-	default:
+	case INDEX_REPLICATE_R1 != "" && INDEX_REPLICATE_R2 != "":
 		INDEX_NO_REPLICATE = false
 		loadIndexes([]string{INDEX_REPLICATE_R1}, &INDEX_R1_DICT, "repl1")
 		loadIndexes([]string{INDEX_REPLICATE_R2}, &INDEX_R2_DICT, "repl2")
@@ -259,6 +269,13 @@ func main() {
 		if INDEX_REPLICATE_R1 == "" || INDEX_REPLICATE_R2 == "" {
 			log.Fatal("Both index_replicate_r1 and index_replicate_r2 should be set up!")
 		}
+	case len(ALLBARCODES) > 0:
+		REPLNUMBER = 1
+		fmt.Printf("#### index file not found but barcode IDs will be considered: %s\n",
+			ALLBARCODES.String())
+	default:
+		REPLNUMBER = 1
+		loadIndexes([]string{}, &INDEX_NO_DICT, "")
 	}
 
 	for repl := 1; repl < REPLNUMBER + 1;repl++ {

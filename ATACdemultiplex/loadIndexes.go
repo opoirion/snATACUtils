@@ -192,7 +192,7 @@ func checkOneIndex(index string, indexName string) (success bool, ref string, re
 	case USEALLBARCODES[indexName]:
 		switch strings.Count(index, "N") {
 		case 0:
-			return true, index, 0
+			return true, index, 1
 		default:
 			goto fail
 		}

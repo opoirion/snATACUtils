@@ -113,6 +113,10 @@ func CloseFile(file closer) {
 /*ExceCmd ... */
 func ExceCmd(cmd string) {
 	_, err := exec.Command("sh", "-c", cmd).Output()
+	if err != nil {
+		fmt.Printf("Error with cmd: %s\n", cmd)
+	}
+
 	Check(err)
 }
 
