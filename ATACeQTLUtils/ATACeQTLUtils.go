@@ -47,11 +47,11 @@ var WRITESNPTOBED bool
 /*USESNPASID Use SNP as id rather than peaks */
 var USESNPASID bool
 
-/*CHRINTERVALDICT chr ID <-> interval tree */
-var CHRINTERVALDICT map[string]*interval.IntTree
+/*SNPINTERVALDICT chr ID <-> interval tree */
+var SNPINTERVALDICT map[string]*interval.IntTree
 
-/*PEAKCHRINTERVALDICT chr ID <-> interval tree */
-var PEAKCHRINTERVALDICT map[string]*interval.IntTree
+/*PEAKINTERVALDICT chr ID <-> interval tree */
+var PEAKINTERVALDICT map[string]*interval.IntTree
 
 /*GENETOEQTLCOUNT gene Key to number of eQTL*/
 var GENETOEQTLCOUNT map[string]int
@@ -165,6 +165,18 @@ func (i IntInterval) Range() interval.IntRange {
 func (i IntInterval) String() string {
 	return fmt.Sprintf("(%d, %d) id: %d ####\n", i.Start, i.End, i.ID())
 }
+
+
+type Snp struct {
+	Start, End int
+	chrID, gene string
+}
+
+/*SNPLIST List of eQTL SNP (DL filtered) used */
+var SNPLIST map[Snp]bool
+
+/*SNPCLUSTERLIST List of eQTL SNP (DL filtered) used */
+var SNPCLUSTERLIST map[string]map[Snp]bool
 
 
 func main() {
@@ -499,11 +511,11 @@ func scanOneBedFile(bedfile string) map[string]map[string]int  {
 		inter.Start = start
 		inter.End = end
 
-		if _, isInside = CHRINTERVALDICT[chrID];!isInside {
+		if _, isInside = SNPINTERVALDICT[chrID];!isInside {
 			continue bedLoop
 		}
 
-		if _, isInside = PEAKCHRINTERVALDICT[chrID];!isInside {
+		if _, isInside = PEAKINTERVALDICT[chrID];!isInside {
 			continue bedLoop
 		}
 
@@ -527,8 +539,8 @@ func processOneRead(
 	var buffer bytes.Buffer
 	var isInside bool
 
-	intervalsSNV = CHRINTERVALDICT[chrID].Get(inter)
-	intervalsPeaks = PEAKCHRINTERVALDICT[chrID].Get(inter)
+	intervalsSNV = SNPINTERVALDICT[chrID].Get(inter)
+	intervalsPeaks = PEAKINTERVALDICT[chrID].Get(inter)
 
 	if len(intervalsSNV) == 0 {
 		return
@@ -685,7 +697,7 @@ func createPeakIntervalTree() {
 
 	var count, start, end int
 
-	PEAKCHRINTERVALDICT = make(map[string]*interval.IntTree)
+	PEAKINTERVALDICT = make(map[string]*interval.IntTree)
 	PEAKUNINTDICT = make(map[uintptr]string)
 
 	scanner, file := PEAKFILE.ReturnReader(0)
@@ -697,8 +709,8 @@ func createPeakIntervalTree() {
 
 		chrID = split[0][3:]
 
-		if _, isInside = PEAKCHRINTERVALDICT[chrID];!isInside {
-			PEAKCHRINTERVALDICT[chrID] = &interval.IntTree{}
+		if _, isInside = PEAKINTERVALDICT[chrID];!isInside {
+			PEAKINTERVALDICT[chrID] = &interval.IntTree{}
 		}
 
 		start, err = strconv.Atoi(split[1])
@@ -722,7 +734,7 @@ func createPeakIntervalTree() {
 		PEAKUNINTDICT[uintptr(count)] = peakID.String()
 		peakID.Reset()
 
-		err = PEAKCHRINTERVALDICT[chrID].Insert(inter, false)
+		err = PEAKINTERVALDICT[chrID].Insert(inter, false)
 		utils.Check(err)
 
 		count++
@@ -743,6 +755,7 @@ func createSNPIntervalTree() {
 	var snpBedFile io.WriteCloser
 	var buffer bytes.Buffer
 	var snp snpID
+	var snpClass Snp
 
 	checkRefSNP := LDFILE != ""
 
@@ -758,15 +771,16 @@ func createSNPIntervalTree() {
 		defer fmt.Printf("File: %s written\n", fname)
 	}
 
-	if len(PEAKCHRINTERVALDICT) == 0 {
+	if len(PEAKINTERVALDICT) == 0 {
 		panic(fmt.Sprintf("Error peak intervals seem empty from file: %s\n", PEAKFILE))
 
 	}
 
-	CHRINTERVALDICT = make(map[string]*interval.IntTree)
+	SNPINTERVALDICT = make(map[string]*interval.IntTree)
 
 	geneUintDict := make(map[string]uintptr)
 	GENEUINTDICT = make(map[uintptr]string)
+	SNPLIST = make(map[Snp]bool)
 
 	for gene := range GENEDICT {
 		geneUintDict[gene] = uintptr(count)
@@ -833,9 +847,18 @@ func createSNPIntervalTree() {
 				UID: geneUintDict[gene],
 			}
 
-			intervals = PEAKCHRINTERVALDICT[chrID].Get(inter)
+			intervals = PEAKINTERVALDICT[chrID].Get(inter)
 
 			isInside = len(intervals) != 0
+
+			if isInside {
+				snpClass.Start = start
+				snpClass.End = end
+				snpClass.chrID = chrID
+				snpClass.gene = gene
+
+				SNPLIST[snpClass] = true
+			}
 
 			if WRITESNPTOBED {
 				buffer.WriteString("chr")
@@ -859,11 +882,11 @@ func createSNPIntervalTree() {
 				continue snpFileLoop
 			}
 
-			if _, isInside = CHRINTERVALDICT[chrID];!isInside {
-				CHRINTERVALDICT[chrID] = &interval.IntTree{}
+			if _, isInside = SNPINTERVALDICT[chrID];!isInside {
+				SNPINTERVALDICT[chrID] = &interval.IntTree{}
 			}
 
-			err = CHRINTERVALDICT[chrID].Insert(inter, false)
+			err = SNPINTERVALDICT[chrID].Insert(inter, false)
 			utils.Check(err)
 			count++
 			GENETOEQTLCOUNT[gene]++

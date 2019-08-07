@@ -5,9 +5,9 @@ import (
 	"log"
 	"fmt"
 	"strings"
+	"github.com/biogo/store/interval"
 	utils "gitlab.com/Grouumf/ATACdemultiplex/ATACdemultiplexUtils"
 	"strconv"
-	"github.com/biogo/store/interval"
 	"path"
 	"bytes"
 	stats "github.com/glycerine/golang-fisher-exact"
@@ -42,6 +42,18 @@ var CLUSTERGENEDICT map[string]map[string]bool
 
 /*TOTALNUMBEREQTL ...*/
 var TOTALNUMBEREQTL int
+
+/*EQTLPEAKRNASPECIFIC <cluster> count*/
+var EQTLPEAKRNASPECIFIC  map[string]int
+
+/*EQTLPEAKSPECIFIC <cluster> count*/
+var EQTLPEAKSPECIFIC  map[string]int
+
+/*EQTLRNASPECIFIC <cluster> count*/
+var EQTLRNASPECIFIC  map[string]int
+
+/*EQTLREST <cluster> count*/
+var EQTLREST  map[string]int
 
 
 func performGlobalEQTLAnalsysis() {
@@ -88,7 +100,9 @@ func performGlobalEQTLAnalsysis() {
 	scanPtable()
 	scanPeaks()
 	countForNonRNAeQTLCount()
+	scanSNPList()
 	writeGlobaleQTLOutput()
+	writeGlobaleQTLOutputTable2()
 }
 
 
@@ -143,20 +157,73 @@ func writeGlobaleQTLOutput() {
 	fmt.Printf("results:\n%s\n", buffer.String())
 }
 
+
+func writeGlobaleQTLOutputTable2() {
+	ext := path.Ext(FEATUREPVALUEFILE.String())
+	outfile := fmt.Sprintf("%s.globaleQTL.Table2.tsv",
+		FEATUREPVALUEFILE[:len(FEATUREPVALUEFILE) - len(ext)])
+
+
+	writer := utils.ReturnWriter(outfile)
+	defer utils.CloseFile(writer)
+	var buffer bytes.Buffer
+	var n11, n12, n21, n22 int
+
+
+	fmt.Printf("\n\n####Analysis 2 ####\n")
+
+	buffer.WriteString(
+		"ClusterID\tC-specific scRNA + chromatin\tC-specific chromatin\tC-specific scRNA\tOther eQTL\tP-value\n")
+
+	clusterList := []string{}
+
+	for cluster := range CLUSTERGENEDICT {
+		clusterList = append(clusterList, strings.Trim(cluster, " "))
+	}
+
+	sort.Strings(clusterList)
+
+	for _, cluster := range clusterList {
+		n11 = EQTLPEAKRNASPECIFIC[cluster]
+		n12 = EQTLPEAKSPECIFIC[cluster]
+		n21 = EQTLRNASPECIFIC[cluster]
+		n22 = EQTLREST[cluster]
+
+		_, pvalue :=  stats.ChiSquareTest(n11, n12,
+			n21, n22, true)
+
+		buffer.WriteString(fmt.Sprintf("%s\t%d\t%d\t%d\t%d\t%f\n",
+			cluster, n11, n12, n21, n22, pvalue))
+
+	}
+
+	_, err := writer.Write(buffer.Bytes())
+	utils.Check(err)
+
+	fmt.Printf("results:\n%s\n", buffer.String())
+
+	fmt.Printf("\nFile: %s written\n", outfile)
+}
+
+
 func scanPtable() {
 	var split []string
 	var chro, cluster, gene string
 	var start, end int
 	var err error
 	var intervals []interval.IntInterface
-	var interval interval.IntInterface
+	var inter interval.IntInterface
 	var isInside bool
+	var snp Snp
+	var interRange interval.IntRange
 
 	scanner, file := FEATUREPVALUEFILE.ReturnReader(0)
 	defer utils.CloseFile(file)
 
 	//Skip first line
 	scanner.Scan()
+
+	SNPCLUSTERLIST = make(map[string]map[Snp]bool)
 
 	for scanner.Scan() {
 		split = strings.Split(scanner.Text(), "\t")
@@ -170,18 +237,31 @@ func scanPtable() {
 
 		cluster = split[3]
 
-		if _, isInside = CHRINTERVALDICT[chro];!isInside {
+		if _, isInside = SNPINTERVALDICT[chro];!isInside {
 			continue
 		}
 
-		intervals = CHRINTERVALDICT[chro].Get(IntInterval{
+		if _, isInside = SNPCLUSTERLIST[cluster];!isInside {
+			SNPCLUSTERLIST[cluster] = make(map[Snp]bool)
+		}
+
+		intervals = SNPINTERVALDICT[chro].Get(IntInterval{
 			Start:start, End:end})
 
 		PEAKRESTCOUNT[cluster]++
 		CLUSTERSPECIFICCOUNT[cluster] += len(intervals)
 
-		for _, interval = range intervals {
-			gene = GENEUINTDICT[interval.ID()]
+		for _, inter = range intervals {
+			gene = GENEUINTDICT[inter.ID()]
+
+			interRange = inter.Range()
+
+			snp.chrID = chro
+			snp.Start = interRange.Start
+			snp.End = interRange.End
+			snp.gene = gene
+
+			SNPCLUSTERLIST[cluster][snp] = true
 
 			if CLUSTERGENEDICT[cluster][gene] {
 				CLUSTERRNASPECIFICEQTL[cluster]++
@@ -215,11 +295,11 @@ func scanPeaks() {
 		end, err = strconv.Atoi(split[2])
 		utils.Check(err)
 
-		if _, isInside = CHRINTERVALDICT[chro];!isInside {
+		if _, isInside = SNPINTERVALDICT[chro];!isInside {
 			continue
 		}
 
-		intervals = CHRINTERVALDICT[chro].Get(IntInterval{
+		intervals = SNPINTERVALDICT[chro].Get(IntInterval{
 			Start:start, End:end})
 
 		for cluster = range CLUSTERGENEDICT {
@@ -243,6 +323,38 @@ func scanPeaks() {
 
 	}
 
+}
+
+
+func scanSNPList() {
+
+	EQTLPEAKRNASPECIFIC = make(map[string]int)
+	EQTLPEAKSPECIFIC = make(map[string]int)
+	EQTLRNASPECIFIC = make(map[string]int)
+	EQTLREST = make(map[string]int)
+
+	var snp Snp
+	var cluster string
+
+	for snp = range SNPLIST {
+
+		for cluster = range CLUSTERGENEDICT {
+			if SNPCLUSTERLIST[cluster][snp] {
+				if CLUSTERGENEDICT[cluster][snp.gene] {
+					EQTLPEAKRNASPECIFIC[cluster]++
+				} else {
+					EQTLPEAKSPECIFIC[cluster]++
+
+				}
+			} else {
+				if CLUSTERGENEDICT[cluster][snp.gene] {
+					EQTLRNASPECIFIC[cluster]++
+				} else {
+					EQTLREST[cluster]++
+				}
+			}
+		}
+	}
 }
 
 
