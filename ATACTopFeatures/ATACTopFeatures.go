@@ -81,7 +81,7 @@ var TOTALNBCELLS int
 const BUFFERSIZE = 1000000
 
 /*SMALLBUFFERSIZE buffer size for multithreading */
-const SMALLBUFFERSIZE = 500000
+const SMALLBUFFERSIZE = 50000
 
 /*BUFFERARRAY map slice: [THREAD][BUFFERSIZE]line*/
 var BUFFERARRAY [][BUFFERSIZE]string
@@ -90,7 +90,7 @@ var BUFFERARRAY [][BUFFERSIZE]string
 var BUFFERRESARRAY [][BUFFERSIZE]boolsparsematfeature
 
 /*BOOLSPARSEMATRIX peaks x cells sparse matrix  */
-var BOOLSPARSEMATRIX map[uintptr]map[string]bool
+var BOOLSPARSEMATRIX []map[string]bool
 
 /*CHI2SCORE map[cluster ID][peak ID]count*/
 var CHI2SCORE map[string][]peakFeature
@@ -363,7 +363,7 @@ func loadPvalueTable() {
 func initBoolSparseMatrix() {
 	var peakKey uintptr
 
-	BOOLSPARSEMATRIX = make(map[uintptr]map[string]bool)
+	BOOLSPARSEMATRIX = make([]map[string]bool, len(PEAKMAPPING))
 
 	for peakKey = range PEAKMAPPING {
 		BOOLSPARSEMATRIX[peakKey] = make(map[string]bool)
@@ -460,18 +460,19 @@ func scanBedFile() {
 
 func processBufferArray(lineArray * [BUFFERSIZE]string, nbLines, threadnb int, waiting * sync.WaitGroup) {
 	var intervals []interval.IntInterface
-	var interval interval.IntInterface
+	var inter interval.IntInterface
 	var start, end, count int
 	var split []string
 	var err error
 	var isInside bool
+	var intree *interval.IntTree
 
 	defer waiting.Done()
 
 	for i := 0; i < nbLines; i++ {
 		split = strings.Split(lineArray[i], "\t")
 
-		if _, isInside = utils.CHRINTERVALDICT[split[0]];!isInside {
+		if intree, isInside = utils.CHRINTERVALDICT[split[0]];!isInside {
 			continue
 		}
 
@@ -481,12 +482,12 @@ func processBufferArray(lineArray * [BUFFERSIZE]string, nbLines, threadnb int, w
 		end, err = strconv.Atoi(split[2])
 		utils.Check(err)
 
-		intervals = utils.CHRINTERVALDICTTHREAD[threadnb][split[0]].Get(
+		intervals = intree.Get(
 			utils.IntInterval{Start: start, End: end})
 
-		for _, interval = range intervals {
+		for _, inter = range intervals {
 			BUFFERRESARRAY[threadnb][count].cell = split[3]
-			BUFFERRESARRAY[threadnb][count].id = interval.ID()
+			BUFFERRESARRAY[threadnb][count].id = inter.ID()
 
 			count++
 
@@ -518,35 +519,38 @@ func processBufferArray(lineArray * [BUFFERSIZE]string, nbLines, threadnb int, w
 func computeChi2Score() {
 	fmt.Printf("Computing chi2 exact test...\n")
 	THREADSCHANNEL = make(chan int, THREADNB)
-	var peakID uintptr
+	var peakID int
 
 	tStart := time.Now()
 	count := 0
 
-	var chi2Array [SMALLBUFFERSIZE]uintptr
+	chunk := SMALLBUFFERSIZE
+
+	chi2Array := make([][]uintptr, THREADNB)
 
 	for i:=0;i<THREADNB;i++ {
 		THREADSCHANNEL <- i
+		chi2Array[i] = make([]uintptr, chunk)
 	}
 
 	threadnb := <- THREADSCHANNEL
-	waiting := &sync.WaitGroup{}
+	var waiting sync.WaitGroup
 
 	for peakID = range BOOLSPARSEMATRIX {
-		chi2Array[count] = peakID
+		chi2Array[threadnb][count] = uintptr(peakID)
 
 		count++
 
-		if count > SMALLBUFFERSIZE {
+		if count >= chunk {
 			waiting.Add(1)
-			go chi2ScoreOneThread(&chi2Array, waiting, count, threadnb)
+			go chi2ScoreOneThread(&chi2Array[threadnb], &waiting, count, threadnb)
 			threadnb = <- THREADSCHANNEL
 			count = 0
 		}
 	}
 
 	waiting.Add(1)
-	go chi2ScoreOneThread(&chi2Array, waiting, count, threadnb)
+	go chi2ScoreOneThread(&chi2Array[threadnb], &waiting, count, threadnb)
 
 	waiting.Wait()
 
@@ -556,7 +560,7 @@ func computeChi2Score() {
 }
 
 
-func chi2ScoreOneThread(chi2Array * [SMALLBUFFERSIZE]uintptr, waiting * sync.WaitGroup, max, threadnb int) {
+func chi2ScoreOneThread(chi2Array * []uintptr, waiting * sync.WaitGroup, max, threadnb int) {
 	var peakID uintptr
 	var cellID, cluster string
 	var isInside bool
@@ -575,7 +579,7 @@ func chi2ScoreOneThread(chi2Array * [SMALLBUFFERSIZE]uintptr, waiting * sync.Wai
 
 		peakTotal = 0
 
-		cellIDloop:
+	cellIDloop:
 		for cellID = range BOOLSPARSEMATRIX[peakID] {
 			if cluster, isInside = CELLCLUSTERID[cellID];!isInside {
 				continue cellIDloop
@@ -843,5 +847,5 @@ func writeContingencyTable() {
 }
 
 func clearSparseMat() {
-	BOOLSPARSEMATRIX = make(map[uintptr]map[string]bool)
+	BOOLSPARSEMATRIX = make([]map[string]bool, 0)
 }
