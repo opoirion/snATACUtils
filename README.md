@@ -16,7 +16,7 @@ chr19   45396965        45397161        AACGAGAGCTAAACCCGAGATA
 ## Installation
 
 * Install and configure a golang compiler (if not existing)
-  * Download binaries: ![https://golang.org/dl/](https://golang.org/dl/)
+  * Download binaries: [https://golang.org/dl/](https://golang.org/dl/)
   * Configure $GOPATH/$GOBIN
 
 ```bash
@@ -29,7 +29,7 @@ chr19   45396965        45397161        AACGAGAGCTAAACCCGAGATA
 	PATH=$HOME/go/bin/:$GOBIN:$PATH
 
 ```
-	* source your init file `source ~/.bashrc`
+  * source your init file `source ~/.bashrc`
 
 * Install the package
 
