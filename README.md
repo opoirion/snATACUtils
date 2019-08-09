@@ -1,11 +1,16 @@
 # single-cell ATAC-seq tools
 
-
-## dependencies:
-    * github.com/dsnet/compress/bzip2
+Suite of tools to maniputate files related to single-cell ATAC experiments, such as fastq files or single cell bed files (below an example)
 
 ```bash
-go get -u github.com/dsnet/compress/bzip2 # install the dependencies
+# Example of BED file related to single-cell ATAC-Seq. The last column designates the cell barcode
+hr17   14066243        14066440        AACGAGAGCTAAACCCGAGATA
+chr19   42120584        42120781        AACGAGAGCTAAACCCGAGATA
+chr19   42120603        42120799        AACGAGAGCTAAACCCGAGATA
+chr6    36835546        36835742        AACGAGAGCTAAACCCGAGATA
+chr17   14066259        14066455        AACGAGAGCTAAACCCGAGATA
+chr16   79321071        79321267        AACGAGAGCTAAACCCGAGATA
+chr19   45396965        45397161        AACGAGAGCTAAACCCGAGATA
 ```
 
 ## Installation
