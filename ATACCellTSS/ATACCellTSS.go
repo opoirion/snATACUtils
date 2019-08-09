@@ -19,7 +19,7 @@ import(
 )
 
 
-/*BASECOVERAGE map[cell][]count */
+/*BASECOVERAGE map[cell][tss relative pos]count */
 var BASECOVERAGE [][]int
 
 /*FLANKCOVERAGE map[cell]count */
@@ -28,7 +28,10 @@ var FLANKCOVERAGE []int
 /*CELLTSS map[cell]tss */
 var CELLTSS map[string]float64
 
-/*CELLDICT map[cell]bool */
+/*CELLCLUSTERDICT map[cell]clusterID*/
+var CELLCLUSTERDICT map[string]int
+
+/*CELLDICT map[cell]int */
 var CELLDICT map[string]int
 
 /*BEDFILENAME bed file name (input) */
@@ -42,6 +45,9 @@ var TSSFILE utils.Filename
 
 /*CELLSIDFNAME file name file with ordered cell IDs (one ID per line) */
 var CELLSIDFNAME utils.Filename
+
+/*CLUSTERFNAME file name file with cluster<TAB>cell IDs for each line */
+var CLUSTERFNAME utils.Filename
 
 /*FILENAMEOUT  output file name output */
 var FILENAMEOUT string
@@ -74,7 +80,9 @@ var MUTEX sync.Mutex
 func main() {
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, `USAGE: ATACCellTSS -bed <filename> -ygi/tss <filename> -xgi <filename>
-                    (optionnal -out <string> -flank <int> -smoothing <int> -boundary <int> -flank_size).
+                    (optionnal -out <string> -flank <int> -smoothing <int> -boundary <int> -cluster <filename> -flank_size).
+
+if -cluster is provided, TSS is computed per cluster and -xgi argument is ignored. THe cluster file should contain cluster and cell ID with the following structure for each line: clusterID<TAB>cellID\n
 
 `)
 		 flag.PrintDefaults()
@@ -84,6 +92,7 @@ func main() {
 	flag.Var(&PEAKFILE, "ygi", "name of the bed file containing the TSS regions (assuming TSS is at the center)")
 	flag.Var(&TSSFILE, "tss", "name of the bed file containing the TSS position (alternative to ygi)")
 	flag.Var(&CELLSIDFNAME, "xgi", "name of the file containing the ordered list of cell IDs (one ID per line)")
+	flag.Var(&CLUSTERFNAME, "cluster", "name of the file containing the cluster<->cellID (<TAB> separated). If cluster is provided, then -xgi is ignored")
 	flag.StringVar(&FILENAMEOUT, "out", "", "name of the output file")
 	flag.IntVar(&FLANKSIZE, "flank", 100, "flank size at the end and begining of the TSS regions")
 	flag.IntVar(&TSSREGION, "boundary", 2000, "TSS boundary size at the end and begining of the TSS (used only when -tss is provided)")
@@ -95,16 +104,13 @@ func main() {
 	switch {
 	case BEDFILENAME == "":
 		log.Fatal("-bed must be provided!")
-	case CELLSIDFNAME == "":
-		log.Fatal("-xgi must be provided!")
+	case CELLSIDFNAME == "" && CLUSTERFNAME == "":
+		log.Fatal("Either -cluster or -xgi must be provided!")
 	case PEAKFILE == "" && TSSFILE == "":
 		log.Fatal("either -ygi or -tss must be provided!")
 
 	case FILENAMEOUT == "":
-		ext := path.Ext(CELLSIDFNAME.String())
-		FILENAMEOUT = fmt.Sprintf("%s.tss_per_cell",
-			CELLSIDFNAME[:len(CELLSIDFNAME)-len(ext)])
-
+		FILENAMEOUT = findFileNameOut()
 	}
 
 	MUTEX = sync.Mutex{}
@@ -115,7 +121,14 @@ func main() {
 		loadTSS(TSSFILE)
 	}
 
-	initCellDicts()
+	if CLUSTERFNAME != "" {
+		loadClusterFile()
+	} else {
+		CELLDICT = utils.LoadCellDictsToIndex(CELLSIDFNAME)
+
+	}
+
+	initDicts()
 
 	utils.CreatePeakIntervalTree()
 	utils.InitIntervalDictsThreading(THREADNB)
@@ -124,6 +137,53 @@ func main() {
 	normaliseCountMatrix()
 	writeCellTSSScore()
 }
+
+
+func findFileNameOut() (foutname string) {
+
+	switch {
+	case CLUSTERFNAME != "":
+		foutname = CLUSTERFNAME.String()
+	default:
+		foutname = CELLSIDFNAME.String()
+	}
+
+	ext := path.Ext(foutname)
+	foutname = fmt.Sprintf("%s.tss_per_cell",
+		foutname[:len(foutname)-len(ext)])
+
+	return foutname
+}
+
+func loadClusterFile() {
+	var split []string
+	var clusterID, index int
+	var cell, cluster string
+	var isInside bool
+
+	CELLDICT = make(map[string]int)
+	CELLCLUSTERDICT = make(map[string]int)
+
+	scanner, file := CLUSTERFNAME.ReturnReader(0)
+	defer utils.CloseFile(file)
+
+	scanner.Scan()
+
+	for scanner.Scan() {
+		split = strings.Split(scanner.Text(), "\t")
+		cell, cluster = split[0], split[1]
+
+		if clusterID, isInside = CELLDICT[cluster]; !isInside {
+			CELLDICT[cluster] = index
+			clusterID = index
+			index++
+		}
+
+		CELLCLUSTERDICT[cell] = clusterID
+	}
+
+}
+
 
 func loadTSS(tssFile utils.Filename) {
 
@@ -161,10 +221,9 @@ func loadTSS(tssFile utils.Filename) {
 }
 
 
-func initCellDicts() {
+func initDicts() {
 	var length, index int
 
-	CELLDICT = utils.LoadCellDictsToIndex(CELLSIDFNAME)
 	FLANKCOVERAGE = make([]int, len(CELLDICT))
 	BASECOVERAGE = make([][]int, len(CELLDICT))
 	CELLTSS = make(map[string]float64)
@@ -268,6 +327,7 @@ func scanBedFile() {
 	fmt.Printf("Scanning bed file done in time: %f s \n", tDiff.Seconds())
 }
 
+
 func processOneBuffer(
 	bufferarray *[BUFFERSIZE]string,
 	thread, limit int,
@@ -280,8 +340,16 @@ func processOneBuffer(
 	var intervals []interval.IntInterface
 	var inter interval.IntInterface
 	var itrg interval.IntRange
+	var celldict map[string]int
 
 	defer waiting.Done()
+
+	// Check if TSS is computed per cell or per cluster
+	if CLUSTERFNAME != "" {
+		celldict = CELLCLUSTERDICT
+	} else {
+		celldict = CELLDICT
+	}
 
 	indexLimit := 2 * TSSREGION - 2 * FLANKSIZE
 
@@ -289,7 +357,7 @@ func processOneBuffer(
 		split = strings.Split(bufferarray[i], "\t")
 		chro = split[0]
 
-		if cellID, isInside = CELLDICT[split[3]];!isInside {
+		if cellID, isInside = celldict[split[3]];!isInside {
 			continue
 		}
 
