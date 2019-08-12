@@ -65,6 +65,9 @@ var MULTIPLETESTS bool
 /*THREADNB number of threads for reading the bam file */
 var THREADNB int
 
+/*SPLIT split the initial list of peaks into sets for memory efficiency */
+var SPLIT int
+
 /*THREADSCHANNEL  thread ID->channel*/
 var THREADSCHANNEL chan int
 
@@ -78,7 +81,7 @@ var CLUSTERSUM map[string]int
 var TOTALNBCELLS int
 
 /*BUFFERSIZE buffer size for multithreading */
-const BUFFERSIZE = 1000000
+const BUFFERSIZE = 50000
 
 /*SMALLBUFFERSIZE buffer size for multithreading */
 const SMALLBUFFERSIZE = 50000
@@ -117,7 +120,7 @@ func main() {
 #################### MODULE TO INFER SIGNIFICANT CLUSTER PEAKS ########################
 
 """full individual chi2 computation for each peak with FDR correction using Benjamini-Hochberg correction. Not recommended because using golang suboptimal chi2 implementation"""
-USAGE: ATACTopFeatures -chi2 -bed <fname> -peak <fname> -cluster <fname> (optionnal -out <string> -threads <int> -alpha <float> -write_all)
+USAGE: ATACTopFeatures -chi2 -bed <fname> -peak <fname> -cluster <fname> (optionnal -out <string> -threads <int> -alpha <float> -write_all -split <int>)
 
 """Create contingency table for each feature and each cluster"""
 USAGE: ATACTopFeatures -create_contingency -bed <fname> -peak <fname> -cluster <fname> (optionnal -out <string> -threads <int>)
@@ -140,6 +143,7 @@ USAGE: ATACTopFeatures -pvalue_correction -ptable <fname> (optionnal -out <strin
                 row scheme: <chromosome>\t<start>\t<stop>\t<cluster ID>\t<pvalue>\n`)
 	flag.StringVar(&FILENAMEOUT, "out", "", "name the output file(s)")
 	flag.IntVar(&THREADNB, "threads", 1, "threads concurrency")
+	flag.IntVar(&SPLIT, "split", 0, "Split the input set of peaks into multiple subsets (The number is defined by the -split option) processed one by one for memory efficiency.")
 	flag.Float64Var(&ALPHA, "alpha", 0.05, "Decision threshold")
 	flag.BoolVar(&WRITEALL, "write_all", false, "Write all features including the not significant ones")
 	flag.BoolVar(&CHI2ANALYSIS, "chi2", false, `perform chi2 analysis with multiple test correction`)
@@ -172,7 +176,11 @@ USAGE: ATACTopFeatures -pvalue_correction -ptable <fname> (optionnal -out <strin
 	switch {
 
 	case CREATECONTINGENCY:
-		createContingencyTable()
+		if SPLIT > 1 {
+			createContingencyTableUsingSubsets()
+		} else {
+			createContingencyTable()
+		}
 	case CHI2ANALYSIS:
 		launchChi2Analysis()
 	}
@@ -204,6 +212,8 @@ func createContingencyTable() {
 			BEDFILENAME[:len(BEDFILENAME)-len(ext)])
 	}
 
+	tStart := time.Now()
+
 	loadSymbolFile()
 	loadCellClusterIDAndInitMaps()
 	utils.LoadPeaks(PEAKFILE)
@@ -214,10 +224,87 @@ func createContingencyTable() {
 	scanBedFile()
 	computeChi2Score()
 	go clearSparseMat()
-	writeContingencyTable()
+	writeContingencyTable(FILENAMEOUT, true)
+
+	tDiff := time.Since(tStart)
+	fmt.Printf("Create contingency table done in time: %f s \n", tDiff.Seconds())
 
 }
 
+func createContingencyTableUsingSubsets() {
+	var chunk, firstPeak, lastPeak int
+	var filenameout string
+	var filenames []string
+
+	BUFFERARRAY = make([][BUFFERSIZE]string, THREADNB)
+	BUFFERRESARRAY = make([][BUFFERSIZE]boolsparsematfeature, THREADNB)
+
+	if FILENAMEOUT == "" {
+		ext := path.Ext(BEDFILENAME.String())
+		FILENAMEOUT = fmt.Sprintf("%s.contingency_table.tsv",
+			BEDFILENAME[:len(BEDFILENAME)-len(ext)])
+	}
+
+	loadSymbolFile()
+	utils.LoadPeaks(PEAKFILE)
+
+	chunk = (len(utils.PEAKIDDICT) + SPLIT) / SPLIT
+	lastPeak = chunk
+
+	tStart := time.Now()
+
+	for i := 0; i < SPLIT; i ++ {
+		filenameout = fmt.Sprintf("%s.%d", FILENAMEOUT, i)
+
+		fmt.Printf("Processing set of peaks: (start: %d  end:%d)\n", firstPeak, lastPeak)
+		utils.LoadPeaksSubset(PEAKFILE, firstPeak, lastPeak)
+		loadSymbolFile()
+		loadCellClusterIDAndInitMaps()
+
+		utils.CreatePeakIntervalTree()
+		utils.InitIntervalDictsThreading(THREADNB)
+
+		createPeakMappingDict()
+		initBoolSparseMatrix()
+		scanBedFile()
+		computeChi2Score()
+		go clearSparseMat()
+		writeContingencyTable(filenameout, i == 0)
+
+		lastPeak += chunk
+		firstPeak += chunk
+
+		filenames = append(filenames, filenameout)
+	}
+
+	fmt.Printf("Combining contingency table and cleaning...\n")
+	mergeAndCleanTmpContingencyTables(filenames)
+
+	tDiff := time.Since(tStart)
+	fmt.Printf("Create contingency table done in time: %f s \n", tDiff.Seconds())
+}
+
+
+func mergeAndCleanTmpContingencyTables(filenames []string) {
+	var cmd, cmdRm bytes.Buffer
+
+	cmd.WriteString("cat ")
+	cmdRm.WriteString("rm ")
+
+	for _, filename := range filenames {
+		cmd.WriteString(filename)
+		cmd.WriteRune(' ')
+
+		cmdRm.WriteString(filename)
+		cmdRm.WriteRune(' ')
+	}
+
+	cmd.WriteString(" > ")
+	cmd.WriteString(FILENAMEOUT)
+
+	utils.ExceCmd(cmd.String())
+	utils.ExceCmd(cmdRm.String())
+}
 
 func launchChi2Analysis() {
 	BUFFERARRAY = make([][BUFFERSIZE]string, THREADNB)
@@ -471,6 +558,10 @@ func processBufferArray(lineArray * [BUFFERSIZE]string, nbLines, threadnb int, w
 
 	for i := 0; i < nbLines; i++ {
 		split = strings.Split(lineArray[i], "\t")
+
+		if _, isInside = CELLCLUSTERID[split[3]];!isInside {
+			continue
+		}
 
 		if intree, isInside = utils.CHRINTERVALDICT[split[0]];!isInside {
 			continue
@@ -781,24 +872,26 @@ func writePvalueCorrectedTable() {
 	fmt.Printf("File: %s written in: %f s \n", FILENAMEOUT, tDiff.Seconds())
 }
 
-func writeContingencyTable() {
+func writeContingencyTable(filenameout string, header bool) {
 	var buffer bytes.Buffer
 	var peakl peak
 	var err error
 
-	writer := utils.ReturnWriter(FILENAMEOUT)
+	writer := utils.ReturnWriter(filenameout)
 	defer utils.CloseFile(writer)
 	tStart := time.Now()
 
 	writeSymbol := len(PEAKSYMBOLDICT) != 0
 
-	buffer.WriteString("#chr\tstart\tstop\tcluster")
+	if header {
+		buffer.WriteString("#chr\tstart\tstop\tcluster")
 
-	if writeSymbol {
-		buffer.WriteString("\tsymbol")
+		if writeSymbol {
+			buffer.WriteString("\tsymbol")
+		}
+
+		buffer.WriteString("\tn11\tn12\tn21\tn22\n")
 	}
-
-	buffer.WriteString("\tn11\tn12\tn21\tn22\n")
 
 	clusters := []string{}
 

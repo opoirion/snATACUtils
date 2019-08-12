@@ -123,6 +123,41 @@ func LoadPeaks(fname Filename) {
 }
 
 
+/*LoadPeaksSubset load peak file  but using only a subset of peaks and return peak peak id -> dict*/
+func LoadPeaksSubset(fname Filename, firstPeak, lastPeak int) {
+	var scanner *bufio.Scanner
+	var file *os.File
+
+	peaknb := -1
+
+	scanner, file = fname.ReturnReader(0)
+
+	defer CloseFile(file)
+
+
+	var count uint
+
+	PEAKIDDICT = make(map[string]uint)
+	count = 0
+
+	for scanner.Scan() {
+		peaknb++
+
+		if peaknb < firstPeak {
+			continue
+		}
+
+		if peaknb >= lastPeak {
+			break
+		}
+
+		line := scanner.Text()
+		PEAKIDDICT[line] = count
+		count++
+	}
+}
+
+
 /*InitIntervalDictsThreading Init interval dict threading map by copying the interval map for each trheads*/
 func InitIntervalDictsThreading(threadnb int) {
        CHRINTERVALDICTTHREAD = make(map[int]map[string]*interval.IntTree)
