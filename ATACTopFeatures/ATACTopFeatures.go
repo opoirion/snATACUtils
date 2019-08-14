@@ -24,7 +24,7 @@ type peak [3]string
 
 type peakFeature struct {
 	id uintptr
-	cluster string
+	cluster int
 	pvalue float64
 	qvalue float64
 	n11, n12, n21, n22 int
@@ -71,11 +71,17 @@ var SPLIT int
 /*THREADSCHANNEL  thread ID->channel*/
 var THREADSCHANNEL chan int
 
-/*CELLCLUSTERID  cellID <string> -> cluster ID <string>*/
-var CELLCLUSTERID map[string]string
+/*CELLCLUSTERID  cellID <string> -> cluster ID <int>*/
+var CELLCLUSTERID map[string]int
+
+/*CLUSTERNAMEMAPPING  cluster name <string> -> cluster ID*/
+var CLUSTERNAMEMAPPING map[string]int
+
+/*NAMECLUSTERMAPPING   cluster ID <int> -> cluster name <string>*/
+var NAMECLUSTERMAPPING []string
 
 /*CLUSTERSUM  nb of cells in each cluster <string> -> sum*/
-var CLUSTERSUM map[string]int
+var CLUSTERSUM map[int]int
 
 /*TOTALNBCELLS  total nb of cells*/
 var TOTALNBCELLS int
@@ -96,7 +102,7 @@ var BUFFERRESARRAY [][BUFFERSIZE]boolsparsematfeature
 var BOOLSPARSEMATRIX []map[string]bool
 
 /*CHI2SCORE map[cluster ID][peak ID]count*/
-var CHI2SCORE map[string][]peakFeature
+var CHI2SCORE [][]peakFeature
 
 /*PEAKMAPPING ...*/
 var PEAKMAPPING map[uintptr]peak
@@ -215,8 +221,8 @@ func createContingencyTable() {
 	tStart := time.Now()
 
 	loadSymbolFile()
-	loadCellClusterIDAndInitMaps()
 	utils.LoadPeaks(PEAKFILE)
+	loadCellClusterIDAndInitMaps()
 	utils.CreatePeakIntervalTree()
 	utils.InitIntervalDictsThreading(THREADNB)
 	createPeakMappingDict()
@@ -317,8 +323,8 @@ func launchChi2Analysis() {
 	}
 
 	loadSymbolFile()
-	loadCellClusterIDAndInitMaps()
 	utils.LoadPeaks(PEAKFILE)
+	loadCellClusterIDAndInitMaps()
 	utils.CreatePeakIntervalTree()
 	utils.InitIntervalDictsThreading(THREADNB)
 	createPeakMappingDict()
@@ -387,7 +393,7 @@ func loadSymbolFile() {
 
 
 func loadPvalueTable() {
-	var line, symbol string
+	var line, symbol, cluster string
 	var split []string
 	var peaki peakFeature
 	var peakl peak
@@ -395,11 +401,13 @@ func loadPvalueTable() {
 	var isInside bool
 	var count uintptr
 	var pvalue float64
+	var clusterID int
 
 	tStart := time.Now()
 
-	CHI2SCORE = make(map[string][]peakFeature)
+	CHI2SCORE = make([][]peakFeature, 1)
 	PEAKMAPPING = make(map[uintptr]peak)
+	CLUSTERNAMEMAPPING = make(map[string]int)
 
 	peakset := make(map[peak]uintptr)
 
@@ -424,6 +432,14 @@ func loadPvalueTable() {
 
 		peakl = peak{split[0], split[1], split[2]}
 
+		cluster = split[3]
+
+		if clusterID, isInside = CLUSTERNAMEMAPPING[cluster];!isInside {
+
+			CLUSTERNAMEMAPPING[cluster] = clusterID
+			clusterID++
+		}
+
 		if _, isInside = peakset[peakl];!isInside {
 			peakset[peakl] = count
 			PEAKMAPPING[count] = peakl
@@ -431,7 +447,7 @@ func loadPvalueTable() {
 		}
 
 		peaki.id  = peakset[peakl]
-		peaki.cluster = split[3]
+		peaki.cluster = clusterID
 		pvalue, err = strconv.ParseFloat(split[len(split) - 1], 64)
 		utils.Check(err)
 		peaki.pvalue = pvalue
@@ -441,6 +457,12 @@ func loadPvalueTable() {
 			symbol = split[4]
 			PEAKSYMBOLDICT[peakl] = symbol
 		}
+	}
+
+	NAMECLUSTERMAPPING = make([]string, len(CLUSTERNAMEMAPPING))
+
+	for cluster, clusterID = range CLUSTERNAMEMAPPING {
+		NAMECLUSTERMAPPING[clusterID] = cluster
 	}
 
 	tDiff := time.Since(tStart)
@@ -477,14 +499,21 @@ func createPeakMappingDict() {
 
 func loadCellClusterIDAndInitMaps() {
 	var line, cellID, cluster string
+	var clusterID int
+	var isInside bool
 	var split []string
 
 	scanner, file := CLUSTERFILE.ReturnReader(0)
 	defer utils.CloseFile(file)
 
-	CELLCLUSTERID = make(map[string]string)
-	CLUSTERSUM = make(map[string]int)
-	CHI2SCORE = make(map[string][]peakFeature)
+	CELLCLUSTERID = make(map[string]int)
+	CLUSTERNAMEMAPPING = make(map[string]int)
+	CLUSTERSUM = make(map[int]int)
+	CHI2SCORE = make([][]peakFeature, 1)
+
+	if len(utils.PEAKIDDICT) == 0 {
+		panic("Error PEAKIDDICT empty!")
+	}
 
 	for scanner.Scan() {
 		line = scanner.Text()
@@ -501,10 +530,25 @@ func loadCellClusterIDAndInitMaps() {
 			panic(fmt.Sprintf("line: %s cannot be splitted with <tab>\n", line))
 		}
 
-		CELLCLUSTERID[cellID] = cluster
-		CLUSTERSUM[cluster]++
+		if _, isInside = CLUSTERNAMEMAPPING[cluster];!isInside {
+			CLUSTERNAMEMAPPING[cluster] = clusterID
+			CHI2SCORE[clusterID] = make([]peakFeature, len(utils.PEAKIDDICT))
+			CHI2SCORE = append(CHI2SCORE, []peakFeature{})
+			clusterID++
+		}
+
+		CELLCLUSTERID[cellID] = CLUSTERNAMEMAPPING[cluster]
+		CLUSTERSUM[CLUSTERNAMEMAPPING[cluster]]++
 
 		TOTALNBCELLS++
+	}
+
+	CHI2SCORE = CHI2SCORE[:len(CHI2SCORE) -1]
+
+	NAMECLUSTERMAPPING = make([]string, len(CLUSTERNAMEMAPPING))
+
+	for cluster, clusterID = range CLUSTERNAMEMAPPING {
+		NAMECLUSTERMAPPING[clusterID] = cluster
 	}
 }
 
@@ -653,11 +697,11 @@ func computeChi2Score() {
 
 func chi2ScoreOneThread(chi2Array * []uintptr, waiting * sync.WaitGroup, max, threadnb int) {
 	var peakID uintptr
-	var cellID, cluster string
+	var cellID string
 	var isInside bool
 	var pvalue float64
-	var value, peakTotal int
-	var clusterDict map[string]int
+	var value, peakTotal, clusterID int
+	var clusterDict map[int]int
 
 	var results [SMALLBUFFERSIZE]peakFeature
 
@@ -666,34 +710,34 @@ func chi2ScoreOneThread(chi2Array * []uintptr, waiting * sync.WaitGroup, max, th
 	defer waiting.Done()
 
 	for _, peakID = range (*chi2Array)[:max] {
-		clusterDict = make(map[string]int)
+		clusterDict = make(map[int]int)
 
 		peakTotal = 0
 
 	cellIDloop:
 		for cellID = range BOOLSPARSEMATRIX[peakID] {
-			if cluster, isInside = CELLCLUSTERID[cellID];!isInside {
+			if clusterID, isInside = CELLCLUSTERID[cellID];!isInside {
 				continue cellIDloop
 			}
 
-			clusterDict[cluster]++
+			clusterDict[clusterID]++
 			peakTotal++
 		}
 
-		for cluster, value = range clusterDict {
+		for clusterID, value = range clusterDict {
 			results[count].id = peakID
-			results[count].cluster = cluster
+			results[count].cluster = clusterID
 
 			if CREATECONTINGENCY {
 				results[count].n11 = value
-				results[count].n12 = CLUSTERSUM[cluster]
+				results[count].n12 = CLUSTERSUM[clusterID]
 				results[count].n21 = peakTotal - value
-				results[count].n22 = TOTALNBCELLS - CLUSTERSUM[cluster]
+				results[count].n22 = TOTALNBCELLS - CLUSTERSUM[clusterID]
 			} else {
 
 			_, pvalue = chiSquareTest(
-				value, CLUSTERSUM[cluster],
-				peakTotal - value, TOTALNBCELLS - CLUSTERSUM[cluster], true)
+				value, CLUSTERSUM[clusterID],
+				peakTotal - value, TOTALNBCELLS - CLUSTERSUM[clusterID], true)
 
 				results[count].pvalue = pvalue
 			}
@@ -746,6 +790,7 @@ func performMultipleTestCorrection() {
 }
 
 func sortPvalueScore() {
+	var clusterID int
 	tStart := time.Now()
 	THREADSCHANNEL = make(chan int, THREADNB)
 
@@ -755,12 +800,12 @@ func sortPvalueScore() {
 
 	threadnb := <- THREADSCHANNEL
 
-	for cluster := range CHI2SCORE {
-		go func(cluster string, threadnb int) {
-			sort.Slice(CHI2SCORE[cluster], func(i int, j int) bool {
-				return CHI2SCORE[cluster][i].pvalue <  CHI2SCORE[cluster][j].pvalue})
+	for clusterID = range CHI2SCORE {
+		go func(clusterID int, threadnb int) {
+			sort.Slice(CHI2SCORE[clusterID], func(i int, j int) bool {
+				return CHI2SCORE[clusterID][i].pvalue <  CHI2SCORE[clusterID][j].pvalue})
 			THREADSCHANNEL <- threadnb
-		}(cluster, threadnb)
+		}(clusterID, threadnb)
 
 	threadnb = <- THREADSCHANNEL
 
@@ -772,6 +817,7 @@ func sortPvalueScore() {
 
 func performCorrectionAfterSorting() {
 
+	var clusterID int
 	tStart := time.Now()
 	THREADSCHANNEL = make(chan int, THREADNB)
 
@@ -781,19 +827,19 @@ func performCorrectionAfterSorting() {
 
 	threadnb := <- THREADSCHANNEL
 
-	for cluster := range CHI2SCORE {
-		go func(threadnb int, cluster string) {
+	for clusterID = range CHI2SCORE {
+		go func(threadnb int, clusterID int) {
 			var rank int
 
-			cllength := float64(len(CHI2SCORE[cluster]))
+			cllength := float64(len(CHI2SCORE[clusterID]))
 
-			for rank = range CHI2SCORE[cluster] {
-				CHI2SCORE[cluster][rank].qvalue = float64(rank + 1) * ALPHA / cllength
+			for rank = range CHI2SCORE[clusterID] {
+				CHI2SCORE[clusterID][rank].qvalue = float64(rank + 1) * ALPHA / cllength
 			}
 
 			THREADSCHANNEL <- threadnb
 
-		}(threadnb, cluster)
+		}(threadnb, clusterID)
 
 		threadnb = <- THREADSCHANNEL
 	}
@@ -807,6 +853,8 @@ func writePvalueCorrectedTable() {
 	var peakl peak
 	var err error
 	var isSignificant bool
+	var clusterID int
+	var cluster string
 
 	writeSymbol := len(PEAKSYMBOLDICT) != 0
 
@@ -822,17 +870,11 @@ func writePvalueCorrectedTable() {
 
 	buffer.WriteRune('\n')
 
-	clusters := []string{}
+	for clusterID = range CHI2SCORE {
+		cluster = NAMECLUSTERMAPPING[clusterID]
 
-	for cluster := range CHI2SCORE {
-		clusters = append(clusters, cluster)
-	}
-
-	sort.Strings(clusters)
-
-	for _, cluster := range clusters {
 		featureLoop:
-		for _, peaki := range CHI2SCORE[cluster] {
+		for _, peaki := range CHI2SCORE[clusterID] {
 			isSignificant = peaki.pvalue < peaki.qvalue
 
 			if !WRITEALL && !isSignificant {
@@ -846,7 +888,7 @@ func writePvalueCorrectedTable() {
 			buffer.WriteRune('\t')
 			buffer.WriteString(peakl[2])
 			buffer.WriteRune('\t')
-			buffer.WriteString(peaki.cluster)
+			buffer.WriteString(cluster)
 
 			if writeSymbol {
 				buffer.WriteRune('\t')
@@ -876,6 +918,8 @@ func writeContingencyTable(filenameout string, header bool) {
 	var buffer bytes.Buffer
 	var peakl peak
 	var err error
+	var cluster string
+	var clusterID int
 
 	writer := utils.ReturnWriter(filenameout)
 	defer utils.CloseFile(writer)
@@ -893,18 +937,13 @@ func writeContingencyTable(filenameout string, header bool) {
 		buffer.WriteString("\tn11\tn12\tn21\tn22\n")
 	}
 
-	clusters := []string{}
+	for clusterID = range CHI2SCORE {
+		cluster = NAMECLUSTERMAPPING[clusterID]
 
-	for cluster := range CHI2SCORE {
-		clusters = append(clusters, cluster)
-	}
-
-	sort.Strings(clusters)
-
-	for _, cluster := range clusters {
-
-		for _, peaki := range CHI2SCORE[cluster] {
-
+		for _, peaki := range CHI2SCORE[clusterID] {
+			if peaki.n11 == 0 {
+				continue
+			}
 			peakl = PEAKMAPPING[peaki.id]
 			buffer.WriteString(peakl[0])
 			buffer.WriteRune('\t')
@@ -912,7 +951,7 @@ func writeContingencyTable(filenameout string, header bool) {
 			buffer.WriteRune('\t')
 			buffer.WriteString(peakl[2])
 			buffer.WriteRune('\t')
-			buffer.WriteString(peaki.cluster)
+			buffer.WriteString(cluster)
 
 			if writeSymbol {
 				buffer.WriteRune('\t')
