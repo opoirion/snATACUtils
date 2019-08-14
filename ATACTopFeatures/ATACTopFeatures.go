@@ -27,13 +27,21 @@ type peakFeature struct {
 	cluster int
 	pvalue float64
 	qvalue float64
-	n11, n12, n21, n22 int
+	n11, n21 int
 }
 
-type boolsparsematfeature struct {
+type chi2feature struct {
 	id uintptr
-	cell string
+	clusterID, cellID int
 }
+
+type cellpeak struct {
+	cellID int
+	peakID uintptr
+}
+
+/*CELLPEAKMAPPING map[(cell, peak)] is used */
+var CELLPEAKMAPPING map[cellpeak]bool
 
 /*BEDFILENAME bed file name (input) */
 var BEDFILENAME utils.Filename
@@ -72,7 +80,10 @@ var SPLIT int
 var THREADSCHANNEL chan int
 
 /*CELLCLUSTERID  cellID <string> -> cluster ID <int>*/
-var CELLCLUSTERID map[string]int
+var CELLCLUSTERID []int
+
+/*CELLMAPPING  cell name <string> -> cell ID <int>*/
+var CELLMAPPING map[string]int
 
 /*CLUSTERNAMEMAPPING  cluster name <string> -> cluster ID*/
 var CLUSTERNAMEMAPPING map[string]int
@@ -81,7 +92,7 @@ var CLUSTERNAMEMAPPING map[string]int
 var NAMECLUSTERMAPPING []string
 
 /*CLUSTERSUM  nb of cells in each cluster <string> -> sum*/
-var CLUSTERSUM map[int]int
+var CLUSTERSUM []int
 
 /*TOTALNBCELLS  total nb of cells*/
 var TOTALNBCELLS int
@@ -96,16 +107,13 @@ const SMALLBUFFERSIZE = 50000
 var BUFFERARRAY [][BUFFERSIZE]string
 
 /*BUFFERRESARRAY map slice: [THREAD][BUFFERSIZE]line*/
-var BUFFERRESARRAY [][BUFFERSIZE]boolsparsematfeature
-
-/*BOOLSPARSEMATRIX peaks x cells sparse matrix  */
-var BOOLSPARSEMATRIX []map[string]bool
+var BUFFERRESARRAY [][BUFFERSIZE]chi2feature
 
 /*CHI2SCORE map[cluster ID][peak ID]count*/
 var CHI2SCORE [][]peakFeature
 
 /*PEAKMAPPING ...*/
-var PEAKMAPPING map[uintptr]peak
+var PEAKMAPPING []peak
 
 /*ALPHA decision threshold*/
 var ALPHA float64
@@ -210,7 +218,7 @@ func launchMultipleTestAnalysis() {
 
 func createContingencyTable() {
 	BUFFERARRAY = make([][BUFFERSIZE]string, THREADNB)
-	BUFFERRESARRAY = make([][BUFFERSIZE]boolsparsematfeature, THREADNB)
+	BUFFERRESARRAY = make([][BUFFERSIZE]chi2feature, THREADNB)
 
 	if FILENAMEOUT == "" {
 		ext := path.Ext(BEDFILENAME.String())
@@ -226,10 +234,7 @@ func createContingencyTable() {
 	utils.CreatePeakIntervalTree()
 	utils.InitIntervalDictsThreading(THREADNB)
 	createPeakMappingDict()
-	initBoolSparseMatrix()
 	scanBedFile()
-	computeChi2Score()
-	go clearSparseMat()
 	writeContingencyTable(FILENAMEOUT, true)
 
 	tDiff := time.Since(tStart)
@@ -243,7 +248,7 @@ func createContingencyTableUsingSubsets() {
 	var filenames []string
 
 	BUFFERARRAY = make([][BUFFERSIZE]string, THREADNB)
-	BUFFERRESARRAY = make([][BUFFERSIZE]boolsparsematfeature, THREADNB)
+	BUFFERRESARRAY = make([][BUFFERSIZE]chi2feature, THREADNB)
 
 	if FILENAMEOUT == "" {
 		ext := path.Ext(BEDFILENAME.String())
@@ -271,10 +276,7 @@ func createContingencyTableUsingSubsets() {
 		utils.InitIntervalDictsThreading(THREADNB)
 
 		createPeakMappingDict()
-		initBoolSparseMatrix()
 		scanBedFile()
-		computeChi2Score()
-		go clearSparseMat()
 		writeContingencyTable(filenameout, i == 0)
 
 		lastPeak += chunk
@@ -314,7 +316,7 @@ func mergeAndCleanTmpContingencyTables(filenames []string) {
 
 func launchChi2Analysis() {
 	BUFFERARRAY = make([][BUFFERSIZE]string, THREADNB)
-	BUFFERRESARRAY = make([][BUFFERSIZE]boolsparsematfeature, THREADNB)
+	BUFFERRESARRAY = make([][BUFFERSIZE]chi2feature, THREADNB)
 
 	if FILENAMEOUT == "" {
 		ext := path.Ext(BEDFILENAME.String())
@@ -328,10 +330,8 @@ func launchChi2Analysis() {
 	utils.CreatePeakIntervalTree()
 	utils.InitIntervalDictsThreading(THREADNB)
 	createPeakMappingDict()
-	initBoolSparseMatrix()
 	scanBedFile()
 	computeChi2Score()
-	go clearSparseMat()
 	performMultipleTestCorrection()
 	writePvalueCorrectedTable()
 
@@ -406,7 +406,6 @@ func loadPvalueTable() {
 	tStart := time.Now()
 
 	CHI2SCORE = make([][]peakFeature, 1)
-	PEAKMAPPING = make(map[uintptr]peak)
 	CLUSTERNAMEMAPPING = make(map[string]int)
 
 	peakset := make(map[peak]uintptr)
@@ -442,7 +441,7 @@ func loadPvalueTable() {
 
 		if _, isInside = peakset[peakl];!isInside {
 			peakset[peakl] = count
-			PEAKMAPPING[count] = peakl
+			PEAKMAPPING = append(PEAKMAPPING, peakl)
 			count++
 		}
 
@@ -469,28 +468,18 @@ func loadPvalueTable() {
 	fmt.Printf("Table %s loaded in: %f s \n", FEATUREPVALUEFILE, tDiff.Seconds())
 }
 
-func initBoolSparseMatrix() {
-	var peakKey uintptr
-
-	BOOLSPARSEMATRIX = make([]map[string]bool, len(PEAKMAPPING))
-
-	for peakKey = range PEAKMAPPING {
-		BOOLSPARSEMATRIX[peakKey] = make(map[string]bool)
-	}
-}
-
 
 func createPeakMappingDict() {
 	var peakstr string
 	var peakid uint
 	var peaktuple []string
 
-	PEAKMAPPING = make(map[uintptr]peak)
+	PEAKMAPPING = make([]peak, len(utils.PEAKIDDICT))
 
 	for peakstr, peakid = range utils.PEAKIDDICT {
 
 		peaktuple = strings.Split(peakstr, "\t")
-		PEAKMAPPING[uintptr(peakid)] = [3]string{
+		PEAKMAPPING[peakid] = [3]string{
 			peaktuple[0], peaktuple[1], peaktuple[2]}
 	}
 
@@ -498,18 +487,20 @@ func createPeakMappingDict() {
 
 
 func loadCellClusterIDAndInitMaps() {
-	var line, cellID, cluster string
-	var clusterID int
+	var line, cellName, cluster string
+	var clusterID, cellID int
 	var isInside bool
 	var split []string
 
 	scanner, file := CLUSTERFILE.ReturnReader(0)
 	defer utils.CloseFile(file)
 
-	CELLCLUSTERID = make(map[string]int)
+	CELLMAPPING = make(map[string]int)
 	CLUSTERNAMEMAPPING = make(map[string]int)
-	CLUSTERSUM = make(map[int]int)
-	CHI2SCORE = make([][]peakFeature, 1)
+	clustersum := make(map[int]int)
+	CELLPEAKMAPPING = make(map[cellpeak]bool)
+	CELLCLUSTERID = make([]int, 0)
+	CHI2SCORE = make([][]peakFeature, 0)
 
 	if len(utils.PEAKIDDICT) == 0 {
 		panic("Error PEAKIDDICT empty!")
@@ -523,7 +514,7 @@ func loadCellClusterIDAndInitMaps() {
 		}
 
 		split = strings.Split(line, "\t")
-		cellID = split[0]
+		cellName = split[0]
 		cluster = split[1]
 
 		if len(split) < 2 {
@@ -532,25 +523,27 @@ func loadCellClusterIDAndInitMaps() {
 
 		if _, isInside = CLUSTERNAMEMAPPING[cluster];!isInside {
 			CLUSTERNAMEMAPPING[cluster] = clusterID
+			CHI2SCORE = append(CHI2SCORE, make([]peakFeature, 0))
 			CHI2SCORE[clusterID] = make([]peakFeature, len(utils.PEAKIDDICT))
-			CHI2SCORE = append(CHI2SCORE, []peakFeature{})
 			clusterID++
 		}
 
-		CELLCLUSTERID[cellID] = CLUSTERNAMEMAPPING[cluster]
-		CLUSTERSUM[CLUSTERNAMEMAPPING[cluster]]++
-
+		CELLMAPPING[cellName] = cellID
+		CELLCLUSTERID = append(CELLCLUSTERID, CLUSTERNAMEMAPPING[cluster])
+		clustersum[CLUSTERNAMEMAPPING[cluster]]++
+		cellID++
 		TOTALNBCELLS++
 	}
 
-	CHI2SCORE = CHI2SCORE[:len(CHI2SCORE) -1]
-
 	NAMECLUSTERMAPPING = make([]string, len(CLUSTERNAMEMAPPING))
+	CLUSTERSUM = make([]int, len(clustersum))
 
 	for cluster, clusterID = range CLUSTERNAMEMAPPING {
+		CLUSTERSUM[clusterID] = clustersum[clusterID]
 		NAMECLUSTERMAPPING[clusterID] = cluster
 	}
 }
+
 
 func scanBedFile() {
 	fmt.Printf("Scanning bed file: %s\n", BEDFILENAME)
@@ -592,24 +585,27 @@ func scanBedFile() {
 func processBufferArray(lineArray * [BUFFERSIZE]string, nbLines, threadnb int, waiting * sync.WaitGroup) {
 	var intervals []interval.IntInterface
 	var inter interval.IntInterface
-	var start, end, count int
+	var start, end, count, clusterID, cellID int
 	var split []string
 	var err error
 	var isInside bool
 	var intree *interval.IntTree
+	var mapping cellpeak
 
 	defer waiting.Done()
 
 	for i := 0; i < nbLines; i++ {
 		split = strings.Split(lineArray[i], "\t")
 
-		if _, isInside = CELLCLUSTERID[split[3]];!isInside {
+		if cellID, isInside = CELLMAPPING[split[3]];!isInside {
 			continue
 		}
 
 		if intree, isInside = utils.CHRINTERVALDICT[split[0]];!isInside {
 			continue
 		}
+
+		clusterID = CELLCLUSTERID[cellID]
 
 		start, err = strconv.Atoi(split[1])
 		utils.Check(err)
@@ -621,7 +617,8 @@ func processBufferArray(lineArray * [BUFFERSIZE]string, nbLines, threadnb int, w
 			utils.IntInterval{Start: start, End: end})
 
 		for _, inter = range intervals {
-			BUFFERRESARRAY[threadnb][count].cell = split[3]
+			BUFFERRESARRAY[threadnb][count].clusterID = clusterID
+			BUFFERRESARRAY[threadnb][count].cellID = cellID
 			BUFFERRESARRAY[threadnb][count].id = inter.ID()
 
 			count++
@@ -629,12 +626,27 @@ func processBufferArray(lineArray * [BUFFERSIZE]string, nbLines, threadnb int, w
 			if count > BUFFERSIZE {
 				MUTEX.Lock()
 				for i :=0; i<count;i++ {
-					BOOLSPARSEMATRIX[BUFFERRESARRAY[threadnb][i].id][BUFFERRESARRAY[threadnb][i].cell] = true
+					clusterID = BUFFERRESARRAY[threadnb][i].clusterID
+
+					mapping.cellID = BUFFERRESARRAY[threadnb][i].cellID
+					mapping.peakID = BUFFERRESARRAY[threadnb][count].id
+
+					if CELLPEAKMAPPING[mapping] {
+						continue
+					}
+
+					CELLPEAKMAPPING[mapping] = true
+
+					CHI2SCORE[clusterID][mapping.peakID].n11++
+
+					for clusterID = range CLUSTERSUM {
+						CHI2SCORE[clusterID][mapping.peakID].n21++
+					}
+
 				}
 				count = 0
 
 				MUTEX.Unlock()
-
 			}
 		}
 	}
@@ -642,7 +654,21 @@ func processBufferArray(lineArray * [BUFFERSIZE]string, nbLines, threadnb int, w
 	MUTEX.Lock()
 
 	for i :=0; i<count;i++ {
-		BOOLSPARSEMATRIX[BUFFERRESARRAY[threadnb][i].id][BUFFERRESARRAY[threadnb][i].cell] = true
+		clusterID = BUFFERRESARRAY[threadnb][i].clusterID
+
+		mapping.cellID = BUFFERRESARRAY[threadnb][i].cellID
+		mapping.peakID = BUFFERRESARRAY[threadnb][i].id
+
+		if CELLPEAKMAPPING[mapping] {
+			continue
+		}
+
+		CELLPEAKMAPPING[mapping] = true
+		CHI2SCORE[clusterID][mapping.peakID].n11++
+
+		for clusterID = range CLUSTERSUM {
+			CHI2SCORE[clusterID][mapping.peakID].n21++
+		}
 	}
 
 	MUTEX.Unlock()
@@ -661,18 +687,18 @@ func computeChi2Score() {
 
 	chunk := SMALLBUFFERSIZE
 
-	chi2Array := make([][]uintptr, THREADNB)
+	chi2Array := make([][]int, THREADNB)
 
 	for i:=0;i<THREADNB;i++ {
 		THREADSCHANNEL <- i
-		chi2Array[i] = make([]uintptr, chunk)
+		chi2Array[i] = make([]int, chunk)
 	}
 
 	threadnb := <- THREADSCHANNEL
 	var waiting sync.WaitGroup
 
-	for peakID = range BOOLSPARSEMATRIX {
-		chi2Array[threadnb][count] = uintptr(peakID)
+	for peakID = range PEAKMAPPING {
+		chi2Array[threadnb][count] = peakID
 
 		count++
 
@@ -695,13 +721,10 @@ func computeChi2Score() {
 }
 
 
-func chi2ScoreOneThread(chi2Array * []uintptr, waiting * sync.WaitGroup, max, threadnb int) {
-	var peakID uintptr
-	var cellID string
-	var isInside bool
+func chi2ScoreOneThread(chi2Array * []int, waiting * sync.WaitGroup, max, threadnb int) {
+	var peakID int
 	var pvalue float64
-	var value, peakTotal, clusterID int
-	var clusterDict map[int]int
+	var clusterID, clusterSum, peakTotal, value int
 
 	var results [SMALLBUFFERSIZE]peakFeature
 
@@ -710,52 +733,34 @@ func chi2ScoreOneThread(chi2Array * []uintptr, waiting * sync.WaitGroup, max, th
 	defer waiting.Done()
 
 	for _, peakID = range (*chi2Array)[:max] {
-		clusterDict = make(map[int]int)
 
-		peakTotal = 0
-
-	cellIDloop:
-		for cellID = range BOOLSPARSEMATRIX[peakID] {
-			if clusterID, isInside = CELLCLUSTERID[cellID];!isInside {
-				continue cellIDloop
-			}
-
-			clusterDict[clusterID]++
-			peakTotal++
-		}
-
-		for clusterID, value = range clusterDict {
-			results[count].id = peakID
+		for clusterID, clusterSum = range CLUSTERSUM {
+			results[count].id = uintptr(peakID)
 			results[count].cluster = clusterID
 
-			if CREATECONTINGENCY {
-				results[count].n11 = value
-				results[count].n12 = CLUSTERSUM[clusterID]
-				results[count].n21 = peakTotal - value
-				results[count].n22 = TOTALNBCELLS - CLUSTERSUM[clusterID]
-			} else {
+			value = CHI2SCORE[clusterID][peakID].n11
+			peakTotal = CHI2SCORE[clusterID][peakID].n21
 
 			_, pvalue = chiSquareTest(
-				value, CLUSTERSUM[clusterID],
-				peakTotal - value, TOTALNBCELLS - CLUSTERSUM[clusterID], true)
+				value, clusterSum,
+				peakTotal - value, TOTALNBCELLS - clusterSum, true)
 
-				results[count].pvalue = pvalue
-			}
+			results[count].pvalue = pvalue
 
 			count++
 
 			if count >= SMALLBUFFERSIZE {
 				MUTEX.Lock()
 				for i := 0; i < count;i++ {
-					CHI2SCORE[results[i].cluster] = append(CHI2SCORE[results[i].cluster], results[i])
+					CHI2SCORE[results[i].cluster][results[i].id].pvalue = results[i].pvalue
 				}
 
 				MUTEX.Unlock()
 				count = 0
 			}
 		}
-
 	}
+
 
 	MUTEX.Lock()
 	for i := 0; i < count;i++ {
@@ -918,8 +923,10 @@ func writeContingencyTable(filenameout string, header bool) {
 	var buffer bytes.Buffer
 	var peakl peak
 	var err error
-	var cluster string
-	var clusterID int
+	var cluster, n22 string
+	var clusterID, clusterSum int
+	var peakIndex int
+	var peaki peakFeature
 
 	writer := utils.ReturnWriter(filenameout)
 	defer utils.CloseFile(writer)
@@ -939,12 +946,16 @@ func writeContingencyTable(filenameout string, header bool) {
 
 	for clusterID = range CHI2SCORE {
 		cluster = NAMECLUSTERMAPPING[clusterID]
+		clusterSum = CLUSTERSUM[clusterID]
+		n22 = strconv.Itoa(TOTALNBCELLS - clusterSum)
 
-		for _, peaki := range CHI2SCORE[clusterID] {
-			if peaki.n11 == 0 {
+		for peakIndex, peaki = range CHI2SCORE[clusterID] {
+
+			if CHI2SCORE[clusterID][peakIndex].n11 == 0 {
 				continue
 			}
-			peakl = PEAKMAPPING[peaki.id]
+
+			peakl = PEAKMAPPING[uintptr(peakIndex)]
 			buffer.WriteString(peakl[0])
 			buffer.WriteRune('\t')
 			buffer.WriteString(peakl[1])
@@ -961,11 +972,11 @@ func writeContingencyTable(filenameout string, header bool) {
 			buffer.WriteRune('\t')
 			buffer.WriteString(strconv.Itoa(peaki.n11))
 			buffer.WriteRune('\t')
-			buffer.WriteString(strconv.Itoa(peaki.n12))
+			buffer.WriteString(strconv.Itoa(clusterSum))
 			buffer.WriteRune('\t')
-			buffer.WriteString(strconv.Itoa(peaki.n21))
+			buffer.WriteString(strconv.Itoa(peaki.n21 - peaki.n11))
 			buffer.WriteRune('\t')
-			buffer.WriteString(strconv.Itoa(peaki.n22))
+			buffer.WriteString(n22)
 			buffer.WriteRune('\n')
 		}
 
@@ -976,8 +987,4 @@ func writeContingencyTable(filenameout string, header bool) {
 
 	tDiff := time.Since(tStart)
 	fmt.Printf("File: %s written in: %f s \n", FILENAMEOUT, tDiff.Seconds())
-}
-
-func clearSparseMat() {
-	BOOLSPARSEMATRIX = make([]map[string]bool, 0)
 }
