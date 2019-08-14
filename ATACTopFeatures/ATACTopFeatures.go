@@ -446,7 +446,7 @@ func loadPvalueTable() {
 		}
 
 		peaki.id  = peakset[peakl]
-		peaki.cluster = clusterID
+		peaki.cluster = CLUSTERNAMEMAPPING[cluster]
 		pvalue, err = strconv.ParseFloat(split[len(split) - 1], 64)
 		utils.Check(err)
 		peaki.pvalue = pvalue
