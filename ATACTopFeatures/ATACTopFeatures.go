@@ -401,11 +401,11 @@ func loadPvalueTable() {
 	var isInside bool
 	var count uintptr
 	var pvalue float64
-	var clusterID int
+	var clusterID, clusterIndex int
 
 	tStart := time.Now()
 
-	CHI2SCORE = make([][]peakFeature, 1)
+	CHI2SCORE = make([][]peakFeature, 0)
 	CLUSTERNAMEMAPPING = make(map[string]int)
 
 	peakset := make(map[peak]uintptr)
@@ -435,8 +435,11 @@ func loadPvalueTable() {
 
 		if clusterID, isInside = CLUSTERNAMEMAPPING[cluster];!isInside {
 
-			CLUSTERNAMEMAPPING[cluster] = clusterID
-			clusterID++
+			CHI2SCORE = append(CHI2SCORE, make([]peakFeature, 0))
+			CLUSTERNAMEMAPPING[cluster] = clusterIndex
+			clusterID = clusterIndex
+			clusterIndex++
+			fmt.Printf("cluster %d %s\n", CLUSTERNAMEMAPPING[cluster], cluster)
 		}
 
 		if _, isInside = peakset[peakl];!isInside {
@@ -446,7 +449,7 @@ func loadPvalueTable() {
 		}
 
 		peaki.id  = peakset[peakl]
-		peaki.cluster = CLUSTERNAMEMAPPING[cluster]
+		peaki.cluster = clusterID
 		pvalue, err = strconv.ParseFloat(split[len(split) - 1], 64)
 		utils.Check(err)
 		peaki.pvalue = pvalue
