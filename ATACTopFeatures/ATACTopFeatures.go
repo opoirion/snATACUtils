@@ -439,7 +439,6 @@ func loadPvalueTable() {
 			CLUSTERNAMEMAPPING[cluster] = clusterIndex
 			clusterID = clusterIndex
 			clusterIndex++
-			fmt.Printf("cluster %d %s\n", CLUSTERNAMEMAPPING[cluster], cluster)
 		}
 
 		if _, isInside = peakset[peakl];!isInside {
