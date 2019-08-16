@@ -625,13 +625,13 @@ func processBufferArray(lineArray * [BUFFERSIZE]string, nbLines, threadnb int, w
 
 			count++
 
-			if count > BUFFERSIZE {
+			if count >= BUFFERSIZE {
 				MUTEX.Lock()
 				for i :=0; i<count;i++ {
 					clusterID = BUFFERRESARRAY[threadnb][i].clusterID
 
 					mapping.cellID = BUFFERRESARRAY[threadnb][i].cellID
-					mapping.peakID = BUFFERRESARRAY[threadnb][count].id
+					mapping.peakID = BUFFERRESARRAY[threadnb][i].id
 
 					if CELLPEAKMAPPING[mapping] {
 						continue
