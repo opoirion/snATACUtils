@@ -109,31 +109,51 @@ var SPLIT bool
 
 
 func main() {
+
+	flag.Usage = func() {
+		fmt.Fprintf(os.Stderr, `
+#################### Suite of functions dedicated to process BAM or BED files ########################
+
+-bed_to_bedgraph: Transform one (-bed) or multiple (use multiple -beds option) into bedgraph
+USAGE: BAMutils -bed_to_bedgraph -bed <fname> (-out <fname> -threads <int> -cellsID <fname> -split)
+
+-create_cell_index: Create cell index (cell -> read Counts) for a bam or bed file
+USAGE: BAMutils -create_cell_index -bed/bam <name> -out <output name> (-sort)
+
+-divide: Divide the bam/bed file according to barcode file list
+USAGE: BAMutils -divide -bed/bam <fname> (-cell_index <fname> -threads <int> -cellsID <fname>)
+
+-divide_parallel: Divide the bam file according to barcode file list using a parallel version
+USAGE: BAMutils -divide_parallel -cell_index <fname> -bed/bam <fname> (-threads <int>)
+
+-split: Split file per chromosomes
+USAGE: BAMutils -split -bed <bedfile> (-out <string> -cellsID <string>)
+
+-downsample: Downsample the number of reads from a a bed file (downsample = 1.0 is 100 perc. and downsample = 0.0 is 0 perc. of the reads)
+USAGE: BAMutils -downsample <float> -bed <bedfile> (-out <string> -cellsID <string>)
+
+
+`)
+		 flag.PrintDefaults()
+	}
+
 	flag.StringVar(&BEDFILENAME, "bed", "", "name of the bed file")
 	flag.Var(&BEDFILENAMES, "beds", "name of the bed files")
 	flag.BoolVar(&BEDTOBEDGRAPH, "bed_to_bedgraph", false,
-		`transform one (-bed) or multiple (use multiple -beds option) into bedgraph
-                USAGE: BAMutils -bed_to_bedgraph -bed <fname> (-out <fname> -threads <int> -cellsID <fname> -split)`)
+		`transform one (-bed) or multiple (use multiple -beds option) into bedgraph`)
 	flag.StringVar(&BAMFILENAME, "bam", "", "name of the bam file")
 	flag.StringVar(&FILENAMEOUT, "out", "", "name of the output file")
 	flag.StringVar(&NUCLEIFILE, "cellsID", "", "file with cell IDs")
 	flag.StringVar(&OUTPUTDIR, "output_dir", "", "output directory")
-	flag.BoolVar(&CREATECELLINDEX, "create_cell_index", false, `create cell index (cell -> read Counts) for a bam or bed file
-                USAGE: BAMutils -create_cell_index -bed/bam <name> -out <output name> (-sort)
-`)
+	flag.BoolVar(&CREATECELLINDEX, "create_cell_index", false, `create cell index (cell -> read Counts) for a bam or bed file`)
 	flag.StringVar(&NUCLEIINDEX, "cell_index", "", "nuclei <-> output files index")
-	flag.BoolVar(&DIVIDE, "divide", false, `divide the bam/bed file according to barcode file list
-                USAGE: BAMutils -divide -bed/bam <fname> (-cell_index <fname> -threads <int> -cellsID <fname>)
-`)
+	flag.BoolVar(&DIVIDE, "divide", false, `divide the bam/bed file according to barcode file list`)
 	flag.BoolVar(&DIVIDEPARALLEL, "divide_parallel", false,
-		`divide the bam file according to barcode file list using a parallel version
-                USAGE: BAMutils -divide_parallel -cell_index <fname> -bed/bam <fname> (-threads <int>)`)
+		`divide the bam file according to barcode file list using a parallel version`)
 	flag.BoolVar(&SORTFILE, "sort", false, "sort output file of cell index")
 	flag.BoolVar(&ADDRG, "add_rg", false, "add cell ID as RG group to bam file")
-	flag.BoolVar(&SPLIT, "split", false, `split file per chromosomes
-                USAGE: BAMutils -split -bed <bedfile> (-out <string> -cellsID <string>)`)
-	flag.Float64Var(&DOWNSAMPLE, "downsample", 1.0, `Downsample the number of reads from a a bed file (downsample = 1.0 is 100% and downsample = 0.0 is 0% of the reads)
-                USAGE: BAMutils -downsample <float> -bed <bedfile> (-out <string> -cellsID <string>)`)
+	flag.BoolVar(&SPLIT, "split", false, `split file per chromosomes`)
+	flag.Float64Var(&DOWNSAMPLE, "downsample", 1.0, `Downsample the number of reads from a a bed file (downsample = 1.0 is 100% and downsample = 0.0 is 0% of the reads)`)
 	flag.IntVar(&THREADNB, "threads", 1, "threads concurrency for reading bam file")
 	flag.IntVar(&BINSIZE, "binsize", 50, "bin size for bedgraph creation")
 	flag.StringVar(&DELIMITER, "delimiter", "\t", "delimiter used")

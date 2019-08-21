@@ -75,6 +75,29 @@ const BUFFERSIZE = 1000000
 
 
 func main() {
+	flag.Usage = func() {
+		fmt.Fprintf(os.Stderr, `
+#################### MODULE TO CREATE (cell x genomic region) SPARSE MATRIX ########################
+"""Boolean peak matrix: -coo """
+transform one (-bed) or multiple (use multiple -beds option) into a boolean sparse matrix in COO format
+                USAGE: ATACMatTools -coo -bed  <bedFile> -ygi <bedFile> -xgi <fname>
+
+"""Create a cell x bin matrix: -bin """
+transform one (-bed) or multiple (use multiple -beds option) into a bin (using float) sparse matrix in COO format. If ygi provided, reads intersecting these bin are ignored
+
+USAGE: ATACMatTools -bin -bed  <bedFile> (optionnal -ygi <bedFile> -xgi <fname>) -norm
+
+"""Count the number of reads in peaks for each cell: -count """
+USAGE: ATACMatTools -count  -xgi <fname> -ygi <bedfile> -bed <bedFile>
+
+"""Merge multiple matrices results into one output file: -merge """
+USAGE: ATACMatTools -coo -merge -xgi <fname> -in <matrixFile1> -in <matrixFile2> ...
+
+`)
+		 flag.PrintDefaults()
+	}
+
+
 	flag.IntVar(&BINSIZE, "bin_size", 5000, "Size of the bin for bin matrix")
 	flag.StringVar(&FILENAMEOUT, "out", "", "name of the output file")
 	flag.Var(&BEDFILENAME, "bed", "name of the bed file")
@@ -83,20 +106,14 @@ func main() {
 	flag.Var(&CELLSIDFNAME, "xgi", "name of the file containing the ordered list of cell IDs (one ID per line)")
 	flag.StringVar(&SEP, "delimiter", "\t", "delimiter used to write the output file (default \t)")
 	flag.BoolVar(&CREATECOOMATRIX, "coo", false,
-		`transform one (-bed) or multiple (use multiple -beds option) into a boolean sparse matrix in COO format
-                USAGE: ATACMatTools -coo -bed  <bedFile> -ygi <bedFile> -xgi <fname>`)
+		`transform one (-bed) or multiple (use multiple -beds option) into a boolean sparse matrix in COO format`)
 
 	flag.BoolVar(&NORM, "norm", false, "Normalize bin matrix per read depth for each cell")
 
 	flag.BoolVar(&CREATEBINMATRIX, "bin", false,
-		`transform one (-bed) or multiple (use multiple -beds option) into a bin (using float) sparse matrix in COO format. If ygi provided, reads intersecting these bin are ignored
-                USAGE: ATACMatTools -bin -bed  <bedFile> (optionnal -ygi <bedFile> -xgi <fname>) -norm`)
-	flag.BoolVar(&MERGEOUTPUTS, "merge", false,
-		`merge multiple matrices results into one output file
-                USAGE: ATACMatTools -coo -merge -xgi <fname> -in <matrixFile1> -in <matrixFile2> ...`)
-	flag.BoolVar(&READINPEAK, "count", false,
-		`Count the number of reads in peaks for each cell
-                USAGE: ATACMatTools -count  -xgi <fname> -ygi <bedfile> -bed <bedFile>`)
+		`transform one (-bed) or multiple (use multiple -beds option) into a bin (using float) sparse matrix in COO format.`)
+	flag.BoolVar(&MERGEOUTPUTS, "merge", false, `merge multiple matrices results into one output file`)
+	flag.BoolVar(&READINPEAK, "count", false, `Count the number of reads in peaks for each cell`)
 	flag.IntVar(&THREADNB, "threads", 1, "threads concurrency")
 	flag.Parse()
 

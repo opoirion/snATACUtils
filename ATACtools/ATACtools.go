@@ -70,23 +70,48 @@ var CICEROPROCESSING bool
 
 
 func main() {
+
+	flag.Usage = func() {
+		fmt.Fprintf(os.Stderr, `
+#################### Suite of functions dedicated to pre/post process files related to snATAC pipeline ########################
+
+-bed_to_cicero: format a bed to cicero input (ex: chr1\t1215523\t1216200\tcellID -> chr1_1215523_121620,tcellID,1)
+USAGE: ATACtools -bed_to_cicero -filename <bedfile> (-filenames <bedfile2> -filenames <bedfile3> ...  -ignoreerror)
+
+-create_ref_fastq: Create a ref FASTQ file using a reference barcode list
+USAGE: ATACtools -create_ref_bed -filename <fname> (-ref_barcode_list <fname> -tag <string>)
+
+-merge: Merge input log files together
+USAGE: ATACtools -merge -filenames <fname1> -filenames <fname2> -filenames <fname3> ...  (-sortfile -delimiter "<string>" -ignoreerror -ignore_sorting_category)
+
+-sortfile: Sort key -> values (i.e.: <key><SEP><value>) file
+USAGE: ATACtools -sortfile -filename <fname> (-delimiter <string> -ignoreerror -ignore_sorting_category)
+
+-write_compl: Write the barcode complement of a fastq files
+USAGE: ATACtools -write_compl <fastq_file> (-compl_strategy <"split_10_compl_second"/"split_10_compl_first"> -tag <string>)
+
+-scan: Scan a file and determine the number of line
+USAGE ATACtools -scan -filename <string> (-printlastline -printlastlines <int> -search_in_line <string> -gotoline <int>)
+
+-create_barcode_dict: Create a barcode key / value count file
+USAGE: ATACtools -create_barcode_list -filename <fname> (-sortfile -delimiter <string>)
+`)
+		 flag.PrintDefaults()
+	}
+
+
 	flag.StringVar(&FILENAME, "filename", "", "name of the file(s) multiple files should be into \"")
 	flag.Var(&FILENAMES, "filenames", "name of the files to use")
 	flag.IntVar(&MAX, "max_nb_lines", 0, "max number of lines")
 	flag.BoolVar(&CICEROPROCESSING, "bed_to_cicero", false,
-		`format a bed to cicero input (ex: chr1\t1215523\t1216200\tcellID -> chr1_1215523_121620,tcellID,1)
-            USAGE: ATACtools -bed_to_cicero -filename <bedfile> (-filenames <bedfile2> -filenames <bedfile3> ...  -ignoreerror)`)
-	flag.BoolVar(&CREATEREFFASTQ, "create_ref_fastq", false, `create a ref FASTQ file using a reference barcode list
-            USAGE: ATACtools -create_ref_bed -filename <fname> (-ref_barcode_list <fname> -tag <string>)`)
-	flag.BoolVar(&CREATEREFBEDFILE, "create_ref_bed", false, `create a ref bed file using a reference barcode list
-            USAGE: ATACtools -create_ref_fastq -filnames <fname1> -filnames <fname2> ... (-ref_barcode_list <fname> -tag <string>)`)
+		`format a bed to cicero input (ex: chr1\t1215523\t1216200\tcellID -> chr1_1215523_121620,tcellID,1)`)
+	flag.BoolVar(&CREATEREFFASTQ, "create_ref_fastq", false, `create a ref FASTQ file using a reference barcode list`)
+	flag.BoolVar(&CREATEREFBEDFILE, "create_ref_bed", false, `create a ref bed file using a reference barcode list`)
 	flag.StringVar(&REFBARCODELIST, "ref_barcode_list", "", "file containing the reference barcodes (one per line)")
-	flag.BoolVar(&MERGE, "merge", false, `merge input log files together
-            USAGE: ATACtools -merge -filenames <fname1> -filenames <fname2> -filenames <fname3> ...  (-sortfile -delimiter "<string>" -ignoreerror -ignore_sorting_category)`)
+	flag.BoolVar(&MERGE, "merge", false, `merge input log files together`)
 	flag.IntVar(&GOTOLINE, "gotoline", 0, "go to line")
 	flag.BoolVar(&SORTLOGS, "sortfile", false,
-		`sort files (<key><SEP><value> file
-            USAGE: ATACtools -sortfile -filename <fname> (-delimiter <string> -ignoreerror -ignore_sorting_category)`)
+		`sort files (<key><SEP><value> file`)
 	flag.BoolVar(&PRINTLASTLINE, "printlastline", false, "print last line")
 	flag.IntVar(&PRINTLASTLINES, "printlastlines", 0, "print last n lines")
 	flag.BoolVar(&IGNOREERROR, "ignoreerror", false, "ignore error and continue")
@@ -94,15 +119,12 @@ func main() {
 	flag.StringVar(&SEARCHLINE, "search_in_line", "", "search specific motifs in line")
 	flag.StringVar(&OUTFILE, "output", "", "file name of the output")
 	flag.StringVar(&OUTTAG, "output_tag", "reference", "particule to annotate the output file name")
-	flag.BoolVar(&WRITECOMPL, "write_compl", false, `write the barcode complement of a fastq files
-            USAGE: ATACtools -write_compl <fastq_file> (-compl_strategy <"split_10_compl_second"/"split_10_compl_first"> -tag <string>)`)
-	flag.BoolVar(&SCAN, "scan", false, `scan a file and determine the number of line
-            USAGE ATACtools -scan -filename <string> (-printlastline -printlastlines <int> -search_in_line <string> -gotoline <int>)`)
+	flag.BoolVar(&WRITECOMPL, "write_compl", false, `write the barcode complement of a fastq files`)
+	flag.BoolVar(&SCAN, "scan", false, `scan a file and determine the number of line`)
 	flag.StringVar(&SEP, "delimiter", "\t", "delimiter used to split and sort the log file (default \t)")
 	flag.StringVar(&TAG, "tag", "", "tag used when creating a reference fastq file to tag all the reads (default \"\")")
 	flag.StringVar(&COMPLSTRATEGY, "compl_strategy", "split_10_compl_second", `Strategy to use when writing the complement of a fastq file (default split_10_compl_second: split after 10 bases and complementary only second)`)
-	flag.BoolVar(&CREATEBARCODEDICT, "create_barcode_dict", false, `create a barcode key / value count file
-            USAGE: ATACtools -create_barcode_list -filename <fname> (-sortfile -delimiter <string>)`)
+	flag.BoolVar(&CREATEBARCODEDICT, "create_barcode_dict", false, `create a barcode key / value count file`)
 	flag.Parse()
 
 

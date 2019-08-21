@@ -1,6 +1,6 @@
 # Demultiplexer for scATAC-Seq
 
-This package aims to insert scATA-Seq index tags inside read ID. The barcoding and tagging strategy follows the protocol described in (Preissl et. al, 2018, doi:10.1038/s41593-018-0079-3). In Preissl et. al., Each barcode consists of four 8-bp long indexes (i5, i7, p5 and p7). The first 8 bp of Index1 correspond to the p7 barcode and the last 8 bp to the i7 barcode. The first 8 bp of Index2 correspond to the i5 barcode and the last 8 bp to the p5 barcode.
+This package aims to insert snATAC-Seq index tags inside read ID. The barcoding and tagging strategy follows the protocol described in (Preissl et. al, 2018, doi:10.1038/s41593-018-0079-3). In Preissl et. al., Each barcode consists of four 8-bp long indexes (i5, i7, p5 and p7). The first 8 bp of Index1 correspond to the p7 barcode and the last 8 bp to the i7 barcode. The first 8 bp of Index2 correspond to the i5 barcode and the last 8 bp to the p5 barcode.
 
 
 ## Usage
