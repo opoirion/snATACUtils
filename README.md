@@ -50,7 +50,7 @@ ATACTopFeatures -h
 BAMutils -h
 ```
 
-##ATACdemultiplex: Fastq files demultiplexification
+## ATACdemultiplex: Fastq files demultiplexification
 Tools to insert snATAC-Seq barcodes from multiple files inside read IDs to create new fastq files containing the cell ID barcode at the begining of each read. See [https://gitlab.com/Grouumf/ATACdemultiplex/tree/master/ATACdemultiplex](https://gitlab.com/Grouumf/ATACdemultiplex/tree/master/ATACdemultiplex)
 
 ## ATACCellTSS: Computing cell / cluster TSS
