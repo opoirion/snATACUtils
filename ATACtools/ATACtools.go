@@ -94,7 +94,9 @@ USAGE: ATACtools -write_compl <fastq_file> (-compl_strategy <"split_10_compl_sec
 USAGE ATACtools -scan -filename <string> (-printlastline -printlastlines <int> -search_in_line <string> -gotoline <int>)
 
 -create_barcode_dict: Create a barcode key / value count file
-USAGE: ATACtools -create_barcode_list -filename <fname> (-sortfile -delimiter <string>)
+USAGE: ATACtools -create_barcode_dict -filename <fname> (-sortfile -delimiter <string>)
+
+
 `)
 		 flag.PrintDefaults()
 	}

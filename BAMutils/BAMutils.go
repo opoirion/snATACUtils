@@ -200,6 +200,10 @@ USAGE: BAMutils -downsample <float> -bed <bedfile> (-out <string> -cellsID <stri
 		fmt.Printf("launching DivideBam...\n")
 		DivideBam()
 	case CREATECELLINDEX:
+		if FILENAMEOUT == "" {
+			log.Fatal("Error -out must be provided!")
+		}
+
 		switch{
 		case BAMFILENAME != "":
 			fmt.Printf("launching CreateCellIndexBam...\n")

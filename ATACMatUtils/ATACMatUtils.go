@@ -524,6 +524,10 @@ func updateBoolSparseMatrixOneThread(bufferLine * [BUFFERSIZE]string, bufferStar
 		intervals = utils.CHRINTERVALDICTTHREAD[threadnb][split[0]].Get(
 			utils.IntInterval{Start: start, End: end})
 
+		if len(intervals) == 0 {
+			continue
+		}
+
 		CELLMUTEXDICT[cellPos].Lock()
 
 		for _, int = range intervals {
