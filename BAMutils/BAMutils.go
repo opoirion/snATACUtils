@@ -1278,7 +1278,8 @@ func loadCellIDDict(fname string) {
 
 	for scanner.Scan() {
 		line := scanner.Text()
-
+		line = strings.Split(line, "\t")[0]
+		line = strings.Trim(line, " \t")
 		CELLIDDICT[line] = true
 	}
 }
