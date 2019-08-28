@@ -516,8 +516,8 @@ func loadCellClusterIDAndInitMaps() {
 		}
 
 		split = strings.Split(line, "\t")
-		cellName = split[0]
-		cluster = split[1]
+		cellName = strings.Trim(split[0], " \t\n")
+		cluster = strings.Trim(split[1], " \t\n")
 
 		if len(split) < 2 {
 			panic(fmt.Sprintf("line: %s cannot be splitted with <tab>\n", line))
