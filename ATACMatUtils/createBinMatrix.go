@@ -342,7 +342,7 @@ func updateBinSparseMatrixOneThread(bufferLine * [BUFFERSIZE]string, bufferStart
 			continue
 		}
 
-		index = (start) / 5000
+		index = (start) / BINSIZE
 
 		bin.chr = split[0]
 		bin.index = index

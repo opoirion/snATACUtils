@@ -80,7 +80,7 @@ func main() {
 #################### MODULE TO CREATE (cell x genomic region) SPARSE MATRIX ########################
 """Boolean peak matrix: -coo """
 transform one (-bed) or multiple (use multiple -beds option) into a boolean sparse matrix in COO format
-                USAGE: ATACMatTools -coo -bed  <bedFile> -ygi <bedFile> -xgi <fname>
+                USAGE: ATACMatTools -coo -bed  <bedFile> -ygi <bedFile> -xgi <fname> (-threads <int> -out <fname>)
 
 """Create a cell x bin matrix: -bin """
 transform one (-bed) or multiple (use multiple -beds option) into a bin (using float) sparse matrix in COO format. If ygi provided, reads intersecting these bin are ignored
