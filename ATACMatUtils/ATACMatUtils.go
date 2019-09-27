@@ -31,8 +31,11 @@ var PEAKFILE utils.Filename
 /*CELLSIDFNAME file name file with ordered cell IDs (one ID per line) */
 var CELLSIDFNAME utils.Filename
 
-/*CREATECOOMATRIX create COO sparse matrix */
+/*CREATECOOMATRIX create COO bool sparse matrix */
 var CREATECOOMATRIX bool
+
+/*USECOUNT create COO count sparse matrix */
+var USECOUNT bool
 
 /*CREATEBINMATRIX create BIN sparse matrix */
 var CREATEBINMATRIX bool
@@ -61,8 +64,8 @@ var MUTEX *sync.Mutex
 /*CELLMUTEXDICT feature pos<->sync.Mutex */
 var CELLMUTEXDICT map[uint]*sync.Mutex
 
-/*BOOLSPARSEMATRIX cell x feature sparse matrix  */
-var BOOLSPARSEMATRIX map[uint]map[uint]bool
+/*INTSPARSEMATRIX cell x feature sparse matrix  */
+var INTSPARSEMATRIX map[uint]map[uint]int
 
 /*FILENAMEOUT  output file name output */
 var FILENAMEOUT string
@@ -80,7 +83,7 @@ func main() {
 #################### MODULE TO CREATE (cell x genomic region) SPARSE MATRIX ########################
 """Boolean peak matrix: -coo """
 transform one (-bed) or multiple (use multiple -beds option) into a boolean sparse matrix in COO format
-                USAGE: ATACMatTools -coo -bed  <bedFile> -ygi <bedFile> -xgi <fname> (-threads <int> -out <fname>)
+                USAGE: ATACMatTools -coo -bed  <bedFile> -ygi <bedFile> -xgi <fname> (-threads <int> -out <fname> -use_count)
 
 """Create a cell x bin matrix: -bin """
 transform one (-bed) or multiple (use multiple -beds option) into a bin (using float) sparse matrix in COO format. If ygi provided, reads intersecting these bin are ignored
@@ -105,6 +108,8 @@ USAGE: ATACMatTools -coo -merge -xgi <fname> -in <matrixFile1> -in <matrixFile2>
 	flag.Var(&PEAKFILE, "ygi", "name of the bed file containing the region of interest( i.e. PEAK )")
 	flag.Var(&CELLSIDFNAME, "xgi", "name of the file containing the ordered list of cell IDs (one ID per line)")
 	flag.StringVar(&SEP, "delimiter", "\t", "delimiter used to write the output file (default \t)")
+	flag.BoolVar(&USECOUNT, "use_count", false,
+		`Use read count instead of boolean value`)
 	flag.BoolVar(&CREATECOOMATRIX, "coo", false,
 		`transform one (-bed) or multiple (use multiple -beds option) into a boolean sparse matrix in COO format`)
 
@@ -185,10 +190,10 @@ func computeReadsInPeaksForCell(){
 
 
 func initBoolSparseMatrix() {
-	BOOLSPARSEMATRIX = make(map[uint]map[uint]bool)
+	INTSPARSEMATRIX = make(map[uint]map[uint]int)
 
 	for _, pos := range CELLIDDICT {
-		BOOLSPARSEMATRIX[pos] = make(map[uint]bool)
+		INTSPARSEMATRIX[pos] = make(map[uint]int)
 	}
 }
 
@@ -237,13 +242,13 @@ func writeBoolMatrixToFile(outfile string) {
 
 	defer utils.CloseFile(writer)
 
-	for cellPos = range BOOLSPARSEMATRIX {
-		for featPos = range BOOLSPARSEMATRIX[cellPos] {
+	for cellPos = range INTSPARSEMATRIX {
+		for featPos = range INTSPARSEMATRIX[cellPos] {
 			buffer.WriteString(strconv.Itoa(int(cellPos)))
 			buffer.WriteString(SEP)
 			buffer.WriteString(strconv.Itoa(int(featPos)))
 			buffer.WriteString(SEP)
-			buffer.WriteRune('1')
+			buffer.WriteString(strconv.Itoa(INTSPARSEMATRIX[cellPos][featPos]))
 			buffer.WriteRune('\n')
 
 			writer.Write(buffer.Bytes())
@@ -296,7 +301,7 @@ func mergeCOOFile(filename string) {
 	var f *os.File
 	var err error
 	var split []string
-	var start, stop int
+	var start, stop, value int
 
 	scanner, f = utils.ReturnReader(filename, 0)
 
@@ -308,8 +313,16 @@ func mergeCOOFile(filename string) {
 		utils.Check(err)
 		stop, err = strconv.Atoi(split[1])
 		utils.Check(err)
+		value, err = strconv.Atoi(split[2])
+		utils.Check(err)
 
-		BOOLSPARSEMATRIX[uint(start)][uint(stop)] = true
+		switch USECOUNT {
+		case true:
+			INTSPARSEMATRIX[uint(start)][uint(stop)] += value
+		default:
+			INTSPARSEMATRIX[uint(start)][uint(stop)] = 1
+		}
+
 	}
 }
 
@@ -532,7 +545,13 @@ func updateBoolSparseMatrixOneThread(bufferLine * [BUFFERSIZE]string, bufferStar
 
 		for _, int = range intervals {
 			featPos = utils.PEAKIDDICT[utils.INTERVALMAPPING[int.ID()]]
-			BOOLSPARSEMATRIX[cellPos][featPos] = true
+
+			switch USECOUNT {
+			case true:
+				INTSPARSEMATRIX[cellPos][featPos]++
+			default:
+				INTSPARSEMATRIX[cellPos][featPos] = 1
+			}
 		}
 
 		CELLMUTEXDICT[cellPos].Unlock()
@@ -580,7 +599,12 @@ func createBoolSparseMatrixOneFile(bedfilename utils.Filename) {
 		for _, interval = range intervals {
 			featPos = utils.PEAKIDDICT[utils.INTERVALMAPPING[interval.ID()]]
 
-			BOOLSPARSEMATRIX[cellPos][featPos] = true
+			switch USECOUNT {
+			case true:
+				INTSPARSEMATRIX[cellPos][featPos]++
+			default:
+				INTSPARSEMATRIX[cellPos][featPos] = 1
+			}
 		}
 	}
 }
@@ -592,13 +616,15 @@ func loadCellIDDict(fname utils.Filename) {
 	scanner, file := fname.ReturnReader(0)
 	defer utils.CloseFile(file)
 	var count uint
+	var cellID string
 
 	CELLIDDICT = make(map[string]uint)
 	count = 0
 
 	for scanner.Scan() {
 		line := scanner.Text()
-		CELLIDDICT[line] = count
+		cellID = strings.Split(line, "\t")[0]
+		CELLIDDICT[cellID] = count
 		count++
 	}
 }

@@ -1,0 +1,121 @@
+#!/usr/bin/env python
+
+import numpy as np
+
+from os.path import isfile
+
+from argparse import ArgumentParser
+
+from scipy.sparse import coo_matrix
+
+from scipy.io import mmwrite
+
+from scipy.sparse import save_npz
+
+
+
+def boolean_string(s):
+    """
+    """
+    if s not in {'False', 'True'}:
+        raise ValueError('Not a valid boolean string')
+    return s == 'True'
+
+
+ARGPARSER = ArgumentParser(description='Transformation of COO matrix to npz', prefix_chars='-')
+
+
+ARGPARSER.add_argument('-coo_file',
+                       required=True,
+                       help='COO file created with ATACMatUtils',
+                       type=str,
+                       default='',
+                       metavar='file')
+
+ARGPARSER.add_argument('-nb_cells',
+                       required=False,
+                       help='number of cells. If not provided, inferred from the loaded file',
+                       type=str,
+                       default='',
+                       metavar='file')
+
+ARGPARSER.add_argument('-nb_features',
+                       required=False,
+                       help='number of features. If not provided, inferred from the loaded file',
+                       type=str,
+                       default='',
+                       metavar='file')
+
+ARGPARSER.add_argument('-out',
+                       required=False,
+                       help='Output file',
+                       type=str,
+                       default='',
+                       metavar='str')
+
+ARGPARSER.add_argument('-save_as_mtx',
+                       required=False,
+                       help='Save matrix as mtx format',
+                       type=boolean_string,
+                       default='False',
+                       metavar='bool')
+
+ARGPARSER.add_argument('-use_transpose',
+                       required=False,
+                       help='Transpose the matrix',
+                       type=boolean_string,
+                       default='False',
+                       metavar='bool')
+
+
+
+ARGS = ARGPARSER.parse_args()
+
+assert(isfile(ARGS.coo_file))
+
+
+
+
+def main():
+    """
+    """
+    matrix = np.fromfile(ARGS.coo_file, sep="\t").astype("int")
+    matrix = matrix.reshape((matrix.shape[0] / 3, 3)).T
+
+
+    if ARGS.save_as_mtx:
+        ext = "mtx"
+    else:
+        ext = "npz"
+
+    if ARGS.out:
+        out = ARGS.out
+    else:
+        out = '{0}.{1}'.format(ARGS.coo_file.rsplit('.', 1)[0], ext)
+
+    if ARGS.nb_cells:
+        nb_cells = ARGS.nb_cells
+    else:
+        nb_cells = matrix.shape[0]
+
+    if ARGS.nb_features:
+        nb_features = ARGS.nb_features
+    else:
+        nb_features = matrix.shape[1]
+
+    matrix = coo_matrix(
+        (matrix[2], (matrix[0], matrix[1])), shape=(nb_cells, nb_features))
+
+    if ARGS.use_transpose:
+        matrix = matrix.T
+
+    if ARGS.save_as_mtx:
+        mmwrite(out, matrix)
+    else:
+        save_npz(out, matrix)
+
+    print("File: {0} saved with matrix dim:{1}!".format(out, matrix.shape))
+
+
+if __name__ == '__main__':
+    main()
