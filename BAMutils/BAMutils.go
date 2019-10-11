@@ -467,6 +467,10 @@ func CreateCellIndexBed() {
 	}
 
 	for readID, count = range(readIndex) {
+		if readID == "" {
+			continue
+		}
+
 		buffer.WriteString(readID)
 		buffer.WriteString(DELIMITER)
 		buffer.WriteString(strconv.Itoa(count))

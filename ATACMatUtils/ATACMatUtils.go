@@ -268,6 +268,9 @@ func writeCellCounter(outfile string) {
 	defer utils.CloseFile(writer)
 
 	for cellID = range CELLIDCOUNT {
+		if cellID == "" {
+			continue
+		}
 		buffer.WriteString(cellID)
 		buffer.WriteString(SEP)
 		buffer.WriteString(strconv.Itoa(int(CELLIDCOUNT[cellID])))
