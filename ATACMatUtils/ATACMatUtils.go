@@ -73,6 +73,9 @@ var FILENAMEOUT string
 /*THREADNB number of threads for reading the bam file */
 var THREADNB int
 
+/*YGIOUT number of threads for reading the bam file */
+var YGIOUT string
+
 /*BUFFERSIZE buffer size for multithreading */
 const BUFFERSIZE = 1000000
 
@@ -83,12 +86,12 @@ func main() {
 #################### MODULE TO CREATE (cell x genomic region) SPARSE MATRIX ########################
 """Boolean peak matrix: -coo """
 transform one (-bed) or multiple (use multiple -beds option) into a boolean sparse matrix in COO format
-                USAGE: ATACMatTools -coo -bed  <bedFile> -ygi <bedFile> -xgi <fname> (-threads <int> -out <fname> -use_count)
+USAGE: ATACMatTools -coo -bed  <bedFile> -ygi <bedFile> -xgi <fname> (-threads <int> -out <fname> -use_count)
 
 """Create a cell x bin matrix: -bin """
 transform one (-bed) or multiple (use multiple -beds option) into a bin (using float) sparse matrix in COO format. If ygi provided, reads intersecting these bin are ignored
 
-USAGE: ATACMatTools -bin -bed  <bedFile> (optionnal -ygi <bedFile> -xgi <fname>) -norm
+USAGE: ATACMatTools -bin -bed  <bedFile> (optional -ygi <bedFile> -xgi <fname> -bin_size <int> -ygi_out <string>) -norm
 
 """Count the number of reads in peaks for each cell: -count """
 USAGE: ATACMatTools -count  -xgi <fname> -ygi <bedfile> -bed <bedFile>
@@ -108,6 +111,7 @@ USAGE: ATACMatTools -coo -merge -xgi <fname> -in <matrixFile1> -in <matrixFile2>
 	flag.Var(&PEAKFILE, "ygi", "name of the bed file containing the region of interest( i.e. PEAK )")
 	flag.Var(&CELLSIDFNAME, "xgi", "name of the file containing the ordered list of cell IDs (one ID per line)")
 	flag.StringVar(&SEP, "delimiter", "\t", "delimiter used to write the output file (default \t)")
+	flag.StringVar(&YGIOUT, "ygi_out", "", "Write the output bin bed file in this specific file")
 	flag.BoolVar(&USECOUNT, "use_count", false,
 		`Use read count instead of boolean value`)
 	flag.BoolVar(&CREATECOOMATRIX, "coo", false,

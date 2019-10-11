@@ -96,7 +96,7 @@ func scanBedFileForBinMat() {
 		pos, err = strconv.Atoi(split[1])
 		utils.Check(err)
 
-		index = (pos) / 5000
+		index = (pos) / BINSIZE
 
 		bin.chr = split[0]
 		bin.index = index
@@ -125,18 +125,23 @@ func scanBedFileForBinMat() {
 func writeBinList(binList []binPos) {
 	var bin binPos
 	var index int
-	ext := path.Ext(CELLSIDFNAME.String())
+	var outfname string
+
+	if YGIOUT != "" {
+		outfname = YGIOUT
+	} else {
+		ext := path.Ext(CELLSIDFNAME.String())
+		outfname = fmt.Sprintf("%s.ygi",
+		CELLSIDFNAME[:len(CELLSIDFNAME) - len(ext)])
+	}
 
 	var buffer bytes.Buffer
-
-	outfname := fmt.Sprintf("%s.ygi",
-		CELLSIDFNAME[:len(CELLSIDFNAME) - len(ext)])
 
 	writer := utils.ReturnWriter(outfname)
 	defer utils.CloseFile(writer)
 
 	for _, bin = range binList {
-		index = int(bin.index) * bin.index
+		index = int(bin.index) * BINSIZE
 
 		buffer.WriteString(bin.chr)
 		buffer.WriteRune('\t')
