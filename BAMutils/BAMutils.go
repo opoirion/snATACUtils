@@ -107,6 +107,15 @@ var DELIMITER string
 /*SPLIT split file per chromosomes */
 var SPLIT bool
 
+/*REFCHR reference chromosomes for bedgpraph */
+var REFCHR map[string]bool
+
+/*REFCHRFNAME reference chromosomes for bedgpraph */
+var REFCHRFNAME utils.Filename
+
+/*NORMBEDGPRAH norm bedpgraph value */
+var NORMBEDGPRAH bool
+
 
 func main() {
 
@@ -115,7 +124,7 @@ func main() {
 #################### Suite of functions dedicated to process BAM or BED files ########################
 
 -bed_to_bedgraph: Transform one (-bed) or multiple (use multiple -beds option) into bedgraph
-USAGE: BAMutils -bed_to_bedgraph -bed <fname> (-out <fname> -threads <int> -cellsID <fname> -split)
+USAGE: BAMutils -bed_to_bedgraph -bed <fname> (-out <fname> -threads <int> -cellsID <fname> -split -binsize <int> -refchr <filename>)
 
 -create_cell_index: Create cell index (cell -> read Counts) for a bam or bed file
 USAGE: BAMutils -create_cell_index -bed/bam <name> -out <output name> (-sort)
@@ -142,9 +151,11 @@ USAGE: BAMutils -downsample <float> -bed <bedfile> (-out <string> -cellsID <stri
 	flag.BoolVar(&BEDTOBEDGRAPH, "bed_to_bedgraph", false,
 		`transform one (-bed) or multiple (use multiple -beds option) into bedgraph`)
 	flag.StringVar(&BAMFILENAME, "bam", "", "name of the bam file")
+	flag.Var(&REFCHRFNAME, "refchr", "reference chromosome list to use for the bedgraph creation")
 	flag.StringVar(&FILENAMEOUT, "out", "", "name of the output file")
 	flag.StringVar(&NUCLEIFILE, "cellsID", "", "file with cell IDs")
 	flag.StringVar(&OUTPUTDIR, "output_dir", "", "output directory")
+	flag.BoolVar(&NORMBEDGPRAH, "norm", true, `norm bedgpraph values`)
 	flag.BoolVar(&CREATECELLINDEX, "create_cell_index", false, `create cell index (cell -> read Counts) for a bam or bed file`)
 	flag.StringVar(&NUCLEIINDEX, "cell_index", "", "nuclei <-> output files index")
 	flag.BoolVar(&DIVIDE, "divide", false, `divide the bam/bed file according to barcode file list`)
@@ -189,7 +200,7 @@ USAGE: BAMutils -downsample <float> -bed <bedfile> (-out <string> -cellsID <stri
 			DivideMultipleBamFile()
 		}
 
-		for filename, _ := range(OUTFILENAMELIST) {
+		for filename := range(OUTFILENAMELIST) {
 			fmt.Printf("output bam file: %s written\n", filename)
 		}
 
@@ -232,8 +243,29 @@ USAGE: BAMutils -downsample <float> -bed <bedfile> (-out <string> -cellsID <stri
 		downSampleBedFile()
 	}
 
-	tDiff := time.Now().Sub(tStart)
+	tDiff := time.Since(tStart)
 	fmt.Printf("done in time: %f s \n", tDiff.Seconds())
+}
+
+func loadRefChrMap() {
+	var line string
+	var lineSplit []string
+
+	if REFCHRFNAME == "" {
+		return
+	}
+
+	REFCHR = make(map[string]bool)
+
+	reader, file := REFCHRFNAME.ReturnReader(0)
+	defer utils.CloseFile(file)
+
+	for reader.Scan() {
+		line = reader.Text()
+		line = strings.ReplaceAll(line, " ", "\t")
+		lineSplit = strings.Split(line, "\t")
+		REFCHR[lineSplit[0][3:]] = true
+	}
 }
 
 func downSampleBedFile() {
@@ -269,10 +301,10 @@ func downSampleBedFile() {
 	}
 
 	bedReader, file := utils.ReturnReader(BEDFILENAME, 0)
-	defer file.Close()
+	defer utils.CloseFile(file)
 
 	writer := utils.ReturnWriter(FILENAMEOUT)
-	defer writer.Close()
+	defer utils.CloseFile(writer)
 
 	for bedReader.Scan() {
 
@@ -344,7 +376,7 @@ func SplitBedPerChr() {
 
 	bedReader, file := utils.ReturnReader(BEDFILENAME, 0)
 
-	defer file.Close()
+	defer utils.CloseFile(file)
 
 	resFileDict := make(map[string]io.WriteCloser)
 	resNameDict := make(map[string]string)
@@ -367,7 +399,7 @@ func SplitBedPerChr() {
 				FILENAMEOUT[:len(FILENAMEOUT) - len(ext)], chrID, ext)
 			resNameDict[chrID] = bedFname
 			resFileDict[chrID] = utils.ReturnWriter(bedFname)
-			defer resFileDict[chrID].Close()
+			defer utils.CloseFile(resFileDict[chrID])
 		}
 
 		buffer.Write(line)
@@ -393,29 +425,30 @@ func CreateCellIndexBam() {
 
 	f, err := os.Open(BAMFILENAME)
 	check(err)
-	defer f.Close()
+	defer utils.CloseFile(f)
 	_, err = bgzf.HasEOF(f)
 	check(err)
 
 	fOut, err := os.Create(FILENAMEOUT)
 
 	check(err)
-	defer fOut.Close()
+	defer utils.CloseFile(fOut)
 
 	bamReader, err := bam.NewReader(f, THREADNB)
-	defer bamReader.Close()
+	defer utils.CloseFile(bamReader)
 	check(err)
 
 	for {
 		record, err = bamReader.Read()
 
+	errLoop:
 		switch err {
 		case io.EOF:
-			break
+			break errLoop
 		case nil:
 		default:
 			fmt.Printf("ERROR: %s\n",err)
-			break
+			break errLoop
 		}
 
 		if record == nil {
@@ -454,10 +487,10 @@ func CreateCellIndexBed() {
 	fOut, err := os.Create(FILENAMEOUT)
 
 	check(err)
-	defer fOut.Close()
+	defer utils.CloseFile(fOut)
 
 	bedReader, file := utils.ReturnReader(BEDFILENAME, 0)
-	defer file.Close()
+	defer utils.CloseFile(file)
 
 	for bedReader.Scan(){
 		line = bedReader.Text()
@@ -492,7 +525,7 @@ func InsertRGTagToBamFile() {
 
 	f, err := os.Open(BAMFILENAME)
 	check(err)
-	defer f.Close()
+	defer utils.CloseFile(f)
 	_, err = bgzf.HasEOF(f)
 	check(err)
 
@@ -503,16 +536,16 @@ func InsertRGTagToBamFile() {
 	fOut, err := os.Create(filenameout)
 
 	check(err)
-	defer fOut.Close()
+	defer utils.CloseFile(fOut)
 
 	bamReader, err := bam.NewReader(f, THREADNB)
 	check(err)
-	defer bamReader.Close()
+	defer utils.CloseFile(bamReader)
 
 	header := bamReader.Header()
 	bamWriter, err := bam.NewWriter(fOut, header, THREADNB)
 	check(err)
-	defer bamWriter.Close()
+	defer utils.CloseFile(bamWriter)
 
 	loop:
 	for {
@@ -549,18 +582,18 @@ func DivideMultipleBedFileParallel() {
 	loadCellIDIndexAndBEDWriter(NUCLEIINDEX)
 
 	for _, file := range(WRITERDICT) {
-		defer file.Close()
+		defer utils.CloseFile(file)
 	}
 
 	for _, file := range(BEDWRITERDICT) {
-		defer file.Close()
+		defer utils.CloseFile(file)
 	}
 
 	index:= 0
 
 	INPUTFNAMEINDEX = make(map[string]int)
 
-	for filename, _ := range(OUTFILENAMELIST) {
+	for filename := range(OUTFILENAMELIST) {
 		INPUTFNAMEINDEX[filename] = index
 		index++
 	}
@@ -579,31 +612,31 @@ func DivideMultipleBedFileParallel() {
 func DivideMultipleBamFileParallel() {
 	f, err := os.Open(BAMFILENAME)
 	check(err)
-	defer f.Close()
+	defer utils.CloseFile(f)
 	_, err = bgzf.HasEOF(f)
 	check(err)
 
 	bamReader, err := bam.NewReader(f, THREADNB)
 	check(err)
-	defer bamReader.Close()
+	defer utils.CloseFile(bamReader)
 
 	header := bamReader.Header()
 	loadCellIDIndexAndBAMWriter(NUCLEIINDEX, header)
 	check(err)
 
 	for _, file := range(WRITERDICT) {
-		defer file.Close()
+		defer utils.CloseFile(file)
 	}
 
 	for _, file := range(BAMWRITERDICT) {
-		defer file.Close()
+		defer utils.CloseFile(file)
 	}
 
 	index:= 0
 
 	INPUTFNAMEINDEX = make(map[string]int)
 
-	for filename, _ := range(OUTFILENAMELIST) {
+	for filename := range(OUTFILENAMELIST) {
 		INPUTFNAMEINDEX[filename] = index
 		index++
 	}
@@ -629,13 +662,13 @@ func divideMultipleBamFileOneThread(threadID int, waiting *sync.WaitGroup){
 
 	f, err := os.Open(BAMFILENAME)
 	check(err)
-	defer f.Close()
+	defer utils.CloseFile(f)
 	_, err = bgzf.HasEOF(f)
 	check(err)
 
 	bamReader, err := bam.NewReader(f, THREADNB)
 	check(err)
-	defer bamReader.Close()
+	defer utils.CloseFile(bamReader)
 
 	count := 0
 	chunkSize := len(CELLIDDICTMULTIPLE) / (THREADNB - 1)
@@ -690,7 +723,7 @@ func divideMultipleBedFileOneThread(threadID int, waiting *sync.WaitGroup){
 	var buffer bytes.Buffer
 
 	bedReader, file := utils.ReturnReader(BEDFILENAME, 0)
-	defer file.Close()
+	defer utils.CloseFile(file)
 
 	count := 0
 	chunkSize := len(CELLIDDICTMULTIPLE) / (THREADNB - 1)
@@ -728,16 +761,16 @@ func DivideMultipleBedFile() {
 	var buffer bytes.Buffer
 
 	bedReader, file := utils.ReturnReader(BEDFILENAME, 0)
-	defer file.Close()
+	defer utils.CloseFile(file)
 
 	loadCellIDIndexAndBEDWriter(NUCLEIINDEX)
 
 	for _, file := range(WRITERDICT) {
-		defer file.Close()
+		defer utils.CloseFile(file)
 	}
 
 	for _, file := range(BEDWRITERDICT) {
-		defer file.Close()
+		defer utils.CloseFile(file)
 	}
 
 
@@ -773,23 +806,23 @@ func DivideMultipleBamFile() {
 
 	f, err := os.Open(BAMFILENAME)
 	check(err)
-	defer f.Close()
+	defer utils.CloseFile(f)
 	_, err = bgzf.HasEOF(f)
 	check(err)
 
 	bamReader, err := bam.NewReader(f, THREADNB)
-	defer bamReader.Close()
+	defer utils.CloseFile(bamReader)
 	check(err)
 
 	header := bamReader.Header()
 	loadCellIDIndexAndBAMWriter(NUCLEIINDEX, header)
 
 	for _, file := range(WRITERDICT) {
-		defer file.Close()
+		defer utils.CloseFile(file)
 	}
 
 	for _, file := range(BAMWRITERDICT) {
-		defer file.Close()
+		defer utils.CloseFile(file)
 	}
 
 	count := 0
@@ -829,7 +862,7 @@ func DivideMultipleBamFile() {
 	}
 }
 
-/*DivideBam divide a bed file */
+/*DivideBed divide a bed file */
 func DivideBed() {
 	var readID string
 	var line string
@@ -848,8 +881,8 @@ func DivideBed() {
 	bedReader, file := utils.ReturnReader(BEDFILENAME, 0)
 	bedWriter := utils.ReturnWriter(FILENAMEOUT)
 
-	defer file.Close()
-	defer bedWriter.Close()
+	defer utils.CloseFile(file)
+	defer utils.CloseFile(bedWriter)
 
 	count := 0
 
@@ -918,7 +951,7 @@ func BedToBedGraphDictMultipleFile(){
 
 	waiting.Wait()
 
-	tDiff := time.Now().Sub(tStart)
+	tDiff := time.Since(tStart)
 	fmt.Printf("iterating through bed files done in: %f sec \n", tDiff.Seconds())
 
 	collectAndProcessMultipleBedGraphDict(FILENAMEOUT)
@@ -933,7 +966,9 @@ func collectAndProcessMultipleBedGraphDict(filenameout string) {
 	fmt.Printf("sumf of number READS: %d\n", totNbReads)
 
 	var waitingSort sync.WaitGroup
-	waitingSort.Add(len(chroHashDict))
+	var scale float64
+
+	loadRefChrMap()
 
 	if filenameout == "" {
 		filenameout = BEDFILENAMES[0]
@@ -945,7 +980,12 @@ func collectAndProcessMultipleBedGraphDict(filenameout string) {
 		filenameout = filenameout[0:len(filenameout) - len(ext)]
 	}
 
-	scale := (float64(totNbReads) / 1e6) * (float64(BINSIZE) / 1e3)
+	if NORMBEDGPRAH {
+		scale = (float64(totNbReads) / 1e6) * (float64(BINSIZE) / 1e3)
+
+	} else {
+		scale = 1.0
+	}
 
 	tStart := time.Now()
 
@@ -959,17 +999,24 @@ func collectAndProcessMultipleBedGraphDict(filenameout string) {
 	}
 	sort.Strings(chroList)
 
+	filterChro := len(REFCHR) > 0
+
 	for _, chro := range chroList {
+		if filterChro && !REFCHR[chro] {
+			continue
+		}
+
 		guard <- struct{}{}
 		chroID := chroHashDict[chro]
 		bedFname := fmt.Sprintf("%s.chr%s.bedgraph", filenameout, chro)
 		fileList = append(fileList, bedFname)
+		waitingSort.Add(1)
 		go writeIndividualChrBedGraph(bedFname, chroID, chro, scale, &waitingSort)
 		<-guard
 	}
 
 	waitingSort.Wait()
-	tDiff := time.Now().Sub(tStart)
+	tDiff := time.Since(tStart)
 	fmt.Printf(" writing done in: %f sec \n", tDiff.Seconds())
 
 	if !SPLIT {
@@ -997,7 +1044,7 @@ func writeIndividualChrBedGraph(bedFname string, chroID int, chro string,
 
 	fWrite, err := os.Create(bedFname)
 	check(err)
-	defer fWrite.Close()
+	defer utils.CloseFile(fWrite)
 
 	bedgraphDict := extractIntDictFromChan(BEDTOBEDGRAPHCHAN[chroID])
 	var buffer bytes.Buffer
@@ -1116,7 +1163,7 @@ func extractIntDictFromChan(channel chan map[int]int) (map[int]int) {
 func bedToBedGraphDictOneThread(bed string, waiting *sync.WaitGroup, checkCellIndex bool){
 	defer waiting.Done()
    	bedReader, file := utils.ReturnReader(bed, 0)
-	defer file.Close()
+	defer utils.CloseFile(file)
 
 	var split []string
 	var chroStr string
@@ -1195,7 +1242,7 @@ func bedToBedGraphDictOneThread(bed string, waiting *sync.WaitGroup, checkCellIn
 			}
 
 			if key < 50 {
-				chrDict[fmt.Sprintf(strconv.Itoa(key))] = key
+				chrDict[strconv.Itoa(key)] = key
 			}
 
 			BEDTOBEDGRAPHCHAN[key] <- bedtobedgraphdict[key]
@@ -1222,22 +1269,22 @@ func DivideBam() {
 
 	f, err := os.Open(BAMFILENAME)
 	check(err)
-	defer f.Close()
+	defer utils.CloseFile(f)
 	_, err = bgzf.HasEOF(f)
 	check(err)
 
 	fWrite, err := os.Create(FILENAMEOUT)
 	check(err)
-	defer fWrite.Close()
+	defer utils.CloseFile(fWrite)
 
 	bamReader, err := bam.NewReader(f, THREADNB)
 	check(err)
-	defer bamReader.Close()
+	defer utils.CloseFile(bamReader)
 
 	header := bamReader.Header()
 	bamWriter, err := bam.NewWriter(fWrite, header, THREADNB)
 	check(err)
-	defer bamWriter.Close()
+	defer utils.CloseFile(bamWriter)
 	count := 0
 
 	loop:
@@ -1275,7 +1322,7 @@ func DivideBam() {
 func loadCellIDDict(fname string) {
 	f, err := os.Open(fname)
 	check(err)
-	defer f.Close()
+	defer utils.CloseFile(f)
 	scanner := bufio.NewScanner(f)
 
 	CELLIDDICT = make(map[string]bool)
@@ -1291,7 +1338,7 @@ func loadCellIDDict(fname string) {
 func loadCellIDIndexAndBAMWriter(fname string, header *sam.Header) {
 	f, err := os.Open(fname)
 	check(err)
-	defer f.Close()
+	defer utils.CloseFile(f)
 	scanner := bufio.NewScanner(f)
 	var filePath string
 
@@ -1336,7 +1383,7 @@ func loadCellIDIndexAndBEDWriter(fname string) {
 	var filePath string
 	f, err := os.Open(fname)
 	check(err)
-	defer f.Close()
+	defer utils.CloseFile(f)
 	scanner := bufio.NewScanner(f)
 
 	CELLIDDICTMULTIPLE = make(map[string]map[string]bool)
