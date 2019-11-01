@@ -1186,7 +1186,6 @@ func bedToBedGraphDictOneThread(bed string, waiting *sync.WaitGroup, checkCellIn
 
 	for bedReader.Scan() {
 		line = bedReader.Text()
-		nbReads++
 
 		split = strings.Split(line, "\t")
 
@@ -1195,6 +1194,8 @@ func bedToBedGraphDictOneThread(bed string, waiting *sync.WaitGroup, checkCellIn
 				continue
 			}
 		}
+
+		nbReads++
 
 		chroStr = split[0][3:]
 		chroIndex, err = strconv.Atoi(chroStr)
