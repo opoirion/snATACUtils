@@ -1197,7 +1197,7 @@ func bedToBedGraphDictOneThread(bed string, waiting *sync.WaitGroup, checkCellIn
 
 		nbReads++
 
-		chroStr = split[0][3:]
+		chroStr = strings.TrimPrefix(split[0], "chr")
 		chroIndex, err = strconv.Atoi(chroStr)
 
 		if err != nil {
