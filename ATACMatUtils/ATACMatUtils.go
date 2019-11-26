@@ -241,6 +241,7 @@ func writeBoolMatrixToFile(outfile string) {
 
 	var buffer bytes.Buffer
 	var cellPos, featPos uint
+	var count int
 
 	writer := utils.ReturnWriter(outfile)
 
@@ -255,10 +256,18 @@ func writeBoolMatrixToFile(outfile string) {
 			buffer.WriteString(strconv.Itoa(INTSPARSEMATRIX[cellPos][featPos]))
 			buffer.WriteRune('\n')
 
-			writer.Write(buffer.Bytes())
-			buffer.Reset()
+			count++
+
+			if count > 100000 {
+				writer.Write(buffer.Bytes())
+				buffer.Reset()
+				count = 0
+			}
 		}
 	}
+
+	writer.Write(buffer.Bytes())
+	buffer.Reset()
 
 	fmt.Printf("file: %s created!\n", outfile)
 }
