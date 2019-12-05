@@ -79,7 +79,7 @@ func main() {
 USAGE: ATACtools -bed_to_cicero -filename <bedfile> (-filenames <bedfile2> -filenames <bedfile3> ...  -ignoreerror)
 
 -create_ref_fastq: Create a ref FASTQ file using a reference barcode list
-USAGE: ATACtools -create_ref_bed -filename <fname> (-ref_barcode_list <fname> -tag <string>)
+USAGE: ATACtools -create_ref_bed -filename <fname> (-ref_barcode_list <fname> -tag <string> -output <string>)
 
 -merge: Merge input log files together
 USAGE: ATACtools -merge -filenames <fname1> -filenames <fname2> -filenames <fname3> ...  (-sortfile -delimiter "<string>" -ignoreerror -ignore_sorting_category)
@@ -177,7 +177,7 @@ USAGE: ATACtools -create_barcode_dict -filename <fname> (-sortfile -delimiter <s
 		log.Fatal("Error at least one processing option (scan/bed_to_cicero/create_ref_fastq/create_ref_bed/merge/create_barcode_list) should be used!")
 	}
 
-	tDiff := time.Now().Sub(tStart)
+	tDiff := time.Since(tStart)
 
 	if nbLines > 0 {
 		fmt.Printf("number of lines: %d\n", nbLines)
@@ -227,7 +227,7 @@ func bedFilestoCiceroInput(filenames []string, outfile string) {
 	cmd = fmt.Sprintf("rm %s", strings.Join(outfiles, " "))
 	utils.ExceCmd(cmd)
 
-	tDiff := time.Now().Sub(tStart)
+	tDiff := time.Since(tStart)
 	fmt.Printf("file:%s created in %f s\n", finalOutfile, tDiff.Seconds())
 }
 
@@ -236,7 +236,7 @@ func bedFiletoCiceroInputOnethread(filename string, outfile string, barcodefilen
 	waiting * sync.WaitGroup, writeHeader bool) {
 	defer waiting.Done()
 	var buffer bytes.Buffer
-	var split = make([]string, 4, 4)
+	var split = make([]string, 4)
 	var nbLine int
 	var barcodeIndex map[string]bool
 	var checkBarcode bool
@@ -285,15 +285,20 @@ func extractBEDreadsPerBarcodes(filename string, barcodefilename string) {
 
 	var barcode string
 	var refbarcodes map[string]bool
-	var split = make([]string, 4, 4)
+	var split = make([]string, 4)
 	var notCheckBarcode = true
 	var buffer bytes.Buffer
+	var outfile string
 
 	ext := path.Ext(filename)
 	ext2 := path.Ext(filename[:len(filename) - len(ext)])
 
-	outfile := fmt.Sprintf("%s.%s%s%s",
-		filename[:len(filename) - len(ext) -len(ext2)], OUTTAG, ext2, ext)
+	if OUTFILE != "" {
+		outfile = OUTFILE
+	} else {
+		outfile = fmt.Sprintf("%s.%s%s%s",
+			filename[:len(filename) - len(ext) -len(ext2)], OUTTAG, ext2, ext)
+	}
 
 	scanner, file := utils.ReturnReader(filename, 0)
 	defer file.Close()
@@ -306,6 +311,7 @@ func extractBEDreadsPerBarcodes(filename string, barcodefilename string) {
 	}
 
 	nbLine := 0
+	buffCount := 0
 
 	for scanner.Scan() {
 		line := scanner.Text()
@@ -314,8 +320,7 @@ func extractBEDreadsPerBarcodes(filename string, barcodefilename string) {
 		split = strings.Split(line, "\t")
 		barcode = split[3]
 
-
-		if refbarcodes[barcode] || notCheckBarcode {
+		if notCheckBarcode || refbarcodes[barcode] {
 
 			if (len(TAG) > 0) {
 				buffer.WriteString(split[0])
@@ -333,11 +338,19 @@ func extractBEDreadsPerBarcodes(filename string, barcodefilename string) {
 				buffer.WriteRune('\n')
 			}
 
-			writer.Write(buffer.Bytes())
-			buffer.Reset()
+			buffCount++
 
+			if buffCount > 100000 {
+				writer.Write(buffer.Bytes())
+				buffer.Reset()
+				buffCount = 0
+			}
 		}
 	}
+
+	writer.Write(buffer.Bytes())
+	buffer.Reset()
+
 	fmt.Printf("nb barcodes extracted: %d\n", nbLine)
 	fmt.Printf("file created: %s\n", outfile)
 }
@@ -347,15 +360,21 @@ func extractFASTQreadsPerBarcodes(filename string, barcodefilename string, waiti
 
 	var barcode string
 	var refbarcodes = make(map[string]bool)
-	var readHeader = make([]string, 2, 2)
+	var readHeader = make([]string, 2)
 	defer waiting.Done()
 	var buffer bytes.Buffer
+	var outfile string
 
 	ext := path.Ext(filename)
 	ext2 := path.Ext(filename[:len(filename) - len(ext)])
 
-	outfile := fmt.Sprintf("%s.%s%s%s",
+	if OUTFILE != "" {
+		outfile = OUTFILE
+	} else {
+
+		outfile = fmt.Sprintf("%s.%s%s%s",
 		filename[:len(filename) - len(ext) -len(ext2)], OUTTAG, ext2, ext)
+	}
 
 	scanner, file := utils.ReturnReader(filename, 0)
 	defer file.Close()
@@ -372,6 +391,7 @@ func extractFASTQreadsPerBarcodes(filename string, barcodefilename string, waiti
 	isfour := 0
 	nbLine := 0
 	tocopy := false
+	buffCount := 0
 
 	for scanner.Scan() {
 		line := scanner.Text()
@@ -400,8 +420,13 @@ func extractFASTQreadsPerBarcodes(filename string, barcodefilename string, waiti
 				buffer.WriteRune('\n')
 			}
 
-			writer.Write(buffer.Bytes())
-			buffer.Reset()
+			buffCount++
+
+			if buffCount > 100000 {
+				writer.Write(buffer.Bytes())
+				buffer.Reset()
+				buffCount = 0
+			}
 		}
 
 		isfour++
@@ -411,6 +436,10 @@ func extractFASTQreadsPerBarcodes(filename string, barcodefilename string, waiti
 			isfour = 0
 		}
 	}
+
+	writer.Write(buffer.Bytes())
+	buffer.Reset()
+
 	fmt.Printf("nb barcodes extracted: %d\n", nbLine)
 	fmt.Printf("file created: %s\n", outfile)
 }
@@ -420,9 +449,14 @@ func writeComplement(filename string, complStrategy string) (nbLines int) {
 	var buffer bytes.Buffer
 	ext := path.Ext(filename)
 	ext2 := path.Ext(filename[:len(filename) - len(ext)])
+	var outfile string
 
-	outfile := fmt.Sprintf("%s.compl%s%s",
-		filename[:len(filename) - len(ext) -len(ext2)], ext2, ext)
+	if OUTFILE != "" {
+		outfile = OUTFILE
+	} else {
+		outfile = fmt.Sprintf("%s.compl%s%s",
+			filename[:len(filename) - len(ext) -len(ext2)], ext2, ext)
+	}
 
 	scanner, file := utils.ReturnReader(filename, 0)
 	defer file.Close()
@@ -507,9 +541,14 @@ func createIndexCountFile(filename string) (nbLines int) {
 
 	ext := path.Ext(filename)
 	ext2 := path.Ext(filename[:len(filename) - len(ext)])
+	var outfilename string
 
-	outfilename := fmt.Sprintf("%s.barcodeCounts",
-		filename[:len(filename) - len(ext) -len(ext2)])
+	if OUTFILE != "" {
+		outfilename = OUTFILE
+	} else {
+		outfilename = fmt.Sprintf("%s.barcodeCounts",
+			filename[:len(filename) - len(ext) -len(ext2)])
+	}
 
 	scanner, file := utils.ReturnReader(filename, 0)
 	defer file.Close()
