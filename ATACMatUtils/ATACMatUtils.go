@@ -103,7 +103,7 @@ USAGE: ATACMatTools -bin -bed  <bedFile> (optional -ygi <bedFile> -xgi <fname> -
 USAGE: ATACMatTools -count  -xgi <fname> -ygi <bedfile> -bed <bedFile>
 
 """Merge multiple matrices results into one output file: -merge """
-USAGE: ATACMatTools -coo/taiji/bin -merge -xgi <fname> -in <matrixFile1> -in <matrixFile2> ...
+USAGE: ATACMatTools -coo/taiji -merge -xgi <fname> -in <matrixFile1> -in <matrixFile2> ... (optional /bin)
 
 `)
 		 flag.PrintDefaults()
@@ -119,7 +119,7 @@ USAGE: ATACMatTools -coo/taiji/bin -merge -xgi <fname> -in <matrixFile1> -in <ma
 	flag.StringVar(&SEP, "delimiter", "\t", "delimiter used to write the output file (default \t)")
 	flag.StringVar(&YGIOUT, "ygi_out", "", "Write the output bin bed file in this specific file")
 	flag.BoolVar(&TAIJI, "taiji", false,
-		`Convert COO matrix file to sparse matrix format required for taiji-utils`)
+		`Convert COO matrix file to sparse matrix format required for taiji-utils. See https://github.com/Taiji-pipeline/Taiji-utils/`)
 	flag.BoolVar(&USECOUNT, "use_count", false,
 		`Use read count instead of boolean value`)
 	flag.BoolVar(&COO, "coo", false,
@@ -134,13 +134,18 @@ USAGE: ATACMatTools -coo/taiji/bin -merge -xgi <fname> -in <matrixFile1> -in <ma
 	flag.IntVar(&THREADNB, "threads", 1, "threads concurrency")
 	flag.Parse()
 
-	tag := "coo"
+	var tag string
+
+
+	if CREATEBINMATRIX {
+		tag = "bin."
+	}
 
 	switch {
-	case CREATEBINMATRIX:
-		tag = "bin"
+	case COO:
+		tag = fmt.Sprintf("%scoo", tag)
 	case TAIJI:
-		tag = "taiji-mat"
+		tag = fmt.Sprintf("%staiji-mat", tag)
 	}
 
 	switch {
@@ -190,7 +195,7 @@ func computeReadsInPeaksForCell(){
 		loadCellIDDict(CELLSIDFNAME)
 	}
 
-	utils.LoadPeaks(PEAKFILE)
+	YGIDIM = utils.LoadPeaks(PEAKFILE)
 	utils.CreatePeakIntervalTree()
 
 	CELLIDCOUNT = make(map[string]int)
@@ -216,7 +221,7 @@ func initIntSparseMatrix() {
 func createBoolSparseMatrix(){
 	fmt.Printf("load indexes...\n")
 	loadCellIDDict(CELLSIDFNAME)
-	utils.LoadPeaks(PEAKFILE)
+	YGIDIM = utils.LoadPeaks(PEAKFILE)
 
 	initIntSparseMatrix()
 	utils.CreatePeakIntervalTree()
@@ -427,12 +432,7 @@ func mergeCOOFloatMatFile(filename string) {
 			YGIDIM = ygi
 		}
 
-		switch USECOUNT {
-		case true:
-			BINSPARSEMATRIX[uint(xgi)][uint(ygi)] += value
-		default:
-			BINSPARSEMATRIX[uint(xgi)][uint(ygi)] = 1
-		}
+		BINSPARSEMATRIX[uint(xgi)][uint(ygi)] += value
 
 	}
 }
@@ -728,16 +728,18 @@ func writeBinMatrixToTaijiFile(outfile string) {
 
 	sortedXgi := make([]string, len(BINSPARSEMATRIX))
 
-	for pos := range sortedXgi {
-		sortedXgi[pos] = strconv.Itoa(pos)
+	for xgi, pos := range CELLIDDICT {
+		sortedXgi[pos] = xgi
 	}
 
 	writer := utils.ReturnWriter(FILENAMEOUT)
+	defer utils.CloseFile(writer)
 
 	buffer.WriteString("sparse matrix:\t")
 	buffer.WriteString(strconv.Itoa(len(sortedXgi)))
 	buffer.WriteString(" x ")
 	buffer.WriteString(strconv.Itoa(YGIDIM))
+	buffer.WriteRune('\n')
 
 	bufSize := 0
 
@@ -770,6 +772,8 @@ func writeBinMatrixToTaijiFile(outfile string) {
 				bufSize = 0
 			}
 		}
+
+		buffer.WriteRune('\n')
 	}
 
 	_, err = writer.Write(buffer.Bytes())
@@ -787,18 +791,20 @@ func writeIntMatrixToTaijiFile(outfile string) {
 
 	tStart := time.Now()
 
-	sortedXgi := make([]string, len(INTSPARSEMATRIX))
+	sortedXgi := make([]string, len(CELLIDDICT))
 
-	for pos := range sortedXgi {
-		sortedXgi[pos] = strconv.Itoa(pos)
+	for xgi, pos := range CELLIDDICT {
+		sortedXgi[pos] = xgi
 	}
 
 	writer := utils.ReturnWriter(FILENAMEOUT)
+	defer utils.CloseFile(writer)
 
 	buffer.WriteString("sparse matrix:\t")
 	buffer.WriteString(strconv.Itoa(len(sortedXgi)))
 	buffer.WriteString(" x ")
 	buffer.WriteString(strconv.Itoa(YGIDIM))
+	buffer.WriteRune('\n')
 
 	bufSize := 0
 
@@ -831,6 +837,8 @@ func writeIntMatrixToTaijiFile(outfile string) {
 				bufSize = 0
 			}
 		}
+
+		buffer.WriteRune('\n')
 	}
 
 	_, err = writer.Write(buffer.Bytes())

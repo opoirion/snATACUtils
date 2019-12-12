@@ -44,7 +44,7 @@ func createBinSparseMatrix() {
 	initBinSparseMatrix()
 
 	if PEAKFILE != "" {
-		utils.LoadPeaks(PEAKFILE)
+		YGIDIM = utils.LoadPeaks(PEAKFILE)
 		utils.CreatePeakIntervalTree()
 		initMutexDict()
 		utils.InitIntervalDictsThreading(THREADNB)
@@ -118,6 +118,8 @@ func scanBedFileForBinMat() {
 
 		BINSPARSEMATRIX[cellID][featureID]++
 	}
+
+	YGIDIM = len(binList)
 
 	tDiff := time.Since(tStart)
 	fmt.Printf("Scanning done in time: %f s \n", tDiff.Seconds())
@@ -306,7 +308,6 @@ func sortBinIndexAndwrite() {
 
 	for i, binsort := range binList {
 		binListReady[i] = binsort.bin
-		fmt.Printf("INDEX BIN %d\n", binsort.indexMat)
 	}
 
 	writeBinList(binListReady)

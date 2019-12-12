@@ -101,7 +101,7 @@ func CreatePeakIntervalTree() {
 
 
 /*LoadPeaks load peak file and return peak peak id -> dict*/
-func LoadPeaks(fname Filename) {
+func LoadPeaks(fname Filename) int {
 	var scanner *bufio.Scanner
 	var file *os.File
 
@@ -120,6 +120,8 @@ func LoadPeaks(fname Filename) {
 		PEAKIDDICT[line] = count
 		count++
 	}
+
+	return int(count)
 }
 
 
