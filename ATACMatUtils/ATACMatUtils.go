@@ -31,8 +31,8 @@ var PEAKFILE utils.Filename
 /*CELLSIDFNAME file name file with ordered cell IDs (one ID per line) */
 var CELLSIDFNAME utils.Filename
 
-/*CREATECOOMATRIX create COO bool sparse matrix */
-var CREATECOOMATRIX bool
+/*COO create COO bool sparse matrix */
+var COO bool
 
 /*USECOUNT create COO count sparse matrix */
 var USECOUNT bool
@@ -48,6 +48,9 @@ var NORM bool
 
 /*MERGEOUTPUTS merge output files */
 var MERGEOUTPUTS bool
+
+/*TAIJI Use TAIJI format */
+var TAIJI bool
 
 /*SEP separator for writing output */
 var SEP string
@@ -76,6 +79,9 @@ var THREADNB int
 /*YGIOUT number of threads for reading the bam file */
 var YGIOUT string
 
+/*YGIDIM dim of ygi when reading a COO file */
+var YGIDIM int
+
 /*BUFFERSIZE buffer size for multithreading */
 const BUFFERSIZE = 1000000
 
@@ -84,20 +90,20 @@ func main() {
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, `
 #################### MODULE TO CREATE (cell x genomic region) SPARSE MATRIX ########################
-"""Boolean peak matrix: -coo """
-transform one (-bed) or multiple (use multiple -beds option) into a boolean sparse matrix in COO format
-USAGE: ATACMatTools -coo -bed  <bedFile> -ygi <bedFile> -xgi <fname> (-threads <int> -out <fname> -use_count)
+"""Boolean / interger Peak matrix """
+transform one (-bed) or multiple bed files into a sparse matrix
+USAGE: ATACMatTools -coo -bed  <bedFile> -ygi <bedFile> -xgi <fname> (-threads <int> -out <fname> -use_count -taiji -bed <fileName2>)
 
 """Create a cell x bin matrix: -bin """
-transform one (-bed) or multiple (use multiple -beds option) into a bin (using float) sparse matrix in COO format. If ygi provided, reads intersecting these bin are ignored
+transform one (-bed) or multiple (use multiple -bed options) bed file into a bin (using float) sparse matrix. If ygi provided, reads intersecting these bin are ignored
 
-USAGE: ATACMatTools -bin -bed  <bedFile> (optional -ygi <bedFile> -xgi <fname> -bin_size <int> -ygi_out <string>) -norm
+USAGE: ATACMatTools -bin -bed  <bedFile> (optional -ygi <bedFile> -xgi <fname> -bin_size <int> -ygi_out <string> -norm -taiji -coo)
 
 """Count the number of reads in peaks for each cell: -count """
 USAGE: ATACMatTools -count  -xgi <fname> -ygi <bedfile> -bed <bedFile>
 
 """Merge multiple matrices results into one output file: -merge """
-USAGE: ATACMatTools -coo -merge -xgi <fname> -in <matrixFile1> -in <matrixFile2> ...
+USAGE: ATACMatTools -coo/taiji/bin -merge -xgi <fname> -in <matrixFile1> -in <matrixFile2> ...
 
 `)
 		 flag.PrintDefaults()
@@ -112,10 +118,12 @@ USAGE: ATACMatTools -coo -merge -xgi <fname> -in <matrixFile1> -in <matrixFile2>
 	flag.Var(&CELLSIDFNAME, "xgi", "name of the file containing the ordered list of cell IDs (one ID per line)")
 	flag.StringVar(&SEP, "delimiter", "\t", "delimiter used to write the output file (default \t)")
 	flag.StringVar(&YGIOUT, "ygi_out", "", "Write the output bin bed file in this specific file")
+	flag.BoolVar(&TAIJI, "taiji", false,
+		`Convert COO matrix file to sparse matrix format required for taiji-utils`)
 	flag.BoolVar(&USECOUNT, "use_count", false,
 		`Use read count instead of boolean value`)
-	flag.BoolVar(&CREATECOOMATRIX, "coo", false,
-		`transform one (-bed) or multiple (use multiple -beds option) into a boolean sparse matrix in COO format`)
+	flag.BoolVar(&COO, "coo", false,
+		`Use COO format as output`)
 
 	flag.BoolVar(&NORM, "norm", false, "Normalize bin matrix per read depth for each cell")
 
@@ -128,8 +136,11 @@ USAGE: ATACMatTools -coo -merge -xgi <fname> -in <matrixFile1> -in <matrixFile2>
 
 	tag := "coo"
 
-	if CREATEBINMATRIX {
+	switch {
+	case CREATEBINMATRIX:
 		tag = "bin"
+	case TAIJI:
+		tag = "taiji-mat"
 	}
 
 	switch {
@@ -144,7 +155,7 @@ USAGE: ATACMatTools -coo -merge -xgi <fname> -in <matrixFile1> -in <matrixFile2>
 	tStart := time.Now()
 
 	switch {
-	case CREATECOOMATRIX || READINPEAK || CREATEBINMATRIX:
+	case COO || READINPEAK || CREATEBINMATRIX || TAIJI:
 		switch {
 		case CELLSIDFNAME == "" && !READINPEAK:
 			log.Fatal("Error -xgi file must be provided!")
@@ -153,12 +164,12 @@ USAGE: ATACMatTools -coo -merge -xgi <fname> -in <matrixFile1> -in <matrixFile2>
 				log.Fatal("Error at least one input (-in) file must be provided!")
 			}
 
-			mergeCOOFiles(INFILES)
+			mergeMatFiles(INFILES)
 		case BEDFILENAME == "":
 			log.Fatal("Error at least one bed file must be provided!")
 		case CREATEBINMATRIX:
 			createBinSparseMatrix()
-		case PEAKFILE == "" && !(CREATECOOMATRIX || READINPEAK):
+		case PEAKFILE == "" && !(COO || READINPEAK):
 			log.Fatal("Error peak file -ygi (bed format) must be provided!")
 		case READINPEAK:
 			computeReadsInPeaksForCell()
@@ -193,7 +204,7 @@ func computeReadsInPeaksForCell(){
 }
 
 
-func initBoolSparseMatrix() {
+func initIntSparseMatrix() {
 	INTSPARSEMATRIX = make(map[uint]map[uint]int)
 
 	for _, pos := range CELLIDDICT {
@@ -207,7 +218,7 @@ func createBoolSparseMatrix(){
 	loadCellIDDict(CELLSIDFNAME)
 	utils.LoadPeaks(PEAKFILE)
 
-	initBoolSparseMatrix()
+	initIntSparseMatrix()
 	utils.CreatePeakIntervalTree()
 
 	switch{
@@ -222,7 +233,11 @@ func createBoolSparseMatrix(){
 		createBoolSparseMatrixOneFile(BEDFILENAME)
 	}
 
-	writeBoolMatrixToFile(FILENAMEOUT)
+	if TAIJI {
+		writeIntMatrixToTaijiFile(FILENAMEOUT)
+	} else {
+		writeIntMatrixToCOOFile(FILENAMEOUT)
+	}
 }
 
 func initMutexDict() {
@@ -236,16 +251,18 @@ func initMutexDict() {
 }
 
 
-func writeBoolMatrixToFile(outfile string) {
+func writeIntMatrixToCOOFile(outfile string) {
 	fmt.Printf("writing to output file...\n")
 
 	var buffer bytes.Buffer
 	var cellPos, featPos uint
-	var count int
+	var err error
 
 	writer := utils.ReturnWriter(outfile)
 
 	defer utils.CloseFile(writer)
+
+	bufSize := 0
 
 	for cellPos = range INTSPARSEMATRIX {
 		for featPos = range INTSPARSEMATRIX[cellPos] {
@@ -256,17 +273,19 @@ func writeBoolMatrixToFile(outfile string) {
 			buffer.WriteString(strconv.Itoa(INTSPARSEMATRIX[cellPos][featPos]))
 			buffer.WriteRune('\n')
 
-			count++
+			bufSize++
 
-			if count > 100000 {
-				writer.Write(buffer.Bytes())
+			if bufSize > 50000 {
+				_, err = writer.Write(buffer.Bytes())
+				utils.Check(err)
 				buffer.Reset()
-				count = 0
+				bufSize = 0
 			}
 		}
 	}
 
-	writer.Write(buffer.Bytes())
+	_, err = writer.Write(buffer.Bytes())
+	utils.Check(err)
 	buffer.Reset()
 
 	fmt.Printf("file: %s created!\n", outfile)
@@ -275,10 +294,13 @@ func writeBoolMatrixToFile(outfile string) {
 func writeCellCounter(outfile string) {
 	var buffer bytes.Buffer
 	var cellID string
+	var err error
 
 	writer := utils.ReturnWriter(outfile)
 
 	defer utils.CloseFile(writer)
+
+	bufSize := 0
 
 	for cellID = range CELLIDCOUNT {
 		if cellID == "" {
@@ -289,35 +311,67 @@ func writeCellCounter(outfile string) {
 		buffer.WriteString(strconv.Itoa(int(CELLIDCOUNT[cellID])))
 		buffer.WriteRune('\n')
 
-		writer.Write(buffer.Bytes())
-		buffer.Reset()
+		bufSize++
+
+		if bufSize > 50000 {
+			_, err = writer.Write(buffer.Bytes())
+			utils.Check(err)
+			buffer.Reset()
+			bufSize = 0
+
+		}
 	}
+
+	_, err = writer.Write(buffer.Bytes())
+			utils.Check(err)
 
 	fmt.Printf("file: %s created!\n", outfile)
 }
 
-/*mergeCOOFiles merge multiple COO output files*/
-func mergeCOOFiles(filenames []string) {
+/*mergeMatFiles merge multiple COO output files*/
+func mergeMatFiles(filenames []string) {
 	fmt.Printf("creating xgi index..\n")
 	loadCellIDDict(CELLSIDFNAME)
-	initBoolSparseMatrix()
+
+	if CREATEBINMATRIX {
+		initBinSparseMatrix()
+	} else {
+		initIntSparseMatrix()
+	}
 
 	for _, filename := range filenames {
 		fmt.Printf("merging file: %s\n", filename)
-		mergeCOOFile(filename)
+
+		if CREATEBINMATRIX {
+			mergeCOOFloatMatFile(filename)
+		} else {
+			mergeCOOIntMatFile(filename)
+		}
 	}
 
-	writeBoolMatrixToFile(FILENAMEOUT)
+	if TAIJI {
+		if CREATEBINMATRIX {
+			writeBinMatrixToTaijiFile(FILENAMEOUT)
+		} else {
+			writeIntMatrixToTaijiFile(FILENAMEOUT)
+		}
+	} else {
+		if CREATEBINMATRIX {
+			writeBinMatrixToCOOFile(FILENAMEOUT)
+		} else {
+			writeIntMatrixToCOOFile(FILENAMEOUT)
+		}
+	}
 }
 
 
-/*mergeCOOFile add one file to the matrix*/
-func mergeCOOFile(filename string) {
+/*mergeCOOIntMatFile add one file to the matrix*/
+func mergeCOOIntMatFile(filename string) {
 	var scanner *bufio.Scanner
 	var f *os.File
 	var err error
 	var split []string
-	var start, stop, value int
+	var xgi, ygi, value int
 
 	scanner, f = utils.ReturnReader(filename, 0)
 
@@ -325,18 +379,59 @@ func mergeCOOFile(filename string) {
 
 	for scanner.Scan() {
 		split = strings.Split(scanner.Text(), SEP)
-		start, err = strconv.Atoi(split[0])
+		xgi, err = strconv.Atoi(split[0])
 		utils.Check(err)
-		stop, err = strconv.Atoi(split[1])
+		ygi, err = strconv.Atoi(split[1])
 		utils.Check(err)
 		value, err = strconv.Atoi(split[2])
 		utils.Check(err)
 
+		if ygi > YGIDIM {
+			YGIDIM = ygi
+		}
+
 		switch USECOUNT {
 		case true:
-			INTSPARSEMATRIX[uint(start)][uint(stop)] += value
+			INTSPARSEMATRIX[uint(xgi)][uint(ygi)] += value
 		default:
-			INTSPARSEMATRIX[uint(start)][uint(stop)] = 1
+			INTSPARSEMATRIX[uint(xgi)][uint(ygi)] = 1
+		}
+
+	}
+}
+
+
+/*mergeCOOFloatMatFile add one file to the matrix*/
+func mergeCOOFloatMatFile(filename string) {
+	var scanner *bufio.Scanner
+	var f *os.File
+	var err error
+	var split []string
+	var xgi, ygi int
+	var value float64
+
+	scanner, f = utils.ReturnReader(filename, 0)
+
+	defer utils.CloseFile(f)
+
+	for scanner.Scan() {
+		split = strings.Split(scanner.Text(), SEP)
+		xgi, err = strconv.Atoi(split[0])
+		utils.Check(err)
+		ygi, err = strconv.Atoi(split[1])
+		utils.Check(err)
+		value, err = strconv.ParseFloat(split[2],64)
+		utils.Check(err)
+
+		if ygi > YGIDIM {
+			YGIDIM = ygi
+		}
+
+		switch USECOUNT {
+		case true:
+			BINSPARSEMATRIX[uint(xgi)][uint(ygi)] += value
+		default:
+			BINSPARSEMATRIX[uint(xgi)][uint(ygi)] = 1
 		}
 
 	}
@@ -625,6 +720,127 @@ func createBoolSparseMatrixOneFile(bedfilename utils.Filename) {
 	}
 }
 
+
+func writeBinMatrixToTaijiFile(outfile string) {
+	var buffer bytes.Buffer
+
+	tStart := time.Now()
+
+	sortedXgi := make([]string, len(BINSPARSEMATRIX))
+
+	for pos := range sortedXgi {
+		sortedXgi[pos] = strconv.Itoa(pos)
+	}
+
+	writer := utils.ReturnWriter(FILENAMEOUT)
+
+	buffer.WriteString("sparse matrix:\t")
+	buffer.WriteString(strconv.Itoa(len(sortedXgi)))
+	buffer.WriteString(" x ")
+	buffer.WriteString(strconv.Itoa(YGIDIM))
+
+	bufSize := 0
+
+	var xgi, ygi uint
+	var value float64
+	var err error
+
+	for xgi = range BINSPARSEMATRIX {
+		buffer.WriteString(sortedXgi[xgi])
+
+		for ygi, value = range BINSPARSEMATRIX[xgi] {
+			buffer.WriteRune('\t')
+			buffer.WriteString(strconv.Itoa(int(ygi)))
+			buffer.WriteRune(',')
+
+			if USECOUNT {
+				buffer.WriteRune('1')
+
+			} else
+			{
+				buffer.WriteString(strconv.FormatFloat(value, 'f', 8, 64))
+			}
+
+			bufSize++
+
+			if bufSize > 10000 {
+				_, err = writer.Write(buffer.Bytes())
+				utils.Check(err)
+				buffer.Reset()
+				bufSize = 0
+			}
+		}
+	}
+
+	_, err = writer.Write(buffer.Bytes())
+	utils.Check(err)
+	buffer.Reset()
+
+	tDiff := time.Since(tStart)
+	fmt.Printf("taiji formated matrix %s written in: %f s \n", FILENAMEOUT, tDiff.Seconds())
+
+}
+
+
+func writeIntMatrixToTaijiFile(outfile string) {
+	var buffer bytes.Buffer
+
+	tStart := time.Now()
+
+	sortedXgi := make([]string, len(INTSPARSEMATRIX))
+
+	for pos := range sortedXgi {
+		sortedXgi[pos] = strconv.Itoa(pos)
+	}
+
+	writer := utils.ReturnWriter(FILENAMEOUT)
+
+	buffer.WriteString("sparse matrix:\t")
+	buffer.WriteString(strconv.Itoa(len(sortedXgi)))
+	buffer.WriteString(" x ")
+	buffer.WriteString(strconv.Itoa(YGIDIM))
+
+	bufSize := 0
+
+	var xgi, ygi uint
+	var value int
+	var err error
+
+	for xgi = range INTSPARSEMATRIX {
+		buffer.WriteString(sortedXgi[xgi])
+
+		for ygi, value = range INTSPARSEMATRIX[xgi] {
+			buffer.WriteRune('\t')
+			buffer.WriteString(strconv.Itoa(int(ygi)))
+			buffer.WriteRune(',')
+
+			if USECOUNT {
+				buffer.WriteRune('1')
+
+			} else
+			{
+				buffer.WriteString(strconv.Itoa(value))
+			}
+
+			bufSize++
+
+			if bufSize > 10000 {
+				_, err = writer.Write(buffer.Bytes())
+				utils.Check(err)
+				buffer.Reset()
+				bufSize = 0
+			}
+		}
+	}
+
+	_, err = writer.Write(buffer.Bytes())
+	utils.Check(err)
+	buffer.Reset()
+
+	tDiff := time.Since(tStart)
+	fmt.Printf("taiji formated matrix %s written in: %f s \n", FILENAMEOUT, tDiff.Seconds())
+
+}
 
 
 /*loadCellIDDict load cell id to map[string] -> id <uint>*/
