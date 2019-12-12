@@ -735,7 +735,7 @@ func writeBinMatrixToTaijiFile(outfile string) {
 	writer := utils.ReturnWriter(FILENAMEOUT)
 	defer utils.CloseFile(writer)
 
-	buffer.WriteString("sparse matrix:\t")
+	buffer.WriteString("sparse matrix: ")
 	buffer.WriteString(strconv.Itoa(len(sortedXgi)))
 	buffer.WriteString(" x ")
 	buffer.WriteString(strconv.Itoa(YGIDIM))
@@ -800,7 +800,7 @@ func writeIntMatrixToTaijiFile(outfile string) {
 	writer := utils.ReturnWriter(FILENAMEOUT)
 	defer utils.CloseFile(writer)
 
-	buffer.WriteString("sparse matrix:\t")
+	buffer.WriteString("sparse matrix: ")
 	buffer.WriteString(strconv.Itoa(len(sortedXgi)))
 	buffer.WriteString(" x ")
 	buffer.WriteString(strconv.Itoa(YGIDIM))
