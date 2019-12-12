@@ -130,7 +130,7 @@ USAGE: BAMutils -bed_to_bedgraph -bed <fname> (-out <fname> -threads <int> -cell
 USAGE: BAMutils -create_cell_index -bed/bam <name> -out <output name> (-sort)
 
 -divide: Divide the bam/bed file according to barcode file list
-USAGE: BAMutils -divide -bed/bam <fname> (-cell_index <fname> -threads <int> -cellsID <fname>)
+USAGE: BAMutils -divide -bed/bam <fname> (-cell_index <fname> -threads <int> -cellsID <fname> -out <fname>)
 
 -divide_parallel: Divide the bam file according to barcode file list using a parallel version
 USAGE: BAMutils -divide_parallel -cell_index <fname> -bed/bam <fname> (-threads <int>)

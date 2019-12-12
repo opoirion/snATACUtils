@@ -53,7 +53,11 @@ func createBinSparseMatrix() {
 		scanBedFileForBinMat()
 	}
 
-	writeBinMatrixToFile(FILENAMEOUT)
+	if TAIJI {
+		writeBinMatrixToTaijiFile(FILENAMEOUT)
+	} else {
+		writeBinMatrixToCOOFile(FILENAMEOUT)
+	}
 }
 
 func initBinSparseMatrix() {
@@ -158,7 +162,7 @@ func writeBinList(binList []binPos) {
 }
 
 
-func writeBinMatrixToFile(outfile string) {
+func writeBinMatrixToCOOFile(outfile string) {
 	fmt.Printf("writing Bin matrix to output file...\n")
 	tStart := time.Now()
 
