@@ -108,7 +108,7 @@ var DELIMITER string
 var SPLIT bool
 
 /*REFCHR reference chromosomes for bedgpraph */
-var REFCHR map[string]bool
+var REFCHR map[string]int
 
 /*REFCHRFNAME reference chromosomes for bedgpraph */
 var REFCHRFNAME utils.Filename
@@ -151,7 +151,9 @@ USAGE: BAMutils -downsample <float> -bed <bedfile> (-out <string> -cellsID <stri
 	flag.BoolVar(&BEDTOBEDGRAPH, "bed_to_bedgraph", false,
 		`transform one (-bed) or multiple (use multiple -beds option) into bedgraph`)
 	flag.StringVar(&BAMFILENAME, "bam", "", "name of the bam file")
-	flag.Var(&REFCHRFNAME, "refchr", "reference chromosome list to use for the bedgraph creation")
+	flag.Var(&REFCHRFNAME, "refchr",
+		`file with reference chromosomes to use for the bedgraph creation.
+ This file can also contain the maximum chromosome size, for example (chr16<tab>90668800)`)
 	flag.StringVar(&FILENAMEOUT, "out", "", "name of the output file")
 	flag.StringVar(&NUCLEIFILE, "cellsID", "", "file with cell IDs")
 	flag.StringVar(&OUTPUTDIR, "output_dir", "", "output directory")
@@ -248,14 +250,16 @@ USAGE: BAMutils -downsample <float> -bed <bedfile> (-out <string> -cellsID <stri
 }
 
 func loadRefChrMap() {
-	var line string
+	var line, chr string
 	var lineSplit []string
+	var chrsize int
+	var err error
 
 	if REFCHRFNAME == "" {
 		return
 	}
 
-	REFCHR = make(map[string]bool)
+	REFCHR = make(map[string]int)
 
 	reader, file := REFCHRFNAME.ReturnReader(0)
 	defer utils.CloseFile(file)
@@ -264,7 +268,16 @@ func loadRefChrMap() {
 		line = reader.Text()
 		line = strings.ReplaceAll(line, " ", "\t")
 		lineSplit = strings.Split(line, "\t")
-		REFCHR[lineSplit[0][3:]] = true
+		chr = lineSplit[0][3:]
+		REFCHR[chr] = 1
+
+		if len(lineSplit) > 1 {
+			chrsize, err = strconv.Atoi(lineSplit[1])
+
+			if err == nil {
+				REFCHR[chr] = chrsize
+			}
+		}
 	}
 }
 
@@ -1002,7 +1015,7 @@ func collectAndProcessMultipleBedGraphDict(filenameout string) {
 	filterChro := len(REFCHR) > 0
 
 	for _, chro := range chroList {
-		if filterChro && !REFCHR[chro] {
+		if filterChro && REFCHR[chro] == 0 {
 			continue
 		}
 
@@ -1011,7 +1024,8 @@ func collectAndProcessMultipleBedGraphDict(filenameout string) {
 		bedFname := fmt.Sprintf("%s.chr%s.bedgraph", filenameout, chro)
 		fileList = append(fileList, bedFname)
 		waitingSort.Add(1)
-		go writeIndividualChrBedGraph(bedFname, chroID, chro, scale, &waitingSort)
+		go writeIndividualChrBedGraph(
+			bedFname, chroID, chro, scale, REFCHR[chro], &waitingSort)
 		<-guard
 	}
 
@@ -1039,7 +1053,7 @@ func collectAndProcessMultipleBedGraphDict(filenameout string) {
 
 /*writeIndividualChrBedGraph write an  bedgraph file for a unique chromosome */
 func writeIndividualChrBedGraph(bedFname string, chroID int, chro string,
-	scale float64, waiting * sync.WaitGroup){
+	scale float64, limit int, waiting * sync.WaitGroup){
 	defer waiting.Done()
 
 	fWrite, err := os.Create(bedFname)
@@ -1056,9 +1070,11 @@ func writeIndividualChrBedGraph(bedFname string, chroID int, chro string,
 	}
 
 	sort.Ints(chroPosList)
-	var pos int
+	var pos, posEnd int
 	var value float64
 	currentPos := 0
+
+	buffSize := 0
 
 	for _, binnb := range chroPosList {
 		pos = binnb * BINSIZE
@@ -1074,27 +1090,60 @@ func writeIndividualChrBedGraph(bedFname string, chroID int, chro string,
 			buffer.WriteRune('0')
 			buffer.WriteRune('\n')
 
-			fWrite.Write(buffer.Bytes())
-			buffer.Reset()
+			buffSize++
+
+			if buffSize > 50000 {
+				_, err = fWrite.Write(buffer.Bytes())
+				check(err)
+				buffer.Reset()
+				buffSize = 0
+
+			}
 		}
 
 		value = float64(bedgraphDict[binnb]) / scale
+
+		posEnd = pos + BINSIZE
+
+		if limit > 1 {
+			if   pos > limit {
+				fmt.Printf(
+					"!!!! Warning starting genomic position: %d greater than chr%s limit: %d. Skipping...\n",
+					pos, chro, limit)
+				break
+
+			}
+			if   posEnd > limit {
+				posEnd = limit
+			}
+		}
 
 		buffer.WriteString("chr")
 		buffer.WriteString(chro)
 		buffer.WriteRune('\t')
 		buffer.WriteString(strconv.Itoa(pos))
 		buffer.WriteRune('\t')
-		buffer.WriteString(strconv.Itoa(pos + BINSIZE))
+		buffer.WriteString(strconv.Itoa(posEnd))
 		buffer.WriteRune('\t')
 		buffer.WriteString(strconv.FormatFloat(value, 'f', 2, 32))
 		buffer.WriteRune('\n')
 
-		fWrite.Write(buffer.Bytes())
-		buffer.Reset()
+		buffSize++
+
+		if buffSize > 50000 {
+			_, err = fWrite.Write(buffer.Bytes())
+			check(err)
+			buffer.Reset()
+			buffSize = 0
+
+		}
 
 		currentPos = pos + BINSIZE
 	}
+
+	_, err = fWrite.Write(buffer.Bytes())
+	check(err)
+	buffer.Reset()
 }
 
 /*extractIntfromChan Transform multiple bed files given using -bed arg */
