@@ -80,7 +80,7 @@ var MUTEX sync.Mutex
 func main() {
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, `USAGE: ATACCellTSS -bed <filename> -ygi/tss <filename> -xgi <filename>
-                    (optionnal -out <string> -flank <int> -smoothing <int> -boundary <int> -cluster <filename> -flank_size).
+                    (optional -out <string> -flank <int> -smoothing <int> -boundary <int> -cluster <filename> -flank_size -threads <int> -xgi <filename>).
 
 if -cluster is provided, TSS is computed per cluster and -xgi argument is ignored. THe cluster file should contain cluster and cell ID with the following structure for each line: clusterID<TAB>cellID\n
 
@@ -104,8 +104,6 @@ if -cluster is provided, TSS is computed per cluster and -xgi argument is ignore
 	switch {
 	case BEDFILENAME == "":
 		log.Fatal("-bed must be provided!")
-	case CELLSIDFNAME == "" && CLUSTERFNAME == "":
-		log.Fatal("Either -cluster or -xgi must be provided!")
 	case PEAKFILE == "" && TSSFILE == "":
 		log.Fatal("either -ygi or -tss must be provided!")
 
@@ -116,15 +114,18 @@ if -cluster is provided, TSS is computed per cluster and -xgi argument is ignore
 	MUTEX = sync.Mutex{}
 
 	if PEAKFILE != "" {
-		utils.LoadPeaks(PEAKFILE)
+		utils.LoadPeaksAndTrim(PEAKFILE)
 	} else {
 		loadTSS(TSSFILE)
 	}
 
-	if CLUSTERFNAME != "" {
+	switch {
+	case CLUSTERFNAME != "":
 		loadClusterFile()
-	} else {
+	case CELLSIDFNAME != "":
 		CELLDICT = utils.LoadCellDictsToIndex(CELLSIDFNAME)
+	default:
+		CELLDICT = utils.LoadCellDictsFromBedFileToIndex(BEDFILENAME)
 
 	}
 
@@ -195,13 +196,16 @@ func loadTSS(tssFile utils.Filename) {
 	var buffer bytes.Buffer
 	var split []string
 	var err error
+	var chro string
 
 	utils.PEAKIDDICT = make(map[string]uint)
 	count = 0
 
 	for scanner.Scan() {
 		split = strings.Split(scanner.Text(), "\t")
-		buffer.WriteString(split[0])
+		chro = strings.TrimPrefix(split[0], "chr")
+
+		buffer.WriteString(chro)
 		buffer.WriteRune('\t')
 
 		start, err = strconv.Atoi(split[1])
@@ -355,7 +359,7 @@ func processOneBuffer(
 
 	for i := 0; i < limit; i++ {
 		split = strings.Split(bufferarray[i], "\t")
-		chro = split[0]
+		chro = strings.TrimPrefix(split[0], "chr")
 
 		if cellID, isInside = celldict[split[3]];!isInside {
 			continue

@@ -489,6 +489,47 @@ func LoadCellDictsToIndex(fname Filename) map[string]int {
 }
 
 
+/*LoadCellDictsFromBedFileToIndex create cell ID <-> index dict using a single cell bed file storing unique CELL ID
+Ex:
+chr1    15555    15522    CELLID1
+chr1    25555    25522    CELLID1
+chr1    35555    35522    CELLID1
+chr1    15555    15522    CELLID2
+chr1    25555    25522    CELLID2
+
+will give map(CELLID1:0, CELLID2:1)
+  */
+func LoadCellDictsFromBedFileToIndex(fname Filename) map[string]int {
+
+	scanner, f := fname.ReturnReader(0)
+	defer CloseFile(f)
+
+	var cellID, line string
+	var index int
+	var isInside bool
+
+	celliddict := make(map[string]int)
+
+	tStart := time.Now()
+
+	for scanner.Scan() {
+		line = scanner.Text()
+		cellID = strings.Split(line, "\t")[3]
+
+		if _, isInside = celliddict[cellID];!isInside {
+			celliddict[cellID] = index
+			index++
+
+		}
+	}
+
+	tDiff := time.Since(tStart)
+	fmt.Printf("Loading Cell Dicts From Bed File To Index done in time: %f s \n", tDiff.Seconds())
+
+	return celliddict
+}
+
+
 /*CountNbLines count nb lines in a file*/
 func CountNbLines(filename string) int {
 	reader, file := ReturnReader(filename, 0)

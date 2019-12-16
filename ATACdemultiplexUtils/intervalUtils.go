@@ -125,6 +125,32 @@ func LoadPeaks(fname Filename) int {
 }
 
 
+/*LoadPeaksAndTrim load peak file and return peak peak id trimmed for "chr" -> dict*/
+func LoadPeaksAndTrim(fname Filename) int {
+	var scanner *bufio.Scanner
+	var file *os.File
+	var line string
+
+	scanner, file = fname.ReturnReader(0)
+
+	defer CloseFile(file)
+
+
+	var count uint
+
+	PEAKIDDICT = make(map[string]uint)
+	count = 0
+
+	for scanner.Scan() {
+		line = strings.TrimPrefix(scanner.Text(), "chr")
+		PEAKIDDICT[line] = count
+		count++
+	}
+
+	return int(count)
+}
+
+
 /*LoadPeaksSubset load peak file  but using only a subset of peaks and return peak peak id -> dict*/
 func LoadPeaksSubset(fname Filename, firstPeak, lastPeak int) {
 	var scanner *bufio.Scanner
