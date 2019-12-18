@@ -25,7 +25,7 @@ var BININDEX map[binPos]uint
 var TOTALREADSCELL map[uint]float64
 
 /*BINSPARSEMATRIX map[cellID]map[bin]float64*/
-var BINSPARSEMATRIX map[uint]map[uint]float64
+var BINSPARSEMATRIX []map[uint]float64
 
 /*BINSIZE bin size for bin matrix */
 var BINSIZE int
@@ -61,7 +61,7 @@ func createBinSparseMatrix() {
 }
 
 func initBinSparseMatrix() {
-	BINSPARSEMATRIX = make(map[uint]map[uint]float64)
+	BINSPARSEMATRIX = make([]map[uint]float64, len(CELLIDDICT))
 	BININDEX = make(map[binPos]uint)
 
 	for _, pos := range CELLIDDICT {
@@ -169,7 +169,7 @@ func writeBinMatrixToCOOFile(outfile string) {
 	tStart := time.Now()
 
 	var buffer bytes.Buffer
-	var cellPos uint
+	var cellPos int
 	var index uint
 	var binValue float64
 	var err error
@@ -182,7 +182,7 @@ func writeBinMatrixToCOOFile(outfile string) {
 
 	for cellPos = range BINSPARSEMATRIX {
 		for index = range BINSPARSEMATRIX[cellPos] {
-			buffer.WriteString(strconv.Itoa(int(cellPos)))
+			buffer.WriteString(strconv.Itoa(cellPos))
 			buffer.WriteString(SEP)
 			buffer.WriteString(strconv.Itoa(int(index)))
 			buffer.WriteString(SEP)
@@ -190,7 +190,7 @@ func writeBinMatrixToCOOFile(outfile string) {
 			binValue = BINSPARSEMATRIX[cellPos][index]
 
 			if NORM {
-				binValue = binValue / TOTALREADSCELL[cellPos]
+				binValue = binValue / TOTALREADSCELL[uint(cellPos)]
 			}
 
 			buffer.WriteString(strconv.FormatFloat(binValue, 'f', 10, 64))

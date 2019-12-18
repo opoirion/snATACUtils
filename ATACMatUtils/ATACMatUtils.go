@@ -68,7 +68,7 @@ var MUTEX *sync.Mutex
 var CELLMUTEXDICT map[uint]*sync.Mutex
 
 /*INTSPARSEMATRIX cell x feature sparse matrix  */
-var INTSPARSEMATRIX map[uint]map[uint]int
+var INTSPARSEMATRIX []map[uint]int
 
 /*FILENAMEOUT  output file name output */
 var FILENAMEOUT string
@@ -210,7 +210,7 @@ func computeReadsInPeaksForCell(){
 
 
 func initIntSparseMatrix() {
-	INTSPARSEMATRIX = make(map[uint]map[uint]int)
+	INTSPARSEMATRIX = make([]map[uint]int, len(CELLIDDICT))
 
 	for _, pos := range CELLIDDICT {
 		INTSPARSEMATRIX[pos] = make(map[uint]int)
@@ -260,7 +260,8 @@ func writeIntMatrixToCOOFile(outfile string) {
 	fmt.Printf("writing to output file...\n")
 
 	var buffer bytes.Buffer
-	var cellPos, featPos uint
+	var cellPos int
+	var featPos uint
 	var err error
 
 	writer := utils.ReturnWriter(outfile)
@@ -271,7 +272,7 @@ func writeIntMatrixToCOOFile(outfile string) {
 
 	for cellPos = range INTSPARSEMATRIX {
 		for featPos = range INTSPARSEMATRIX[cellPos] {
-			buffer.WriteString(strconv.Itoa(int(cellPos)))
+			buffer.WriteString(strconv.Itoa(cellPos))
 			buffer.WriteString(SEP)
 			buffer.WriteString(strconv.Itoa(int(featPos)))
 			buffer.WriteString(SEP)
@@ -397,9 +398,9 @@ func mergeCOOIntMatFile(filename string) {
 
 		switch USECOUNT {
 		case true:
-			INTSPARSEMATRIX[uint(xgi)][uint(ygi)] += value
+			INTSPARSEMATRIX[xgi][uint(ygi)] += value
 		default:
-			INTSPARSEMATRIX[uint(xgi)][uint(ygi)] = 1
+			INTSPARSEMATRIX[xgi][uint(ygi)] = 1
 		}
 
 	}
@@ -743,7 +744,8 @@ func writeBinMatrixToTaijiFile(outfile string) {
 
 	bufSize := 0
 
-	var xgi, ygi uint
+	var xgi int
+	var ygi uint
 	var value float64
 	var err error
 
@@ -808,8 +810,8 @@ func writeIntMatrixToTaijiFile(outfile string) {
 
 	bufSize := 0
 
-	var xgi, ygi uint
-	var value int
+	var ygi uint
+	var xgi, value int
 	var err error
 
 	for xgi = range INTSPARSEMATRIX {
