@@ -41,6 +41,7 @@ func createBinSparseMatrix() {
 	CELLIDCOUNT = make(map[string]int)
 
 	loadCellIDDict(CELLSIDFNAME)
+	XGIDIM = len(CELLIDDICT)
 	initBinSparseMatrix()
 
 	if PEAKFILE != "" {
@@ -61,7 +62,7 @@ func createBinSparseMatrix() {
 }
 
 func initBinSparseMatrix() {
-	BINSPARSEMATRIX = make([]map[uint]float64, len(CELLIDDICT))
+	BINSPARSEMATRIX = make([]map[uint]float64, XGIDIM)
 	BININDEX = make(map[binPos]uint)
 
 	for _, pos := range CELLIDDICT {
@@ -251,8 +252,6 @@ func createBinSparseMatrixOneFileThreading(bedfilename utils.Filename) {
 			bufferStop := chunk
 
 			for i := 0; i < THREADNB;i++{
-
-				waiting.Add(1)
 				go updateBinSparseMatrixOneThread(bufferPointer , bufferStart, bufferStop, i, &waiting)
 
 				bufferStart += chunk
@@ -325,7 +324,16 @@ func updateBinSparseMatrixOneThread(bufferLine * [BUFFERSIZE]string, bufferStart
 	var index int
 	var featureID, cellID uint
 
+	waiting.Add(1)
 	var intervals []interval.IntInterface
+
+	type tmpMatUnit struct {
+		bin binPos
+		cellID uint
+	}
+
+	var tmpResult []tmpMatUnit
+	var oneFeat tmpMatUnit
 
 	for i := bufferStart; i < bufferStop;i++ {
 
@@ -357,23 +365,27 @@ func updateBinSparseMatrixOneThread(bufferLine * [BUFFERSIZE]string, bufferStart
 		bin.chr = split[0]
 		bin.index = index
 
+		oneFeat.bin = bin
+		oneFeat.cellID = cellID
+
+		tmpResult = append(tmpResult, oneFeat)
+	}
+
+	BININDEXMUTEX.Lock()
+
+	for _, oneFeat = range tmpResult {
 		if featureID, isInside = BININDEX[bin];!isInside {
-			BININDEXMUTEX.Lock()
 			featureID = BININDEXCOUNT
 			BININDEX[bin] = BININDEXCOUNT
 			BININDEXCOUNT++
-			BININDEXMUTEX.Unlock()
 		}
-
-		CELLMUTEXDICT[cellID].Lock()
 
 		if NORM {
 			TOTALREADSCELL[cellID]++
 		}
 
 		BINSPARSEMATRIX[cellID][featureID]++
-
-
-		CELLMUTEXDICT[cellID].Unlock()
 	}
+
+	BININDEXMUTEX.Unlock()
 }

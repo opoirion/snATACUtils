@@ -806,7 +806,7 @@ func writeBinMatrixToTaijiFile(outfile string) {
 
 	tStart := time.Now()
 
-	sortedXgi := make([]string, len(BINSPARSEMATRIX))
+	sortedXgi := make([]string, XGIDIM)
 
 	for xgi, pos := range CELLIDDICT {
 		sortedXgi[pos] = xgi
@@ -816,7 +816,7 @@ func writeBinMatrixToTaijiFile(outfile string) {
 	defer utils.CloseFile(writer)
 
 	buffer.WriteString("sparse matrix: ")
-	buffer.WriteString(strconv.Itoa(len(sortedXgi)))
+	buffer.WriteString(strconv.Itoa(XGIDIM))
 	buffer.WriteString(" x ")
 	buffer.WriteString(strconv.Itoa(YGIDIM))
 	buffer.WriteRune('\n')
@@ -867,23 +867,23 @@ func writeBinMatrixToTaijiFile(outfile string) {
 }
 
 
-func writeIntMatrixToTaijiFile(outfile string, writeHeader bool) {
+func writeIntMatrixToTaijiFile(filenameout string, writeHeader bool) {
 	var buffer bytes.Buffer
 
 	tStart := time.Now()
 
-	sortedXgi := make([]string, len(CELLIDDICT))
+	sortedXgi := make([]string, XGIDIM)
 
 	for xgi, pos := range CELLIDDICT {
 		sortedXgi[pos] = xgi
 	}
 
-	writer := utils.ReturnWriter(FILENAMEOUT)
+	writer := utils.ReturnWriter(filenameout)
 	defer utils.CloseFile(writer)
 
 	if writeHeader {
 		buffer.WriteString("sparse matrix: ")
-		buffer.WriteString(strconv.Itoa(len(sortedXgi)))
+		buffer.WriteString(strconv.Itoa(XGIDIM))
 		buffer.WriteString(" x ")
 		buffer.WriteString(strconv.Itoa(YGIDIM))
 		buffer.WriteRune('\n')
@@ -929,7 +929,7 @@ func writeIntMatrixToTaijiFile(outfile string, writeHeader bool) {
 	buffer.Reset()
 
 	tDiff := time.Since(tStart)
-	fmt.Printf("taiji formated matrix %s written in: %f s \n", FILENAMEOUT, tDiff.Seconds())
+	fmt.Printf("taiji formated matrix %s written in: %f s \n", filenameout, tDiff.Seconds())
 
 }
 
