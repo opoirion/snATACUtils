@@ -52,6 +52,9 @@ var MERGEOUTPUTS bool
 /*TAIJI Use TAIJI format */
 var TAIJI bool
 
+/*SPLIT split computation */
+var SPLIT int
+
 /*SEP separator for writing output */
 var SEP string
 
@@ -82,6 +85,9 @@ var YGIOUT string
 /*YGIDIM dim of ygi when reading a COO file */
 var YGIDIM int
 
+/*XGIDIM dim of xgi when reading a COO file */
+var XGIDIM int
+
 /*BUFFERSIZE buffer size for multithreading */
 const BUFFERSIZE = 1000000
 
@@ -110,6 +116,7 @@ USAGE: ATACMatTools -coo/taiji -merge -xgi <fname> -in <matrixFile1> -in <matrix
 	}
 
 
+	flag.IntVar(&SPLIT, "split", 0, "Split computation into n iterative chuncks (to reduce RAM usage for very large matrices)")
 	flag.IntVar(&BINSIZE, "bin_size", 5000, "Size of the bin for bin matrix")
 	flag.StringVar(&FILENAMEOUT, "out", "", "name of the output file")
 	flag.Var(&BEDFILENAME, "bed", "name of the bed file")
@@ -179,7 +186,11 @@ USAGE: ATACMatTools -coo/taiji -merge -xgi <fname> -in <matrixFile1> -in <matrix
 		case READINPEAK:
 			computeReadsInPeaksForCell()
 		default:
-			createBoolSparseMatrix()
+			if SPLIT > 0 {
+				createBoolSparseMatrixSplit()
+			} else {
+				createBoolSparseMatrix()
+			}
 		}
 	}
 
@@ -210,7 +221,7 @@ func computeReadsInPeaksForCell(){
 
 
 func initIntSparseMatrix() {
-	INTSPARSEMATRIX = make([]map[uint]int, len(CELLIDDICT))
+	INTSPARSEMATRIX = make([]map[uint]int, XGIDIM)
 
 	for _, pos := range CELLIDDICT {
 		INTSPARSEMATRIX[pos] = make(map[uint]int)
@@ -221,11 +232,16 @@ func initIntSparseMatrix() {
 func createBoolSparseMatrix(){
 	fmt.Printf("load indexes...\n")
 	loadCellIDDict(CELLSIDFNAME)
+
+	XGIDIM = len(CELLIDDICT)
 	YGIDIM = utils.LoadPeaks(PEAKFILE)
 
 	initIntSparseMatrix()
 	utils.CreatePeakIntervalTree()
+	launchBoolSparseMatrix(FILENAMEOUT)
+}
 
+func launchBoolSparseMatrix(filenameout string) {
 	switch{
 	case THREADNB > 1:
 		fmt.Printf("init mutexes...\n")
@@ -239,10 +255,73 @@ func createBoolSparseMatrix(){
 	}
 
 	if TAIJI {
-		writeIntMatrixToTaijiFile(FILENAMEOUT)
+		writeIntMatrixToTaijiFile(filenameout)
 	} else {
-		writeIntMatrixToCOOFile(FILENAMEOUT)
+		writeIntMatrixToCOOFile(filenameout)
 	}
+
+}
+
+func createBoolSparseMatrixSplit(){
+	var count, nbsplit int
+	var filenameout string
+	var tmpfiles []string
+
+	fmt.Printf("load indexes...\n")
+	loadCellIDDict(CELLSIDFNAME)
+	XGIDIM = len(CELLIDDICT)
+	YGIDIM = utils.LoadPeaks(PEAKFILE)
+
+	chunk := len(CELLIDDICT) / SPLIT
+	celliddict := make([]string, len(CELLIDDICT))
+
+	for cellID, pos := range CELLIDDICT {
+		celliddict[pos] = cellID
+	}
+
+	CELLIDDICT = make(map[string]uint)
+
+	utils.CreatePeakIntervalTree()
+
+	for pos, cellID := range celliddict {
+		CELLIDDICT[cellID] = uint(pos)
+
+		count++
+
+		if count > chunk {
+
+			filenameout = fmt.Sprintf("%s.%d.tmp", FILENAMEOUT, nbsplit)
+			fmt.Printf("#### Number of split: %d\n", nbsplit + 1)
+
+			initIntSparseMatrix()
+			launchBoolSparseMatrix(filenameout)
+
+			tmpfiles = append(tmpfiles, filenameout)
+
+			count = 0
+			nbsplit++
+			CELLIDDICT = make(map[string]uint)
+		}
+	}
+
+	//Finalizing last chunk
+	filenameout = fmt.Sprintf("%s.%d.tmp", FILENAMEOUT, nbsplit)
+	fmt.Printf("#### Number of split: %d\n", nbsplit + 1)
+	initIntSparseMatrix()
+	launchBoolSparseMatrix(filenameout)
+	tmpfiles = append(tmpfiles, filenameout)
+	/////////////////////////////////////////////////////////////
+
+	fmt.Printf("Concatenating tmp files...\n")
+	cmd := fmt.Sprintf("cat %s > %s", strings.Join(tmpfiles, " "), FILENAMEOUT)
+	utils.ExceCmd(cmd)
+
+	fmt.Printf("file: %s created!\n", FILENAMEOUT)
+
+	fmt.Printf("Removing tmp files...\n")
+	cmd = fmt.Sprintf("rm %s", strings.Join(tmpfiles, " "))
+	utils.ExceCmd(cmd)
+
 }
 
 func initMutexDict() {
