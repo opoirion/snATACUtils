@@ -1446,9 +1446,9 @@ func loadCellIDIndexAndBEDWriter(fname string) {
 		cellid := split[0]
 		filename := split[1]
 
-		ext := filename[len(filename)-7:]
+		ext := path.Ext(filename)
 
-		if ext != ".bed.gz" || ext != ".bed"  {
+		if ext != ".gz" && ext != ".bed"  {
 			filePath = fmt.Sprintf("%s/%s.bed.gz", OUTPUTDIR, filename)
 		} else {
 			filePath = fmt.Sprintf("%s/%s", OUTPUTDIR, filename)
