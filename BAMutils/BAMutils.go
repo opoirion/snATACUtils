@@ -1448,7 +1448,7 @@ func loadCellIDIndexAndBEDWriter(fname string) {
 
 		ext := filename[len(filename)-7:]
 
-		if ext != ".bed.gz" {
+		if ext != ".bed.gz" || ext != ".bed"  {
 			filePath = fmt.Sprintf("%s/%s.bed.gz", OUTPUTDIR, filename)
 		} else {
 			filePath = fmt.Sprintf("%s/%s", OUTPUTDIR, filename)
