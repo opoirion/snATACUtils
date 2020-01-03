@@ -47,7 +47,6 @@ func createBinSparseMatrix() {
 	if PEAKFILE != "" {
 		YGIDIM = utils.LoadPeaks(PEAKFILE)
 		utils.CreatePeakIntervalTree()
-		initMutexDict()
 		utils.InitIntervalDictsThreading(THREADNB)
 		createBinSparseMatrixOneFileThreading(BEDFILENAME)
 	} else {
