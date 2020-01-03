@@ -16,6 +16,7 @@ import(
 	"time"
 	"bytes"
 	"sync"
+	"path"
 )
 
 
@@ -282,6 +283,7 @@ func createBoolSparseMatrixSplit(){
 	CELLIDDICT = make(map[string]uint)
 
 	utils.CreatePeakIntervalTree()
+	ext := path.Ext(FILENAMEOUT)
 
 	for pos, cellID := range celliddict {
 		CELLIDDICT[cellID] = uint(pos)
@@ -290,7 +292,7 @@ func createBoolSparseMatrixSplit(){
 
 		if count > chunk {
 
-			filenameout = fmt.Sprintf("%s.%d.tmp", FILENAMEOUT, nbsplit)
+			filenameout = fmt.Sprintf("%s.%d.tmp%s", FILENAMEOUT[:len(FILENAMEOUT) - len(ext)], nbsplit, ext)
 			fmt.Printf("#### Number of split: %d\n", nbsplit + 1)
 
 			initIntSparseMatrix()
@@ -305,7 +307,7 @@ func createBoolSparseMatrixSplit(){
 	}
 
 	//Finalizing last chunk
-	filenameout = fmt.Sprintf("%s.%d.tmp", FILENAMEOUT, nbsplit)
+	filenameout = fmt.Sprintf("%s.%d.tmp%s", FILENAMEOUT[:len(FILENAMEOUT) - len(ext)], nbsplit, ext)
 	fmt.Printf("#### Number of split: %d\n", nbsplit + 1)
 	initIntSparseMatrix()
 	launchBoolSparseMatrix(filenameout, nbsplit == 0)
