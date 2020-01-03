@@ -238,10 +238,10 @@ func createBoolSparseMatrix(){
 
 	initIntSparseMatrix()
 	utils.CreatePeakIntervalTree()
-	launchBoolSparseMatrix(FILENAMEOUT)
+	launchBoolSparseMatrix(FILENAMEOUT, true)
 }
 
-func launchBoolSparseMatrix(filenameout string) {
+func launchBoolSparseMatrix(filenameout string, writeTaijiHeader bool) {
 	switch{
 	case THREADNB > 1:
 		fmt.Printf("init mutexes...\n")
@@ -255,7 +255,7 @@ func launchBoolSparseMatrix(filenameout string) {
 	}
 
 	if TAIJI {
-		writeIntMatrixToTaijiFile(filenameout)
+		writeIntMatrixToTaijiFile(filenameout, writeTaijiHeader)
 	} else {
 		writeIntMatrixToCOOFile(filenameout)
 	}
@@ -294,7 +294,7 @@ func createBoolSparseMatrixSplit(){
 			fmt.Printf("#### Number of split: %d\n", nbsplit + 1)
 
 			initIntSparseMatrix()
-			launchBoolSparseMatrix(filenameout)
+			launchBoolSparseMatrix(filenameout, nbsplit == 0)
 
 			tmpfiles = append(tmpfiles, filenameout)
 
@@ -308,7 +308,7 @@ func createBoolSparseMatrixSplit(){
 	filenameout = fmt.Sprintf("%s.%d.tmp", FILENAMEOUT, nbsplit)
 	fmt.Printf("#### Number of split: %d\n", nbsplit + 1)
 	initIntSparseMatrix()
-	launchBoolSparseMatrix(filenameout)
+	launchBoolSparseMatrix(filenameout, nbsplit == 0)
 	tmpfiles = append(tmpfiles, filenameout)
 	/////////////////////////////////////////////////////////////
 
@@ -438,7 +438,7 @@ func mergeMatFiles(filenames []string) {
 		if CREATEBINMATRIX {
 			writeBinMatrixToTaijiFile(FILENAMEOUT)
 		} else {
-			writeIntMatrixToTaijiFile(FILENAMEOUT)
+			writeIntMatrixToTaijiFile(FILENAMEOUT, true)
 		}
 	} else {
 		if CREATEBINMATRIX {
@@ -867,7 +867,7 @@ func writeBinMatrixToTaijiFile(outfile string) {
 }
 
 
-func writeIntMatrixToTaijiFile(outfile string) {
+func writeIntMatrixToTaijiFile(outfile string, writeHeader bool) {
 	var buffer bytes.Buffer
 
 	tStart := time.Now()
@@ -881,11 +881,13 @@ func writeIntMatrixToTaijiFile(outfile string) {
 	writer := utils.ReturnWriter(FILENAMEOUT)
 	defer utils.CloseFile(writer)
 
-	buffer.WriteString("sparse matrix: ")
-	buffer.WriteString(strconv.Itoa(len(sortedXgi)))
-	buffer.WriteString(" x ")
-	buffer.WriteString(strconv.Itoa(YGIDIM))
-	buffer.WriteRune('\n')
+	if writeHeader {
+		buffer.WriteString("sparse matrix: ")
+		buffer.WriteString(strconv.Itoa(len(sortedXgi)))
+		buffer.WriteString(" x ")
+		buffer.WriteString(strconv.Itoa(YGIDIM))
+		buffer.WriteRune('\n')
+	}
 
 	bufSize := 0
 
