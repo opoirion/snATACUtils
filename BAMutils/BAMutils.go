@@ -57,7 +57,7 @@ var CELLIDDICT map[string]bool
 var INPUTFNAMEINDEX map[string]int
 
 /*CELLIDDICTMULTIPLE cell ID<->dict */
-var CELLIDDICTMULTIPLE map[string]map[string]bool
+var CELLIDDICTMULTIPLE map[string][]string
 
 /*OUTFILENAMELIST bam filename<->bool */
 var OUTFILENAMELIST map[string]bool
@@ -590,8 +590,18 @@ func InsertRGTagToBamFile() {
 }
 
 
-/*DivideMultipleBedFileParallel divide one bed file into multiple bed files in parallel */
-func DivideMultipleBedFileParallel() {
+/*DivideMultipleBedFile divide the bam file */
+func DivideMultipleBedFile() {
+	var line string
+	var readID string
+	var isInside bool
+	var filename string
+	var buffer bytes.Buffer
+	var flist []string
+
+	bedReader, file := utils.ReturnReader(BEDFILENAME, 0)
+	defer utils.CloseFile(file)
+
 	loadCellIDIndexAndBEDWriter(NUCLEIINDEX)
 
 	for _, file := range(WRITERDICT) {
@@ -602,23 +612,27 @@ func DivideMultipleBedFileParallel() {
 		defer utils.CloseFile(file)
 	}
 
-	index:= 0
+	count := 0
 
-	INPUTFNAMEINDEX = make(map[string]int)
+	for bedReader.Scan() {
+		line = bedReader.Text()
+		count++
 
-	for filename := range(OUTFILENAMELIST) {
-		INPUTFNAMEINDEX[filename] = index
-		index++
+		readID = strings.Split(line, "\t")[3]
+
+		if  flist, isInside = CELLIDDICTMULTIPLE[readID];!isInside {
+			continue
+		}
+
+		buffer.WriteString(line)
+		buffer.WriteRune('\n')
+
+		for _, filename = range flist {
+			BEDWRITERDICT[filename].Write(buffer.Bytes())
+		}
+
+		buffer.Reset()
 	}
-
-	var waiting sync.WaitGroup
-	waiting.Add(THREADNB)
-
-	for i := 0; i < THREADNB;i++ {
-		go divideMultipleBedFileOneThread(i, &waiting)
-	}
-
-	waiting.Wait()
 }
 
 /*DivideMultipleBamFileParallel divide a bam file into multiple bam files in parallel */
@@ -672,6 +686,7 @@ func divideMultipleBamFileOneThread(threadID int, waiting *sync.WaitGroup){
 	var bamWriter *bam.Writer
 	var isInside bool
 	var filename string
+	var flist []string
 
 	f, err := os.Open(BAMFILENAME)
 	check(err)
@@ -708,9 +723,9 @@ func divideMultipleBamFileOneThread(threadID int, waiting *sync.WaitGroup){
 
 		readID = strings.SplitN(record.Name, ":", 2)[0]
 
-		if  _, isInside = CELLIDDICTMULTIPLE[readID];isInside {
+		if  flist, isInside = CELLIDDICTMULTIPLE[readID];isInside {
 
-			for filename = range(CELLIDDICTMULTIPLE[readID]) {
+			for _,filename = range flist {
 				if !((startIndex <= INPUTFNAMEINDEX[filename]) && (INPUTFNAMEINDEX[filename]  < endIndex)) {
 					continue
 				}
@@ -734,6 +749,7 @@ func divideMultipleBedFileOneThread(threadID int, waiting *sync.WaitGroup){
 	var filename string
 	var line string
 	var buffer bytes.Buffer
+	var flist []string
 
 	bedReader, file := utils.ReturnReader(BEDFILENAME, 0)
 	defer utils.CloseFile(file)
@@ -749,11 +765,11 @@ func divideMultipleBedFileOneThread(threadID int, waiting *sync.WaitGroup){
 
 		readID = strings.Split(line, "\t")[3]
 
-		if  _, isInside = CELLIDDICTMULTIPLE[readID];isInside {
+		if  flist, isInside = CELLIDDICTMULTIPLE[readID];isInside {
 			buffer.WriteString(line)
 			buffer.WriteRune('\n')
 
-			for filename = range(CELLIDDICTMULTIPLE[readID]) {
+			for _, filename = range flist {
 				if !((startIndex <= INPUTFNAMEINDEX[filename]) && (INPUTFNAMEINDEX[filename]  < endIndex)) {
 					continue
 				}
@@ -766,12 +782,19 @@ func divideMultipleBedFileOneThread(threadID int, waiting *sync.WaitGroup){
 
 
 /*DivideMultipleBedFile divide the bam file */
-func DivideMultipleBedFile() {
+func DivideMultipleBedFileParallel() {
 	var line string
 	var readID string
 	var isInside bool
 	var filename string
-	var buffer bytes.Buffer
+	var flist []string
+	var lineBuffer map[string][]string
+	var lineBufferSize map[string]int
+	var waiting sync.WaitGroup
+
+	chunk := 100000
+
+	fnameset := make(map[string]bool)
 
 	bedReader, file := utils.ReturnReader(BEDFILENAME, 0)
 	defer utils.CloseFile(file)
@@ -786,27 +809,95 @@ func DivideMultipleBedFile() {
 		defer utils.CloseFile(file)
 	}
 
+	for readID =range CELLIDDICTMULTIPLE {
+		for _, filename = range CELLIDDICTMULTIPLE[readID] {
+			fnameset[filename] = true
+		}
+	}
 
 	count := 0
+	lineBuffer, lineBufferSize = returnlineBuffer(chunk, fnameset)
+	guard := make(chan struct{}, THREADNB)
 
 	for bedReader.Scan() {
 		line = bedReader.Text()
-		count++
 
 		readID = strings.Split(line, "\t")[3]
 
-		if  _, isInside = CELLIDDICTMULTIPLE[readID];isInside {
-			buffer.WriteString(line)
-			buffer.WriteRune('\n')
+		if  flist, isInside = CELLIDDICTMULTIPLE[readID];!isInside {
+			continue
+		}
 
-			for filename = range(CELLIDDICTMULTIPLE[readID]) {
-				BEDWRITERDICT[filename].Write(buffer.Bytes())
+		count++
+
+		for _, filename = range flist {
+			lineBuffer[filename][lineBufferSize[filename]] = line
+			lineBufferSize[filename]++
+		}
+
+		if count >= chunk {
+			for filename = range lineBuffer {
+				waiting.Add(1)
+				guard <- struct{}{}
+				go writeBuffer(filename,
+					lineBuffer[filename],
+					lineBufferSize[filename],
+					&waiting, guard)
 			}
-
-			buffer.Reset()
+			waiting.Wait()
+			count = 0
+			lineBuffer, lineBufferSize = returnlineBuffer(chunk, fnameset)
 		}
 	}
+
+	//Last iteration
+	for filename = range lineBuffer {
+		waiting.Add(1)
+		guard <- struct{}{}
+		go writeBuffer(filename,
+			lineBuffer[filename],
+			lineBufferSize[filename],
+			&waiting, guard)
+	}
+	waiting.Wait()
 }
+
+func returnlineBuffer (chunk int, fnameset map[string]bool) (
+	lineBuffer map[string][]string, lineBufferSize map[string]int) {
+
+		var filename string
+		lineBuffer = make(map[string][]string, chunk)
+		lineBufferSize = make(map[string]int)
+
+		for filename = range fnameset {
+			lineBuffer[filename] = make([]string, chunk)
+		}
+
+		return lineBuffer, lineBufferSize
+}
+
+func writeBuffer (filename string, lineBuffer []string, lineBufferSize int, waiting *sync.WaitGroup, guard chan struct{}) {
+	defer waiting.Done()
+	var buffer bytes.Buffer
+	var line string
+	var err error
+	var count int
+
+	for _, line = range lineBuffer {
+		buffer.WriteString(line)
+		buffer.WriteRune('\n')
+		count++
+
+		if count >= lineBufferSize {
+			break
+		}
+	}
+
+	_, err = BEDWRITERDICT[filename].Write(buffer.Bytes())
+	utils.Check(err)
+	<-guard
+}
+
 
 /*DivideMultipleBamFile divide the bam file */
 func DivideMultipleBamFile() {
@@ -816,6 +907,7 @@ func DivideMultipleBamFile() {
 	var bamWriter *bam.Writer
 	var isInside bool
 	var filename string
+	var flist []string
 
 	f, err := os.Open(BAMFILENAME)
 	check(err)
@@ -861,9 +953,9 @@ func DivideMultipleBamFile() {
 		read = record.String()
 		readID = strings.SplitN(read, ":", 2)[0]
 
-		if  _, isInside = CELLIDDICTMULTIPLE[readID];isInside {
+		if  flist, isInside = CELLIDDICTMULTIPLE[readID];isInside {
 
-			for filename = range(CELLIDDICTMULTIPLE[readID]) {
+			for _, filename = range flist {
 				bamWriter = BAMWRITERDICT[filename]
 				err = bamWriter.Write(record)
 				if err != nil {
@@ -1391,8 +1483,10 @@ func loadCellIDIndexAndBAMWriter(fname string, header *sam.Header) {
 	defer utils.CloseFile(f)
 	scanner := bufio.NewScanner(f)
 	var filePath string
+	var isInside bool
 
-	CELLIDDICTMULTIPLE = make(map[string]map[string]bool)
+	CELLIDDICTMULTIPLE = make(map[string][]string)
+	fnameset := make(map[string]map[string]bool)
 	WRITERDICT = make(map[string]*os.File)
 	BAMWRITERDICT = make(map[string]*bam.Writer)
 	OUTFILENAMELIST = make(map[string]bool)
@@ -1420,23 +1514,30 @@ func loadCellIDIndexAndBAMWriter(fname string, header *sam.Header) {
 			OUTFILENAMELIST[filename] = true
 		}
 
-		if _, isInside := CELLIDDICTMULTIPLE[cellid]; !isInside {
-			CELLIDDICTMULTIPLE[cellid] = make(map[string]bool)
+		if _, isInside = fnameset[cellid];!isInside {
+			fnameset[cellid] = make(map[string]bool)
 		}
 
-		CELLIDDICTMULTIPLE[cellid][filename] = true
+		if fnameset[cellid][filename] {
+			continue
+		}
+
+		CELLIDDICTMULTIPLE[cellid] = append(CELLIDDICTMULTIPLE[cellid], filename)
+		fnameset[cellid][filename] = true
 	}
 }
 
 
 func loadCellIDIndexAndBEDWriter(fname string) {
 	var filePath string
+	var isInside bool
 	f, err := os.Open(fname)
 	check(err)
 	defer utils.CloseFile(f)
 	scanner := bufio.NewScanner(f)
 
-	CELLIDDICTMULTIPLE = make(map[string]map[string]bool)
+	fnameset := make(map[string]map[string]bool)
+	CELLIDDICTMULTIPLE = make(map[string][]string)
 	BEDWRITERDICT = make(map[string]io.WriteCloser)
 	OUTFILENAMELIST = make(map[string]bool)
 
@@ -1460,11 +1561,16 @@ func loadCellIDIndexAndBEDWriter(fname string) {
 			OUTFILENAMELIST[filename] = true
 		}
 
-		if _, isInside := CELLIDDICTMULTIPLE[cellid]; !isInside {
-			CELLIDDICTMULTIPLE[cellid] = make(map[string]bool)
+		if _, isInside = fnameset[cellid];!isInside {
+			fnameset[cellid] = make(map[string]bool)
 		}
 
-		CELLIDDICTMULTIPLE[cellid][filename] = true
+		if fnameset[cellid][filename] {
+			continue
+		}
+
+		CELLIDDICTMULTIPLE[cellid] = append(CELLIDDICTMULTIPLE[cellid], filename)
+		fnameset[cellid][filename] = true
 	}
 }
 
