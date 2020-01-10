@@ -65,10 +65,10 @@ var OUTFILENAMELIST map[string]bool
 /*WRITERDICT filename<->dict */
 var WRITERDICT map[string]*os.File
 
-/*BAMWRITERDICT filename<->dict */
+/*BAMWRITERDICT filename<->open bam file writer */
 var BAMWRITERDICT map[string]*bam.Writer
 
-/*BEDWRITERDICT filename<->dict */
+/*BEDWRITERDICT filename<->open bed file */
 var BEDWRITERDICT map[string]io.WriteCloser
 
 /*DIVIDE  dividing the bam file tool */
@@ -596,13 +596,22 @@ func DivideMultipleBedFile() {
 	var readID string
 	var isInside bool
 	var filename string
-	var buffer bytes.Buffer
+	var bufferDict map[string]*bytes.Buffer
 	var flist []string
+	var err error
+
+	var buffer *bytes.Buffer
+
+	bufferDict = make(map[string]*bytes.Buffer)
 
 	bedReader, file := utils.ReturnReader(BEDFILENAME, 0)
 	defer utils.CloseFile(file)
 
 	loadCellIDIndexAndBEDWriter(NUCLEIINDEX)
+
+	for filename = range OUTFILENAMELIST {
+		bufferDict[filename] = &bytes.Buffer{}
+	}
 
 	for _, file := range(WRITERDICT) {
 		defer utils.CloseFile(file)
@@ -613,10 +622,10 @@ func DivideMultipleBedFile() {
 	}
 
 	count := 0
+	buffSize := 50000
 
 	for bedReader.Scan() {
 		line = bedReader.Text()
-		count++
 
 		readID = strings.Split(line, "\t")[3]
 
@@ -624,16 +633,30 @@ func DivideMultipleBedFile() {
 			continue
 		}
 
-		buffer.WriteString(line)
-		buffer.WriteRune('\n')
+		count++
 
 		for _, filename = range flist {
-			BEDWRITERDICT[filename].Write(buffer.Bytes())
+			bufferDict[filename].WriteString(line)
+			bufferDict[filename].WriteRune('\n')
 		}
 
+		if count >= buffSize {
+			for filename, buffer = range bufferDict {
+				_, err = BEDWRITERDICT[filename].Write(buffer.Bytes())
+				utils.Check(err)
+				buffer.Reset()
+			}
+			count = 0
+		}
+	}
+
+	for filename, buffer = range bufferDict {
+		_, err = BEDWRITERDICT[filename].Write(buffer.Bytes())
+		utils.Check(err)
 		buffer.Reset()
 	}
 }
+
 
 /*DivideMultipleBamFileParallel divide a bam file into multiple bam files in parallel */
 func DivideMultipleBamFileParallel() {
