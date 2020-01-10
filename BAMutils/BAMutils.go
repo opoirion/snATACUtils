@@ -512,12 +512,12 @@ func CreateCellIndexBed() {
 		split = strings.Split(line, "\t")
 
 		if len(split) < 4 {
-			panic(fmt.Sprintf("Error! line cannot be splitted in 4 blocks:%s\n", line))
+			panic(fmt.Sprintf("Error! line nb %d cannot be splitted in 4 blocks:%s\n", count, line))
 		}
 
 		readID = split[3]
-
 		readIndex[readID]++
+		count++
 	}
 
 	for readID, count = range(readIndex) {
