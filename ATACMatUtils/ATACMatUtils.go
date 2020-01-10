@@ -92,6 +92,20 @@ var XGIDIM int
 /*BUFFERSIZE buffer size for multithreading */
 const BUFFERSIZE = 1000000
 
+type mattype string
+
+func (i *mattype) Set(mtype string) mattype {
+	switch mtype {
+	case "coo":
+		*i = mattype(mtype)
+	case "taiji":
+		*i = mattype(mtype)
+	default:
+		panic(fmt.Sprintf("Matrix format unknown: %s", mtype))
+	}
+
+	return *i
+}
 
 func main() {
 	flag.Usage = func() {
@@ -110,7 +124,8 @@ USAGE: ATACMatTools -bin -bed  <bedFile> (optional -ygi <bedFile> -xgi <fname> -
 USAGE: ATACMatTools -count  -xgi <fname> -ygi <bedfile> -bed <bedFile>
 
 """Merge multiple matrices results into one output file: -merge """
-USAGE: ATACMatTools -coo/taiji -merge -xgi <fname> -in <matrixFile1> -in <matrixFile2> ... (optional /bin)
+It can be used to convert taiji to coo or coo to taiji formats.
+USAGE: ATACMatTools -coo/taiji -merge -xgi <fname> -in <matrixFile1> -in <matrixFile2> ... (optional /bin -out <fname>)
 
 `)
 		 flag.PrintDefaults()
@@ -419,6 +434,7 @@ func writeCellCounter(outfile string) {
 func mergeMatFiles(filenames []string) {
 	fmt.Printf("creating xgi index..\n")
 	loadCellIDDict(CELLSIDFNAME)
+	XGIDIM = len(CELLIDDICT)
 
 	if CREATEBINMATRIX {
 		initBinSparseMatrix()
@@ -427,12 +443,13 @@ func mergeMatFiles(filenames []string) {
 	}
 
 	for _, filename := range filenames {
-		fmt.Printf("merging file: %s\n", filename)
+		mtype := findMatrixFormat(filename)
+		fmt.Printf("merging file: matrix %s with format: %s \n", filename, mtype)
 
 		if CREATEBINMATRIX {
-			mergeCOOFloatMatFile(filename)
+			mergeFloatMatFile(filename, mtype)
 		} else {
-			mergeCOOIntMatFile(filename)
+			mergeIntMatFile(filename, mtype)
 		}
 	}
 
@@ -451,9 +468,59 @@ func mergeMatFiles(filenames []string) {
 	}
 }
 
+/*mergeIntMatFile add one file to the matrix*/
+func mergeIntMatFile(filename string, mtype mattype) {
+	switch mtype {
+	case "coo":
+		mergeIntMatFileFromCOO(filename)
+	case "taiji":
+		mergeIntMatFileFromTaiji(filename)
+	}
+}
 
-/*mergeCOOIntMatFile add one file to the matrix*/
-func mergeCOOIntMatFile(filename string) {
+/*mergeFloatMatFile add one file to the matrix*/
+func mergeFloatMatFile(filename string, mtype mattype) {
+	switch mtype {
+	case "coo":
+		mergeFloatMatFileFromCOO(filename)
+	case "taiji":
+		mergeFloatMatFileFromTaiji(filename)
+	}
+}
+
+/*findMatrixFormat find matrix format */
+func findMatrixFormat(filename string) mattype {
+	scanner, f := utils.ReturnReader(filename, 0)
+
+	scanner.Scan()
+	firstLine := scanner.Text()
+	utils.CloseFile(f)
+
+	var err1, err2, err3 error
+
+	split := strings.Split(firstLine, "\t")
+
+	if len(split) == 3 {
+		_, err1 = strconv.Atoi(split[0])
+		_, err2 = strconv.Atoi(split[1])
+		_, err3 = strconv.ParseFloat(split[2], 64)
+
+		if err1 == nil && err2 == nil && err3 == nil {
+			return mattype("coo")
+		}
+	}
+
+	if strings.HasPrefix(firstLine, "sparse matrix:") && strings.Contains(firstLine, " x ") {
+		return mattype("taiji")
+	}
+
+	panic(fmt.Sprintf("Matrix header:% s does not match any matrix type", firstLine))
+
+	return mattype("unknown")
+}
+
+/*mergeIntMatFileFromCOO add one file to the matrix*/
+func mergeIntMatFileFromCOO(filename string) {
 	var scanner *bufio.Scanner
 	var f *os.File
 	var err error
@@ -488,8 +555,93 @@ func mergeCOOIntMatFile(filename string) {
 }
 
 
-/*mergeCOOFloatMatFile add one file to the matrix*/
-func mergeCOOFloatMatFile(filename string) {
+/*mergeIntMatFileFromCOO add one file to the matrix*/
+func mergeIntMatFileFromTaiji(filename string) {
+	var scanner *bufio.Scanner
+	var f *os.File
+	var err error
+	var split, ygiSplit []string
+	var ygiUnit string
+	var xgi uint
+	var ygi int
+	var value float64
+
+	var isInside bool
+
+	scanner, f = utils.ReturnReader(filename, 0)
+	scanner.Scan()
+	_ = scanner.Text()
+
+	defer utils.CloseFile(f)
+
+	for scanner.Scan() {
+		split = strings.Split(scanner.Text(), "\t")
+
+		if xgi, isInside = CELLIDDICT[split[0]]; !isInside {
+			fmt.Printf("Barcode %s is not in %s", split[0], CELLSIDFNAME)
+			continue
+		}
+
+		for _, ygiUnit = range split[1:] {
+			ygiSplit = strings.Split(ygiUnit, ",")
+			ygi, err = strconv.Atoi(ygiSplit[0])
+			utils.Check(err)
+			value, err = strconv.ParseFloat(ygiSplit[1], 64)
+			utils.Check(err)
+
+			switch USECOUNT {
+			case true:
+				INTSPARSEMATRIX[xgi][uint(ygi)] += int(value)
+			default:
+				INTSPARSEMATRIX[xgi][uint(ygi)] = 1
+			}
+
+		}
+	}
+}
+
+
+/*mergeFLloattMatFileFromCOO add one file to the matrix*/
+func mergeFloatMatFileFromTaiji(filename string) {
+	var scanner *bufio.Scanner
+	var f *os.File
+	var err error
+	var split, ygiSplit []string
+	var ygiUnit string
+	var xgi uint
+	var ygi int
+	var value float64
+	var isInside bool
+
+	scanner, f = utils.ReturnReader(filename, 0)
+	scanner.Scan()
+	_ = scanner.Text()
+
+	defer utils.CloseFile(f)
+
+	for scanner.Scan() {
+		split = strings.Split(scanner.Text(), "\t")
+
+		if xgi, isInside = CELLIDDICT[split[0]]; !isInside {
+			fmt.Printf("Barcode %s is not in %s", split[0], CELLSIDFNAME)
+			continue
+		}
+
+		for _, ygiUnit = range split[1:] {
+			ygiSplit = strings.Split(ygiUnit, ",")
+			ygi, err = strconv.Atoi(ygiSplit[0])
+			utils.Check(err)
+			value, err = strconv.ParseFloat(ygiSplit[1], 64)
+			utils.Check(err)
+
+			BINSPARSEMATRIX[xgi][uint(ygi)] += value
+		}
+	}
+}
+
+
+/*mergeFloatMatFileFromCOO add one file to the matrix*/
+func mergeFloatMatFileFromCOO(filename string) {
 	var scanner *bufio.Scanner
 	var f *os.File
 	var err error
@@ -507,7 +659,7 @@ func mergeCOOFloatMatFile(filename string) {
 		utils.Check(err)
 		ygi, err = strconv.Atoi(split[1])
 		utils.Check(err)
-		value, err = strconv.ParseFloat(split[2],64)
+		value, err = strconv.ParseFloat(split[2], 64)
 		utils.Check(err)
 
 		if ygi > YGIDIM {
@@ -906,11 +1058,9 @@ func writeIntMatrixToTaijiFile(filenameout string, writeHeader bool) {
 			buffer.WriteRune(',')
 
 			if USECOUNT {
-				buffer.WriteRune('1')
-
-			} else
-			{
 				buffer.WriteString(strconv.Itoa(value))
+			} else {
+				buffer.WriteRune('1')
 			}
 
 			bufSize++
