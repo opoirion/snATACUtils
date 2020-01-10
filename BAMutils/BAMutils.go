@@ -492,6 +492,7 @@ func CreateCellIndexBed() {
 	var line string
 
 	var readID string
+	var split []string
 	var count int
 	var buffer bytes.Buffer
 
@@ -508,7 +509,14 @@ func CreateCellIndexBed() {
 	for bedReader.Scan(){
 		line = bedReader.Text()
 
-		readID = strings.Split(line, "\t")[3]
+		split = strings.Split(line, "\t")
+
+		if len(split) < 4 {
+			panic(fmt.Sprintf("Error! line cannot be splitted in 4 blocks:%s\n", line))
+		}
+
+		readID = split[3]
+
 		readIndex[readID]++
 	}
 
