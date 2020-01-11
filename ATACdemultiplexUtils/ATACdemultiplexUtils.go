@@ -332,28 +332,25 @@ input:
     ignoreSortingCategory bool,
     ignoreError bool
 */
-func SortLogfile(filename string, separator string, outfname string,
+func SortLogfile(filename Filename, separator string, outfname string,
 	ignoreSortingCategory bool, ignoreError bool)  {
-	file, err := os.Open(filename)
-	Check(err)
-	defer file.Close()
+	scanner, file := filename.ReturnReader(0)
+	defer CloseFile(file)
 	var buffer bytes.Buffer
 	var split []string
 	var valueField, key string
 	var value int
-	Check(err)
-	scanner := bufio.NewScanner(file)
 
-	ext := path.Ext(filename)
+	ext := path.Ext(filename.String())
 
 	if outfname == "" {
-		outfname = fmt.Sprintf("%s_sorted%s", strings.TrimSuffix(filename, ext), ext)
+		outfname = fmt.Sprintf("%s_sorted%s", strings.TrimSuffix(filename.String(), ext), ext)
 	}
 
 	outfile, err := os.Create(outfname)
 	Check(err)
-	defer outfile.Close()
-	defer os.Rename(outfname, filename)
+	defer CloseFile(outfile)
+	defer os.Rename(outfname, filename.String())
 
 	Check(err)
 	pl := PairList{}

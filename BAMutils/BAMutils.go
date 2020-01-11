@@ -229,7 +229,9 @@ USAGE: BAMutils -downsample <float> -bed <bedfile> (-out <string> -cellsID <stri
 		}
 
 		if SORTFILE {
-			utils.SortLogfile(FILENAMEOUT, DELIMITER, "", true, false)
+			utils.SortLogfile(
+				utils.Filename(FILENAMEOUT),
+				DELIMITER, "", true, false)
 		}
 
 	case BEDTOBEDGRAPH:
