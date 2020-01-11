@@ -203,7 +203,7 @@ func cleanFile(filename utils.Filename) {
 	defer utils.CloseFile(file)
 
 	if OUTFILE == "" {
-		fsplit := strings.Split(filename.String(), ".")
+		fsplit := strings.SplitN(filename.String(), ".", 2)
 		OUTFILE = fmt.Sprintf("%s.clean.%s", fsplit[0], fsplit[1])
 	}
 
