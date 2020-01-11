@@ -203,9 +203,9 @@ USAGE: ATACMatTools -coo/taiji -merge -xgi <fname> -in <matrixFile1> -in <matrix
 			computeReadsInPeaksForCell()
 		default:
 			if SPLIT > 0 {
-				createIntlSparseMatrixSplit()
+				createIntSparseMatrixSplit()
 			} else {
-				createIntlSparseMatrix()
+				createIntSparseMatrix()
 			}
 		}
 	}
@@ -245,7 +245,7 @@ func initIntSparseMatrix() {
 }
 
 
-func createIntlSparseMatrix(){
+func createIntSparseMatrix(){
 	fmt.Printf("load indexes...\n")
 	loadCellIDDict(CELLSIDFNAME)
 
@@ -254,10 +254,10 @@ func createIntlSparseMatrix(){
 
 	initIntSparseMatrix()
 	utils.CreatePeakIntervalTree()
-	launchIntlSparseMatrix(FILENAMEOUT, true)
+	launchIntSparseMatrix(FILENAMEOUT, true)
 }
 
-func launchIntlSparseMatrix(filenameout string, writeTaijiHeader bool) {
+func launchIntSparseMatrix(filenameout string, writeTaijiHeader bool) {
 	switch{
 	case THREADNB > 1:
 		fmt.Printf("init mutexes...\n")
@@ -265,9 +265,9 @@ func launchIntlSparseMatrix(filenameout string, writeTaijiHeader bool) {
 		fmt.Printf("init threading...\n")
 		utils.InitIntervalDictsThreading(THREADNB)
 		fmt.Printf("launching sparse matrices creation...\n")
-		createIntlSparseMatrixOneFileThreading(BEDFILENAME)
+		createIntSparseMatrixOneFileThreading(BEDFILENAME)
 	default:
-		createIntlSparseMatrixOneFile(BEDFILENAME)
+		createIntSparseMatrixOneFile(BEDFILENAME)
 	}
 
 	if TAIJI {
@@ -278,7 +278,7 @@ func launchIntlSparseMatrix(filenameout string, writeTaijiHeader bool) {
 
 }
 
-func createIntlSparseMatrixSplit(){
+func createIntSparseMatrixSplit(){
 	var count, nbsplit int
 	var filenameout string
 	var tmpfiles []string
@@ -311,7 +311,7 @@ func createIntlSparseMatrixSplit(){
 			fmt.Printf("#### Number of split: %d\n", nbsplit + 1)
 
 			initIntSparseMatrix()
-			launchIntlSparseMatrix(filenameout, nbsplit == 0)
+			launchIntSparseMatrix(filenameout, nbsplit == 0)
 
 			tmpfiles = append(tmpfiles, filenameout)
 
@@ -325,7 +325,7 @@ func createIntlSparseMatrixSplit(){
 	filenameout = fmt.Sprintf("%s.%d.tmp%s", FILENAMEOUT[:len(FILENAMEOUT) - len(ext)], nbsplit, ext)
 	fmt.Printf("#### Number of split: %d\n", nbsplit + 1)
 	initIntSparseMatrix()
-	launchIntlSparseMatrix(filenameout, nbsplit == 0)
+	launchIntSparseMatrix(filenameout, nbsplit == 0)
 	tmpfiles = append(tmpfiles, filenameout)
 	/////////////////////////////////////////////////////////////
 
@@ -672,8 +672,8 @@ func mergeFloatMatFileFromCOO(filename string) {
 }
 
 
-/*createIntlSparseMatrixOneFileThreading ceate the bool Sparse Matrix for one bed file using multi-threading*/
-func createIntlSparseMatrixOneFileThreading(bedfilename utils.Filename) {
+/*createIntSparseMatrixOneFileThreading ceate the bool Sparse Matrix for one bed file using multi-threading*/
+func createIntSparseMatrixOneFileThreading(bedfilename utils.Filename) {
 	var nbReads uint
 	var bufferLine1 [BUFFERSIZE]string
 	var bufferLine2 [BUFFERSIZE]string
@@ -704,7 +704,7 @@ func createIntlSparseMatrixOneFileThreading(bedfilename utils.Filename) {
 			for i := 0; i < THREADNB;i++{
 
 				waiting.Add(1)
-				go updateIntlSparseMatrixOneThread(bufferPointer , bufferStart, bufferStop, i, &waiting)
+				go updateIntSparseMatrixOneThread(bufferPointer , bufferStart, bufferStop, i, &waiting)
 
 				bufferStart += chunk
 				bufferStop += chunk
@@ -732,7 +732,7 @@ func createIntlSparseMatrixOneFileThreading(bedfilename utils.Filename) {
 
 	if bufferIt > 0 {
 		waiting.Add(1)
-		updateIntlSparseMatrixOneThread(bufferPointer , 0, bufferIt, 0, &waiting)
+		updateIntSparseMatrixOneThread(bufferPointer , 0, bufferIt, 0, &waiting)
 	}
 }
 
@@ -849,7 +849,7 @@ func updateReadInPeakThread(bufferLine * [BUFFERSIZE]string, bufferStart ,buffer
 	}
 }
 
-func updateIntlSparseMatrixOneThread(bufferLine * [BUFFERSIZE]string, bufferStart ,bufferStop, threadnb int,
+func updateIntSparseMatrixOneThread(bufferLine * [BUFFERSIZE]string, bufferStart ,bufferStop, threadnb int,
 	waiting * sync.WaitGroup) {
 	defer waiting.Done()
 	var split []string
@@ -903,7 +903,7 @@ func updateIntlSparseMatrixOneThread(bufferLine * [BUFFERSIZE]string, bufferStar
 	}
 }
 
-func createIntlSparseMatrixOneFile(bedfilename utils.Filename) {
+func createIntSparseMatrixOneFile(bedfilename utils.Filename) {
 	var line string
 	var split []string
 	var isInside bool
