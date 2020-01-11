@@ -211,11 +211,13 @@ func cleanFile(filename utils.Filename) {
 	defer utils.CloseFile(writer)
 	var buffer bytes.Buffer
 	count := 0
+	countrm := 0
 
 	for scanner.Scan() {
 		line = scanner.Text()
 
 		if line == CLEANPATTERN {
+			countrm++
 			continue
 		}
 
@@ -234,7 +236,7 @@ func cleanFile(filename utils.Filename) {
 	_, err = writer.Write(buffer.Bytes())
 	utils.Check(err)
 
-	fmt.Printf("output file: %s written!\n", OUTFILE)
+	fmt.Printf("%d lines removed. output file: %s written!\n", countrm, OUTFILE)
 }
 
 
