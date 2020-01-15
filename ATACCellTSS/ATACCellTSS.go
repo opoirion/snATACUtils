@@ -120,9 +120,10 @@ if -cluster is provided, TSS is computed per cluster and -xgi argument is ignore
 	if PEAKFILE != "" {
 		if USEMIDDLE {
 			loadTSS(PEAKFILE)
-		}
+		} else {
+			utils.LoadPeaksAndTrim(PEAKFILE)
 
-		utils.LoadPeaksAndTrim(PEAKFILE)
+		}
 
 	} else {
 		loadTSS(TSSFILE)
@@ -231,8 +232,12 @@ func loadTSS(tssFile utils.Filename) {
 		buffer.WriteString(strconv.Itoa(start - TSSREGION))
 		buffer.WriteRune('\t')
 		buffer.WriteString(strconv.Itoa(start + TSSREGION))
-		buffer.WriteRune('\t')
-		buffer.WriteString(split[3])
+
+		if len(split) >= 4 {
+			buffer.WriteRune('\t')
+			buffer.WriteString(split[3])
+		}
+
 		buffer.WriteRune('\n')
 
 		utils.PEAKIDDICT[buffer.String()] = count
