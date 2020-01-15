@@ -300,7 +300,9 @@ func assertPeakRegionHaveSameLengths() (tssregion int){
 			if end - start != tssregion {
 				log.Fatal(fmt.Sprintf(
 					`Constant TSS tssregion error!
-Error for TSS region: %s, expected to have a size of %d, found %d instead \n`,
+Error for TSS region: %s, expected to have a size of %d, found %d instead \n
+To use peaks with different sizes, please use the -use_middle option
+`,
 					peak, tssregion, end - start))
 			}
 		}
