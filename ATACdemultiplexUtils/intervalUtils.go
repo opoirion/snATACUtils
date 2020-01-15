@@ -104,31 +104,8 @@ func CreatePeakIntervalTree() {
 func LoadPeaks(fname Filename) int {
 	var scanner *bufio.Scanner
 	var file *os.File
-
-	scanner, file = fname.ReturnReader(0)
-
-	defer CloseFile(file)
-
-
-	var count uint
-
-	PEAKIDDICT = make(map[string]uint)
-	count = 0
-
-	for scanner.Scan() {
-		line := scanner.Text()
-		PEAKIDDICT[line] = count
-		count++
-	}
-
-	return int(count)
-}
-
-
-/*LoadPeaksAndTrim load peak file and return peak peak id trimmed for "chr" -> dict*/
-func LoadPeaksAndTrim(fname Filename) int {
-	var scanner *bufio.Scanner
-	var file *os.File
+	var split []string
+	var err1, err2 error
 	var line string
 
 	scanner, file = fname.ReturnReader(0)
@@ -142,7 +119,70 @@ func LoadPeaksAndTrim(fname Filename) int {
 	count = 0
 
 	for scanner.Scan() {
+		line = scanner.Text()
+
+		split = strings.Split(line, "\t")
+
+		if len(split) < 3 {
+			panic(fmt.Sprintf(
+				"Peak: %s at line %d from file %s cannot be cut in chr int int ####\n",
+				line, count, fname))
+		}
+
+		_, err1 = strconv.Atoi(split[1])
+		_, err2 = strconv.Atoi(split[2])
+
+		if err1 != nil || err2 != nil {
+			panic(fmt.Sprintf(
+				"Peak positions : %s at line %d from file %s cannot be used as int ####\n",
+				line, count, fname))
+		}
+
+		PEAKIDDICT[line] = count
+		count++
+	}
+
+	return int(count)
+}
+
+
+/*LoadPeaksAndTrim load peak file and return peak peak id trimmed for "chr" -> dict*/
+func LoadPeaksAndTrim(fname Filename) int {
+	var scanner *bufio.Scanner
+	var file *os.File
+	var line string
+	var split []string
+	var err1, err2 error
+
+	scanner, file = fname.ReturnReader(0)
+
+	defer CloseFile(file)
+
+
+	var count uint
+
+	PEAKIDDICT = make(map[string]uint)
+	count = 0
+
+	for scanner.Scan() {
 		line = strings.TrimPrefix(scanner.Text(), "chr")
+		split = strings.Split(line, "\t")
+
+		if len(split) < 3 {
+			panic(fmt.Sprintf(
+				"Peak: %s at line %d from file %s cannot be cut in chr int int ####\n",
+				line, count, fname))
+		}
+
+		_, err1 = strconv.Atoi(split[1])
+		_, err2 = strconv.Atoi(split[2])
+
+		if err1 != nil || err2 != nil {
+			panic(fmt.Sprintf(
+				"Peak positions : %s at line %d from file %s cannot be used as int ####\n",
+				line, count, fname))
+		}
+
 		PEAKIDDICT[line] = count
 		count++
 	}
