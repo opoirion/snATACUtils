@@ -62,6 +62,9 @@ var SEP string
 /*CELLIDCOUNT cell ID<->count */
 var CELLIDCOUNT map[string]int
 
+/*CELLIDCOUNT2 cell ID<->count */
+var CELLIDCOUNT2 map[string]int
+
 /*CELLIDDICT cell ID<->pos */
 var CELLIDDICT map[string]uint
 
@@ -121,7 +124,7 @@ transform one (-bed) or multiple (use multiple -bed options) bed file into a bin
 USAGE: ATACMatTools -bin -bed  <bedFile> (optional -ygi <bedFile> -xgi <fname> -bin_size <int> -ygi_out <string> -norm -taiji -coo)
 
 """Count the number of reads in peaks for each cell: -count """
-USAGE: ATACMatTools -count  -xgi <fname> -ygi <bedfile> -bed <bedFile>
+USAGE: ATACMatTools -count  -xgi <fname> -ygi <bedfile> -bed <bedFile> (optionnal: -out <fname> -norm)
 
 """Merge multiple matrices results into one output file: -merge """
 It can be used to convert taiji to coo or coo to taiji formats.
@@ -148,7 +151,7 @@ USAGE: ATACMatTools -coo/taiji -merge -xgi <fname> -in <matrixFile1> -in <matrix
 	flag.BoolVar(&COO, "coo", false,
 		`Use COO format as output`)
 
-	flag.BoolVar(&NORM, "norm", false, "Normalize bin matrix per read depth for each cell")
+	flag.BoolVar(&NORM, "norm", false, "Normalize bin matrix / count per read depth for each cell")
 
 	flag.BoolVar(&CREATEBINMATRIX, "bin", false,
 		`transform one (-bed) or multiple (use multiple -beds option) into a bin (using float) sparse matrix in COO format.`)
@@ -226,6 +229,10 @@ func computeReadsInPeaksForCell(){
 	utils.CreatePeakIntervalTree()
 
 	CELLIDCOUNT = make(map[string]int)
+
+	if NORM {
+		CELLIDCOUNT2 = make(map[string]int)
+	}
 
 	fmt.Printf("init mutexes...\n")
 	initMutexDict()
@@ -397,6 +404,7 @@ func writeCellCounter(outfile string) {
 	var buffer bytes.Buffer
 	var cellID string
 	var err error
+	var value float64
 
 	writer := utils.ReturnWriter(outfile)
 
@@ -404,13 +412,22 @@ func writeCellCounter(outfile string) {
 
 	bufSize := 0
 
+
 	for cellID = range CELLIDCOUNT {
 		if cellID == "" {
 			continue
 		}
 		buffer.WriteString(cellID)
 		buffer.WriteString(SEP)
-		buffer.WriteString(strconv.Itoa(int(CELLIDCOUNT[cellID])))
+
+		if NORM {
+			value = float64(CELLIDCOUNT[cellID]) / float64(CELLIDCOUNT2[cellID])
+			buffer.WriteString(strconv.FormatFloat(value, 'f', 7, 64))
+		} else {
+			buffer.WriteString(strconv.Itoa(int(CELLIDCOUNT[cellID])))
+		}
+
+
 		buffer.WriteRune('\n')
 
 		bufSize++
@@ -766,7 +783,8 @@ func createReadInPeakOneFileThreading(bedfilename utils.Filename) {
 			for i := 0; i < THREADNB;i++{
 
 				waiting.Add(1)
-				go updateReadInPeakThread(bufferPointer , bufferStart, bufferStop, i, &waiting)
+				go updateReadInPeakThread(bufferPointer,
+					bufferStart, bufferStop, i, &waiting)
 
 				bufferStart += chunk
 				bufferStop += chunk
@@ -803,13 +821,19 @@ func updateReadInPeakThread(bufferLine * [BUFFERSIZE]string, bufferStart ,buffer
 	defer waiting.Done()
 	var split []string
 	var isInside bool
-	var start, end int
+	var start, end, count int
 	var err error
+	var cellcount map[string]int
+	var cellid string
 
 	isCellsID := true
 
 	if CELLSIDFNAME == "" {
 		isCellsID = false
+	}
+
+	if NORM {
+		cellcount = make(map[string]int)
 	}
 
 	var intervals []interval.IntInterface
@@ -824,6 +848,10 @@ func updateReadInPeakThread(bufferLine * [BUFFERSIZE]string, bufferStart ,buffer
 				continue
 			}
 
+		}
+
+		if NORM {
+			cellcount[split[3]]++
 		}
 
 		start, err = strconv.Atoi(split[1])
@@ -843,6 +871,14 @@ func updateReadInPeakThread(bufferLine * [BUFFERSIZE]string, bufferStart ,buffer
 
 		for range intervals {
 			CELLIDCOUNT[split[3]]++
+		}
+
+		if NORM {
+			for cellid, count = range cellcount {
+				CELLIDCOUNT2[cellid] += count
+			}
+
+			cellcount = make(map[string]int)
 		}
 
 		MUTEX.Unlock()
