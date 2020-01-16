@@ -64,7 +64,7 @@ ARGPARSER.add_argument('-verbose',
 
 ARGPARSER.add_argument('-header',
                        required=False,
-                       help='Use input header',
+                       help='Use input header to write in the output file',
                        type=int,
                        default=1,
                        metavar='<int>')
