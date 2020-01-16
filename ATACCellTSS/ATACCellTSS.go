@@ -76,6 +76,9 @@ var BUFFERARRAY[][BUFFERSIZE]string
 /*MUTEX global mutex*/
 var MUTEX sync.Mutex
 
+/*USEMIDDLE bool*/
+var USEMIDDLE bool
+
 
 func main() {
 	flag.Usage = func() {
@@ -99,6 +102,7 @@ if -cluster is provided, TSS is computed per cluster and -xgi argument is ignore
 	flag.IntVar(&SMOOTHINGWINDOW, "smoothing", 50, "Smoothing window size")
 	flag.IntVar(&TSSFLANKSEARCH, "tss_flank", 50, "search hightest TSS values to define TSS score using this flank size arround TSS")
 	flag.IntVar(&THREADNB, "threads", 1, "threads concurrency")
+	flag.BoolVar(&USEMIDDLE, "use_middle", false, "Use the middle of the peak to determine the TSS ")
 	flag.Parse()
 
 	switch {
@@ -114,7 +118,13 @@ if -cluster is provided, TSS is computed per cluster and -xgi argument is ignore
 	MUTEX = sync.Mutex{}
 
 	if PEAKFILE != "" {
-		utils.LoadPeaksAndTrim(PEAKFILE)
+		if USEMIDDLE {
+			loadTSS(PEAKFILE)
+		} else {
+			utils.LoadPeaksAndTrim(PEAKFILE)
+
+		}
+
 	} else {
 		loadTSS(TSSFILE)
 	}
@@ -193,6 +203,7 @@ func loadTSS(tssFile utils.Filename) {
 
 	var count uint
 	var start int
+	var end int
 	var buffer bytes.Buffer
 	var split []string
 	var err error
@@ -211,11 +222,22 @@ func loadTSS(tssFile utils.Filename) {
 		start, err = strconv.Atoi(split[1])
 		utils.Check(err)
 
+		if USEMIDDLE {
+			start, err = strconv.Atoi(split[2])
+			utils.Check(err)
+
+			start = (start + end) / 2
+		}
+
 		buffer.WriteString(strconv.Itoa(start - TSSREGION))
 		buffer.WriteRune('\t')
 		buffer.WriteString(strconv.Itoa(start + TSSREGION))
-		buffer.WriteRune('\t')
-		buffer.WriteString(split[3])
+
+		if len(split) >= 4 {
+			buffer.WriteRune('\t')
+			buffer.WriteString(split[3])
+		}
+
 		buffer.WriteRune('\n')
 
 		utils.PEAKIDDICT[buffer.String()] = count
@@ -283,7 +305,9 @@ func assertPeakRegionHaveSameLengths() (tssregion int){
 			if end - start != tssregion {
 				log.Fatal(fmt.Sprintf(
 					`Constant TSS tssregion error!
-Error for TSS region: %s, expected to have a size of %d, found %d instead \n`,
+Error for TSS region: %s, expected to have a size of %d, found %d instead \n
+To use peaks with different sizes, please use the -use_middle option
+`,
 					peak, tssregion, end - start))
 			}
 		}
