@@ -823,7 +823,7 @@ func updateReadInPeakThread(bufferLine * [BUFFERSIZE]string, bufferStart ,buffer
 	var isInside bool
 	var start, end, count int
 	var err error
-	var cellcount map[string]int
+	var cellcount []string
 	var cellid string
 
 	isCellsID := true
@@ -833,7 +833,7 @@ func updateReadInPeakThread(bufferLine * [BUFFERSIZE]string, bufferStart ,buffer
 	}
 
 	if NORM {
-		cellcount = make(map[string]int)
+		cellcount = make([]string, bufferStop - bufferStart)
 	}
 
 	var intervals []interval.IntInterface
@@ -851,7 +851,8 @@ func updateReadInPeakThread(bufferLine * [BUFFERSIZE]string, bufferStart ,buffer
 		}
 
 		if NORM {
-			cellcount[split[3]]++
+			cellcount[count] = split[3]
+			count++
 		}
 
 		start, err = strconv.Atoi(split[1])
@@ -874,14 +875,21 @@ func updateReadInPeakThread(bufferLine * [BUFFERSIZE]string, bufferStart ,buffer
 		}
 
 		if NORM {
-			for cellid, count = range cellcount {
-				CELLIDCOUNT2[cellid] += count
+			for _,cellid = range cellcount[:count] {
+				CELLIDCOUNT2[cellid]++
 			}
 
-			cellcount = make(map[string]int)
+			count = 0
 		}
 
 		MUTEX.Unlock()
+	}
+
+	//process last reads for norm
+	if NORM {
+		for _,cellid = range cellcount[:count] {
+			CELLIDCOUNT2[cellid]++
+		}
 	}
 }
 
