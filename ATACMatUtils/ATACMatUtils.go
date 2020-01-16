@@ -885,12 +885,16 @@ func updateReadInPeakThread(bufferLine * [BUFFERSIZE]string, bufferStart ,buffer
 		MUTEX.Unlock()
 	}
 
+	MUTEX.Lock()
+
 	//process last reads for norm
 	if NORM {
 		for _,cellid = range cellcount[:count] {
 			CELLIDCOUNT2[cellid]++
 		}
 	}
+
+	MUTEX.Unlock()
 }
 
 func updateIntSparseMatrixOneThread(bufferLine * [BUFFERSIZE]string, bufferStart ,bufferStop, threadnb int,
