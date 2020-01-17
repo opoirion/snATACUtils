@@ -572,6 +572,20 @@ func mergeIntMatFileFromCOO(filename string) {
 }
 
 
+func getTaijiMatDim(filename string) int {
+	scanner, f := utils.ReturnReader(filename, 0)
+	scanner.Scan()
+
+	firstLine := scanner.Text()
+	utils.CloseFile(f)
+
+	ygidim, err := strconv.Atoi(strings.Split(firstLine, " x ")[1])
+	utils.Check(err)
+
+	return ygidim
+
+}
+
 /*mergeIntMatFileFromCOO add one file to the matrix*/
 func mergeIntMatFileFromTaiji(filename string) {
 	var scanner *bufio.Scanner
@@ -580,16 +594,16 @@ func mergeIntMatFileFromTaiji(filename string) {
 	var split, ygiSplit []string
 	var ygiUnit string
 	var xgi uint
-	var ygi int
+	var ygi, ygidim int
 	var value float64
-
 	var isInside bool
 
+	ygidim = getTaijiMatDim(filename)
 	scanner, f = utils.ReturnReader(filename, 0)
-	scanner.Scan()
-	_  = scanner.Text()
-
 	defer utils.CloseFile(f)
+
+	scanner.Buffer([]byte{}, ygidim / 3 * ygidim / 3)
+	scanner.Scan()
 
 	for scanner.Scan() {
 		split = strings.Split(scanner.Text(), "\t")
@@ -630,15 +644,16 @@ func mergeFloatMatFileFromTaiji(filename string) {
 	var split, ygiSplit []string
 	var ygiUnit string
 	var xgi uint
-	var ygi int
+	var ygi, ygidim int
 	var value float64
 	var isInside bool
 
+	ygidim = getTaijiMatDim(filename)
 	scanner, f = utils.ReturnReader(filename, 0)
-	scanner.Scan()
-	_ = scanner.Text()
-
 	defer utils.CloseFile(f)
+
+	scanner.Buffer([]byte{}, ygidim / 3 * ygidim / 3)
+	scanner.Scan()
 
 	for scanner.Scan() {
 		split = strings.Split(scanner.Text(), "\t")

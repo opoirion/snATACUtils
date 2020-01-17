@@ -203,11 +203,16 @@ func ReturnReader(fname string, startingLine int) (*bufio.Scanner, *os.File) {
 
 /*ReturnReaderForGzipfile ... */
 func ReturnReaderForGzipfile(fname string, startingLine int) (*bufio.Scanner, *os.File) {
-	fileOpen, err := os.OpenFile(fname, 0, 0)
+	var readerBzip * gzip.Reader
+	var fileOpen *os.File
+	var err error
+
+	fileOpen, err = os.OpenFile(fname, 0, 0)
 	Check(err)
 
 	readerOs := bufio.NewReader(fileOpen)
-	readerBzip, _ := gzip.NewReader(readerOs)
+	readerBzip, err = gzip.NewReader(readerOs)
+	Check(err)
 	bzipScanner := bufio.NewScanner(readerBzip)
 
 	if startingLine > 0 {

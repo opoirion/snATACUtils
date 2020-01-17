@@ -71,7 +71,8 @@ var CICEROPROCESSING bool
 var CLEAN bool
 /*CLEANPATTERN pattern used to clean files with unwanted lines*/
 var CLEANPATTERN string
-
+/*MAXSCANTOKENSIZE int*/
+var MAXSCANTOKENSIZE int
 
 func main() {
 
@@ -134,6 +135,7 @@ USAGE: ATACtools -clean -filename <fname> -output filename -clean_pattern "\n"
 	flag.BoolVar(&CREATEBARCODEDICT, "create_barcode_dict", false, `create a barcode key / value count file`)
 	flag.BoolVar(&CLEAN, "clean", false, `clean files with unwanted lines`)
 	flag.StringVar(&TAG, "clean_pattern", "\n", "pattern used to clean files with unwanted lines")
+	flag.IntVar(&MAXSCANTOKENSIZE, "max_scan_size", 0, "MaxScanTokenSize variable that defines the length of a line that a buffer can read (set if differnt than 0)")
 	flag.Parse()
 
 
@@ -760,6 +762,13 @@ func mergeLogFiles(filenames []string, outfname string) {
 
 func processScanner(scanner * bufio.Scanner) (nbLines int) {
 	nbLines = 0
+
+
+	if MAXSCANTOKENSIZE > 0 {
+		scanner.Buffer([]byte{}, MAXSCANTOKENSIZE * MAXSCANTOKENSIZE)
+	}
+
+
 	for scanner.Scan() {
 		nbLines++
 
@@ -784,6 +793,8 @@ func processScanner(scanner * bufio.Scanner) (nbLines int) {
 		line := scanner.Text()
 		fmt.Printf("last line: %s\n", line)
 	}
+
+	utils.Check(scanner.Err())
 
 	return nbLines
 
