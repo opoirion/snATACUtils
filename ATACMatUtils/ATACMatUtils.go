@@ -527,7 +527,7 @@ func findMatrixFormat(filename string) mattype {
 		}
 	}
 
-	if strings.HasPrefix(firstLine, "sparse matrix:") && strings.Contains(firstLine, " x ") {
+	if strings.HasPrefix(firstLine, "Sparse matrix:") && strings.Contains(firstLine, " x ") {
 		return mattype("taiji")
 	}
 
@@ -1017,7 +1017,7 @@ func writeBinMatrixToTaijiFile(outfile string) {
 	writer := utils.ReturnWriter(FILENAMEOUT)
 	defer utils.CloseFile(writer)
 
-	buffer.WriteString("sparse matrix: ")
+	buffer.WriteString("Sparse matrix: ")
 	buffer.WriteString(strconv.Itoa(XGIDIM))
 	buffer.WriteString(" x ")
 	buffer.WriteString(strconv.Itoa(YGIDIM))
@@ -1084,7 +1084,7 @@ func writeIntMatrixToTaijiFile(filenameout string, writeHeader bool) {
 	defer utils.CloseFile(writer)
 
 	if writeHeader {
-		buffer.WriteString("sparse matrix: ")
+		buffer.WriteString("Sparse matrix: ")
 		buffer.WriteString(strconv.Itoa(XGIDIM))
 		buffer.WriteString(" x ")
 		buffer.WriteString(strconv.Itoa(YGIDIM))
