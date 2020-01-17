@@ -128,7 +128,7 @@ USAGE: ATACMatTools -count  -xgi <fname> -ygi <bedfile> -bed <bedFile> (optionna
 
 """Merge multiple matrices results into one output file: -merge """
 It can be used to convert taiji to coo or coo to taiji formats.
-USAGE: ATACMatTools -coo/taiji -merge -xgi <fname> -in <matrixFile1> -in <matrixFile2> ... (optional /bin -out <fname>)
+USAGE: ATACMatTools -coo/taiji -merge -xgi <fname> -in <matrixFile1> -in <matrixFile2> ... (optional -bin -use_count -out <fname>)
 
 `)
 		 flag.PrintDefaults()
@@ -587,7 +587,7 @@ func mergeIntMatFileFromTaiji(filename string) {
 
 	scanner, f = utils.ReturnReader(filename, 0)
 	scanner.Scan()
-	_ = scanner.Text()
+	_  = scanner.Text()
 
 	defer utils.CloseFile(f)
 
@@ -605,6 +605,10 @@ func mergeIntMatFileFromTaiji(filename string) {
 			utils.Check(err)
 			value, err = strconv.ParseFloat(ygiSplit[1], 64)
 			utils.Check(err)
+
+			if ygi > YGIDIM {
+				YGIDIM = ygi
+			}
 
 			switch USECOUNT {
 			case true:
@@ -650,6 +654,10 @@ func mergeFloatMatFileFromTaiji(filename string) {
 			utils.Check(err)
 			value, err = strconv.ParseFloat(ygiSplit[1], 64)
 			utils.Check(err)
+
+			if ygi > YGIDIM {
+				YGIDIM = ygi
+			}
 
 			BINSPARSEMATRIX[xgi][uint(ygi)] += value
 		}
