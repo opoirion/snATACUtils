@@ -527,7 +527,7 @@ func findMatrixFormat(filename string) mattype {
 		}
 	}
 
-	if strings.HasPrefix(firstLine, "Sparse matrix:") && strings.Contains(firstLine, " x ") {
+	if strings.Contains(firstLine, "parse matrix:") && strings.Contains(firstLine, " x ") {
 		return mattype("taiji")
 	}
 
