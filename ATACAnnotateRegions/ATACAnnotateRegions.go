@@ -33,6 +33,12 @@ var IGNOREUNANNOATED bool
 /*WRITEINTERSECT write intersection only */
 var WRITEINTERSECT bool
 
+/*UNIQ write only unique output peaks */
+var UNIQ bool
+
+/*WRITEREF write_ref write bed region from reference file */
+var WRITEREF bool
+
 
 func main() {
 	flag.Usage = func() {
@@ -51,6 +57,8 @@ USAGE: ATACAnnotateRegions -chi2 -bed <fname> -peak <fname> -cluster <fname> (op
 	flag.BoolVar(&REPLACEINPUT, "edit", false, `edit input bed file instead of creating a new file`)
 	flag.BoolVar(&IGNOREUNANNOATED, "ignore", false, `ignore unnatotated peak`)
 	flag.BoolVar(&WRITEINTERSECT, "intersect", false, `write intersection only`)
+	flag.BoolVar(&UNIQ, "unique", false, `write only unique output peaks`)
+	flag.BoolVar(&WRITEREF, "write_ref", false, `write bed region from reference file`)
 
 	flag.Parse()
 
@@ -88,6 +96,7 @@ func scanBedFileAndAddAnnotation() {
 	var inttree *interval.IntTree
 	var buffer bytes.Buffer
 	var intrange interval.IntRange
+	var uniqueBed map[string]bool
 
 	scanner, file := BEDFILENAME.ReturnReader(0)
 	defer utils.CloseFile(file)
@@ -96,6 +105,10 @@ func scanBedFileAndAddAnnotation() {
 	defer utils.CloseFile(writer)
 
 	tStart := time.Now()
+
+	if UNIQ {
+		uniqueBed = make(map[string]bool)
+	}
 
 	for scanner.Scan() {
 		line = scanner.Text()
@@ -127,17 +140,27 @@ func scanBedFileAndAddAnnotation() {
 
 			symbol = utils.PEAKSYMBOLDICT[peak]
 
-			if WRITEINTERSECT {
-				intrange = oneInterval.Range()
-				buffer.WriteString(peak[0])
-				buffer.WriteRune('\t')
-				buffer.WriteString(strconv.Itoa(intrange.Start))
-				buffer.WriteRune('\t')
-				buffer.WriteString(strconv.Itoa(intrange.End))
-			} else {
-				buffer.WriteString(line)
+			switch {
+			case WRITEINTERSECT:
+				peakstr = fmt.Sprintf("%s\t%d\t%d", peak[0],
+					intrange.Start,
+					intrange.End)
+			case WRITEREF:
+				peakstr = peak.PeakToString()
+			default:
+				peakstr = line
+
 			}
 
+			if UNIQ {
+				if uniqueBed[peakstr] {
+					continue
+				}
+
+				uniqueBed[peakstr] = true
+			}
+
+			buffer.WriteString(peakstr)
 			buffer.WriteRune('\t')
 			buffer.WriteString(symbol)
 			buffer.WriteRune('\n')

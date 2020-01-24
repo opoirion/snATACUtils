@@ -62,6 +62,12 @@ func (peak * Peak) StringToPeak(str string) {
 	(*peak)[2] = split[2]
 }
 
+/*PeakToString Convert Peak to string*/
+func (peak * Peak) PeakToString() (peakstr string)  {
+	return fmt.Sprintf("%s\t%s\t%s", peak[0], peak[1], peak[2])
+
+}
+
 //StringToPeakNoCheck Convert Peak string to peak
 func (peak * Peak) StringToPeakNoCheck(str string) {
 	split := strings.Split(str, "\t")
