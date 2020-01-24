@@ -15,12 +15,8 @@ import (
 	"sort"
 	"bytes"
 	"path"
-	"bufio"
 	"os"
 )
-
-
-type peak [3]string
 
 type peakFeature struct {
 	id uintptr
@@ -113,7 +109,7 @@ var BUFFERRESARRAY [][BUFFERSIZE]chi2feature
 var CHI2SCORE [][]peakFeature
 
 /*PEAKMAPPING ...*/
-var PEAKMAPPING []peak
+var PEAKMAPPING []utils.Peak
 
 /*ALPHA decision threshold*/
 var ALPHA float64
@@ -123,9 +119,6 @@ var MUTEX sync.Mutex
 
 /*WRITEALL Write all features even the not significant one*/
 var WRITEALL bool
-
-/*PEAKSYMBOLDICT map[peak]symbol */
-var PEAKSYMBOLDICT map[peak]string
 
 
 func main() {
@@ -208,7 +201,7 @@ func launchMultipleTestAnalysis() {
 			FEATUREPVALUEFILE[:len(FEATUREPVALUEFILE)-len(ext)])
 	}
 
-	loadSymbolFile()
+	utils.LoadSymbolFile(PEAKSYMBOLFILE, PEAKFILE)
 	loadPvalueTable()
 	sortPvalueScore()
 	performCorrectionAfterSorting()
@@ -228,7 +221,7 @@ func createContingencyTable() {
 
 	tStart := time.Now()
 
-	loadSymbolFile()
+	utils.LoadSymbolFile(PEAKSYMBOLFILE, PEAKFILE)
 	utils.LoadPeaks(PEAKFILE)
 	loadCellClusterIDAndInitMaps()
 	utils.CreatePeakIntervalTree()
@@ -256,7 +249,7 @@ func createContingencyTableUsingSubsets() {
 			BEDFILENAME[:len(BEDFILENAME)-len(ext)])
 	}
 
-	loadSymbolFile()
+	utils.LoadSymbolFile(PEAKSYMBOLFILE, PEAKFILE)
 	utils.LoadPeaks(PEAKFILE)
 
 	chunk = (len(utils.PEAKIDDICT) + SPLIT) / SPLIT
@@ -269,7 +262,7 @@ func createContingencyTableUsingSubsets() {
 
 		fmt.Printf("Processing set of peaks: (start: %d  end:%d)\n", firstPeak, lastPeak)
 		utils.LoadPeaksSubset(PEAKFILE, firstPeak, lastPeak)
-		loadSymbolFile()
+		utils.LoadSymbolFile(PEAKSYMBOLFILE, PEAKFILE)
 		loadCellClusterIDAndInitMaps()
 
 		utils.CreatePeakIntervalTree()
@@ -324,7 +317,7 @@ func launchChi2Analysis() {
 			BEDFILENAME[:len(BEDFILENAME)-len(ext)])
 	}
 
-	loadSymbolFile()
+	utils.LoadSymbolFile(PEAKSYMBOLFILE, PEAKFILE)
 	utils.LoadPeaks(PEAKFILE)
 	loadCellClusterIDAndInitMaps()
 	utils.CreatePeakIntervalTree()
@@ -338,65 +331,11 @@ func launchChi2Analysis() {
 }
 
 
-func loadSymbolFile() {
-	var scannerPeak *bufio.Scanner
-	var filePeak *os.File
-	var split, split2 []string
-	var peakl peak
-	var symbol string
-
-	PEAKSYMBOLDICT = make(map[peak]string)
-
-	if PEAKSYMBOLFILE == "" {
-		return
-	}
-
-	isOption1 := true
-
-	if PEAKFILE == "" {
-		isOption1 = false
-	} else {
-		scannerPeak, filePeak = PEAKFILE.ReturnReader(0)
-		defer utils.CloseFile(filePeak)
-	}
-
-	scanner, file := PEAKSYMBOLFILE.ReturnReader(0)
-	defer utils.CloseFile(file)
-
-	for scanner.Scan() {
-		split = strings.Split(scanner.Text(), "\t")
-
-		if len(split) == 4 {
-			isOption1 = false
-		}
-
-		if !isOption1 && len(split) != 4 {
-			panic(fmt.Sprintf(
-				"Error line %s from symbol file should be <symbol>\t<chromosome>\t<start>\t<stop>\n",
-				split))
-		}
-
-		symbol = split[0]
-
-		if isOption1 {
-			scannerPeak.Scan()
-			split2 = strings.Split(scannerPeak.Text(), "\t")
-			peakl = peak{split2[0], split2[1], split2[2]}
-
-		} else {
-			peakl = peak{split[1], split2[2], split2[3]}
-		}
-
-		PEAKSYMBOLDICT[peakl] = symbol
-	}
-}
-
-
 func loadPvalueTable() {
 	var line, symbol, cluster string
 	var split []string
 	var peaki peakFeature
-	var peakl peak
+	var peakl utils.Peak
 	var err error
 	var isInside bool
 	var count uintptr
@@ -408,7 +347,7 @@ func loadPvalueTable() {
 	CHI2SCORE = make([][]peakFeature, 0)
 	CLUSTERNAMEMAPPING = make(map[string]int)
 
-	peakset := make(map[peak]uintptr)
+	peakset := make(map[utils.Peak]uintptr)
 
 	scanner, file := FEATUREPVALUEFILE.ReturnReader(0)
 	defer utils.CloseFile(file)
@@ -429,7 +368,7 @@ func loadPvalueTable() {
 		_, err = strconv.Atoi(split[2])
 		utils.Check(err)
 
-		peakl = peak{split[0], split[1], split[2]}
+		peakl = utils.Peak{split[0], split[1], split[2]}
 
 		cluster = split[3]
 
@@ -456,7 +395,7 @@ func loadPvalueTable() {
 
 		if !isSymbolFile && len(split) == 6 {
 			symbol = split[4]
-			PEAKSYMBOLDICT[peakl] = symbol
+			utils.PEAKSYMBOLDICT[peakl] = symbol
 		}
 	}
 
@@ -476,7 +415,7 @@ func createPeakMappingDict() {
 	var peakid uint
 	var peaktuple []string
 
-	PEAKMAPPING = make([]peak, len(utils.PEAKIDDICT))
+	PEAKMAPPING = make([]utils.Peak, len(utils.PEAKIDDICT))
 
 	for peakstr, peakid = range utils.PEAKIDDICT {
 
@@ -857,13 +796,13 @@ func performCorrectionAfterSorting() {
 
 func writePvalueCorrectedTable() {
 	var buffer bytes.Buffer
-	var peakl peak
+	var peakl utils.Peak
 	var err error
 	var isSignificant bool
 	var clusterID int
 	var cluster string
 
-	writeSymbol := len(PEAKSYMBOLDICT) != 0
+	writeSymbol := len(utils.PEAKSYMBOLDICT) != 0
 
 	writer := utils.ReturnWriter(FILENAMEOUT)
 	defer utils.CloseFile(writer)
@@ -899,7 +838,7 @@ func writePvalueCorrectedTable() {
 
 			if writeSymbol {
 				buffer.WriteRune('\t')
-				buffer.WriteString(PEAKSYMBOLDICT[peakl])
+				buffer.WriteString(utils.PEAKSYMBOLDICT[peakl])
 			}
 
 			buffer.WriteRune('\t')
@@ -923,7 +862,7 @@ func writePvalueCorrectedTable() {
 
 func writeContingencyTable(filenameout string, header bool) {
 	var buffer bytes.Buffer
-	var peakl peak
+	var peakl utils.Peak
 	var err error
 	var cluster, n22 string
 	var clusterID, clusterSum int
@@ -934,7 +873,7 @@ func writeContingencyTable(filenameout string, header bool) {
 	defer utils.CloseFile(writer)
 	tStart := time.Now()
 
-	writeSymbol := len(PEAKSYMBOLDICT) != 0
+	writeSymbol := len(utils.PEAKSYMBOLDICT) != 0
 
 	if header {
 		buffer.WriteString("#chr\tstart\tstop\tcluster")
@@ -968,7 +907,7 @@ func writeContingencyTable(filenameout string, header bool) {
 
 			if writeSymbol {
 				buffer.WriteRune('\t')
-				buffer.WriteString(PEAKSYMBOLDICT[peakl])
+				buffer.WriteString(utils.PEAKSYMBOLDICT[peakl])
 			}
 
 			buffer.WriteRune('\t')

@@ -355,7 +355,7 @@ func SortLogfile(filename Filename, separator string, outfname string,
 	outfile, err := os.Create(outfname)
 	Check(err)
 	defer CloseFile(outfile)
-	defer os.Rename(outfname, filename.String())
+	defer Check(os.Rename(outfname, filename.String()))
 
 	Check(err)
 	pl := PairList{}
@@ -374,9 +374,6 @@ func SortLogfile(filename Filename, separator string, outfname string,
 			buffer.WriteString(line)
 			buffer.WriteRune('\n')
 
-			outfile.Write(buffer.Bytes())
-			buffer.Reset()
-
 			if len(pl) == 0  {
 				continue
 			}
@@ -390,12 +387,12 @@ func SortLogfile(filename Filename, separator string, outfname string,
 				buffer.WriteString(strconv.Itoa(el.Value))
 				buffer.WriteRune('\n')
 
-				outfile.Write(buffer.Bytes())
-				buffer.Reset()
-
 				buff++
+
 				if buff > 100000{
-					outfile.Sync()
+					_, err = outfile.Write(buffer.Bytes())
+					Check(err)
+					buffer.Reset()
 					buff = 0
 				}
 			}
@@ -403,6 +400,10 @@ func SortLogfile(filename Filename, separator string, outfname string,
 			pl = PairList{}
 			continue
 		}
+
+		_, err = outfile.Write(buffer.Bytes())
+		Check(err)
+		buffer.Reset()
 
 		split = strings.Split(line, separator)
 		valueField = split[len(split)-1]
@@ -436,14 +437,22 @@ func SortLogfile(filename Filename, separator string, outfname string,
 	})
 
 	for _, el := range pl {
-		outfile.WriteString(fmt.Sprintf("%s%s%d\n", el.Key, separator, el.Value))
+		buffer.WriteString(el.Key)
+		buffer.WriteString(separator)
+		buffer.WriteString(strconv.Itoa(el.Value))
+		buffer.WriteRune('\n')
+
 		buff++
 		if buff > 100000{
-			err = outfile.Sync()
+			_, err = outfile.Write(buffer.Bytes())
 			Check(err)
+			buffer.Reset()
 			buff = 0
 		}
 	}
+
+	_, err = outfile.Write(buffer.Bytes())
+	Check(err)
 }
 
 /*LoadCellIDDict create cell ID bool dict */

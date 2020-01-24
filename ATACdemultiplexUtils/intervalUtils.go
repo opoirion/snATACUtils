@@ -41,6 +41,35 @@ func (i IntInterval) String() string {
 	return fmt.Sprintf("(%d, %d) id: %d ####\n", i.Start, i.End, i.ID())
 }
 
+//Peak Descriptor of a peak as string slice
+type Peak [3]string
+
+//StringToPeak Convert Peak string to peak
+func (peak * Peak) StringToPeak(str string) {
+	split := strings.Split(str, "\t")
+
+	_, err1 := strconv.Atoi(split[1])
+	_, err2 := strconv.Atoi(split[2])
+
+	if err1 != nil || err2 != nil {
+		panic(fmt.Sprintf(
+			"Error when converting Peak: %s cannot be used as int ####\n",
+			str))
+	}
+
+	(*peak)[0] = split[0]
+	(*peak)[1] = split[1]
+	(*peak)[2] = split[2]
+}
+
+//StringToPeakNoCheck Convert Peak string to peak
+func (peak * Peak) StringToPeakNoCheck(str string) {
+	split := strings.Split(str, "\t")
+
+	(*peak)[0] = split[0]
+	(*peak)[1] = split[1]
+	(*peak)[2] = split[2]
+}
 
 /*PEAKIDDICT peak ID<->pos */
 var PEAKIDDICT map[string]uint
@@ -53,6 +82,93 @@ var CHRINTERVALDICTTHREAD map[int]map[string]*interval.IntTree
 
 /*INTERVALMAPPING peak ID pos <->pos */
 var INTERVALMAPPING map[uintptr]string
+
+/*PEAKSYMBOLDICT map[peak]symbol */
+var PEAKSYMBOLDICT map[Peak]string
+
+
+/*LoadSymbolFile  peaksymbolfile, peakfile  Filename*/
+func LoadSymbolFile(peaksymbolfile, peakfile  Filename) {
+	var scannerPeak *bufio.Scanner
+	var filePeak *os.File
+	var split, split2 []string
+	var peakl Peak
+	var symbol string
+
+	PEAKSYMBOLDICT = make(map[Peak]string)
+
+	if peaksymbolfile == "" {
+		return
+	}
+
+	isOption1 := true
+
+	if peakfile == "" {
+		isOption1 = false
+	} else {
+		scannerPeak, filePeak = peakfile.ReturnReader(0)
+		defer CloseFile(filePeak)
+	}
+
+	scanner, file := peaksymbolfile.ReturnReader(0)
+	defer CloseFile(file)
+
+	for scanner.Scan() {
+		split = strings.Split(scanner.Text(), "\t")
+
+		if len(split) == 4 {
+			isOption1 = false
+		}
+
+		if !isOption1 && len(split) != 4 {
+			panic(fmt.Sprintf(
+				"Error line %s from symbol file should be <symbol>\t<chromosome>\t<start>\t<stop>\n",
+				split))
+		}
+
+		symbol = split[0]
+
+		if isOption1 {
+			scannerPeak.Scan()
+			split2 = strings.Split(scannerPeak.Text(), "\t")
+			peakl = Peak{split2[0], split2[1], split2[2]}
+
+		} else {
+			peakl = Peak{split[1], split2[2], split2[3]}
+		}
+
+		PEAKSYMBOLDICT[peakl] = symbol
+	}
+}
+
+
+/*LoadRefBedFileWithSymbol  peaksymbolfile, peakfile  Filename*/
+func LoadRefBedFileWithSymbol(peaksymbolfile Filename) {
+	var split []string
+	var peakl Peak
+	var symbol string
+
+	PEAKSYMBOLDICT = make(map[Peak]string)
+
+
+	scanner, file := peaksymbolfile.ReturnReader(0)
+	defer CloseFile(file)
+
+	for scanner.Scan() {
+		split = strings.Split(scanner.Text(), "\t")
+
+		if len(split) < 4 {
+			panic(fmt.Sprintf(
+				"Error line %s from symbol file should be <chromosome>\t<start>\t<stop>\tsymbol>\n",
+				split))
+		}
+
+		symbol = split[3]
+		peakl = Peak{split[0], split[1], split[2]}
+
+		PEAKSYMBOLDICT[peakl] = symbol
+	}
+}
 
 
 /*CreatePeakIntervalTree ...*/
