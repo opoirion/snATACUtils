@@ -68,6 +68,10 @@ USAGE: ATACAnnotateRegions -chi2 -bed <fname> -peak <fname> -cluster <fname> (op
 			BEDFILENAME[:len(BEDFILENAME)-len(ext)], ext)
 	}
 
+	if WRITEREF && WRITEINTERSECT {
+		panic(fmt.Sprintf("Error! options -write_ref and -intersect cannot be TRUE together. Please chose one!\n"))
+	}
+
 	utils.LoadRefBedFileWithSymbol(REFBEDFILENAME)
 	utils.LoadPeaks(REFBEDFILENAME)
 	utils.CreatePeakIntervalTree()
