@@ -219,13 +219,14 @@ func loadClusterFile() {
 func makeClusterFileForAll() {
 	var cell string
 
-	CELLDICT = make(map[string]int)
-	CELLCLUSTERDICT = map[string]int{"all":0}
+	CELLCLUSTERDICT = make(map[string]int)
 
 	for cell = range CELLDICT {
 
 		CELLCLUSTERDICT[cell] = 0
 	}
+
+	CELLDICT = map[string]int{"all":0}
 
 }
 
@@ -407,9 +408,12 @@ func processOneBuffer(
 	defer waiting.Done()
 
 	// Check if TSS is computed per cell or per cluster
-	if CLUSTERFNAME != "" {
+	switch {
+	case ALL:
 		celldict = CELLCLUSTERDICT
-	} else {
+	case CLUSTERFNAME != "":
+		celldict = CELLCLUSTERDICT
+	default:
 		celldict = CELLDICT
 	}
 
