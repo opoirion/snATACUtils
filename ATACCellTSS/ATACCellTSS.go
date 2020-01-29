@@ -163,6 +163,8 @@ func findFileNameOut() (foutname string) {
 	switch {
 	case CLUSTERFNAME != "":
 		foutname = CLUSTERFNAME.String()
+	case CELLSIDFNAME == "":
+		foutname = BEDFILENAME.String()
 	default:
 		foutname = CELLSIDFNAME.String()
 	}
