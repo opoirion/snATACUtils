@@ -79,6 +79,9 @@ var MUTEX sync.Mutex
 /*USEMIDDLE bool*/
 var USEMIDDLE bool
 
+/*ALL bool*/
+var ALL bool
+
 
 func main() {
 	flag.Usage = func() {
@@ -103,6 +106,7 @@ if -cluster is provided, TSS is computed per cluster and -xgi argument is ignore
 	flag.IntVar(&TSSFLANKSEARCH, "tss_flank", 50, "search hightest TSS values to define TSS score using this flank size arround TSS")
 	flag.IntVar(&THREADNB, "threads", 1, "threads concurrency")
 	flag.BoolVar(&USEMIDDLE, "use_middle", false, "Use the middle of the peak to determine the TSS ")
+	flag.BoolVar(&ALL, "all", false, "Compute the general TSS ")
 	flag.Parse()
 
 	switch {
@@ -130,13 +134,17 @@ if -cluster is provided, TSS is computed per cluster and -xgi argument is ignore
 	}
 
 	switch {
+
 	case CLUSTERFNAME != "":
 		loadClusterFile()
 	case CELLSIDFNAME != "":
 		CELLDICT = utils.LoadCellDictsToIndex(CELLSIDFNAME)
 	default:
 		CELLDICT = utils.LoadCellDictsFromBedFileToIndex(BEDFILENAME)
+	}
 
+	if ALL {
+		makeClusterFileForAll()
 	}
 
 	initDicts()
@@ -160,8 +168,20 @@ func findFileNameOut() (foutname string) {
 	}
 
 	ext := path.Ext(foutname)
-	foutname = fmt.Sprintf("%s.tss_per_cell",
-		foutname[:len(foutname)-len(ext)])
+
+	var trueExt string
+
+	switch {
+	case ALL:
+		trueExt = ".tss"
+	case CLUSTERFNAME != "":
+		trueExt = ".tss_per_cluster"
+	default:
+		trueExt = ".tss_per_cell"
+	}
+
+	foutname = fmt.Sprintf("%s%s",
+		foutname[:len(foutname)-len(ext)], trueExt)
 
 	return foutname
 }
@@ -191,6 +211,20 @@ func loadClusterFile() {
 		}
 
 		CELLCLUSTERDICT[cell] = clusterID
+	}
+
+}
+
+
+func makeClusterFileForAll() {
+	var cell string
+
+	CELLDICT = make(map[string]int)
+	CELLCLUSTERDICT = map[string]int{"all":0}
+
+	for cell = range CELLDICT {
+
+		CELLCLUSTERDICT[cell] = 0
 	}
 
 }
