@@ -260,7 +260,7 @@ func loadTSS(tssFile utils.Filename) {
 		utils.Check(err)
 
 		if USEMIDDLE {
-			start, err = strconv.Atoi(split[2])
+			end, err = strconv.Atoi(split[2])
 			utils.Check(err)
 
 			start = (start + end) / 2
