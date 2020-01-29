@@ -250,7 +250,8 @@ func loadTSS(tssFile utils.Filename) {
 	count = 0
 
 	for scanner.Scan() {
-		split = strings.Split(scanner.Text(), "\t")
+		split = strings.Split(
+			strings.Trim(scanner.Text(), "\n"), "\t")
 		chro = strings.TrimPrefix(split[0], "chr")
 
 		buffer.WriteString(chro)
