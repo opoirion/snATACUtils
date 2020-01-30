@@ -137,7 +137,7 @@ if -cluster is provided, TSS is computed per cluster and -xgi argument is ignore
 
 	case CLUSTERFNAME != "":
 		loadClusterFile()
-	case ALL && CELLSIDFNAME != "":
+	case ALL && CELLSIDFNAME == "":
 		//Nothing
 	case CELLSIDFNAME != "":
 		CELLDICT = utils.LoadCellDictsToIndex(CELLSIDFNAME)
@@ -424,7 +424,7 @@ func processOneBuffer(
 
 	indexLimit := 2 * TSSREGION - 2 * FLANKSIZE
 
-	if ALL && CELLSIDFNAME != "" {
+	if ALL && CELLSIDFNAME == "" {
 		cellIDis0 = true
 	}
 
