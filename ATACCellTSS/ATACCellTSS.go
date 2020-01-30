@@ -137,6 +137,8 @@ if -cluster is provided, TSS is computed per cluster and -xgi argument is ignore
 
 	case CLUSTERFNAME != "":
 		loadClusterFile()
+	case ALL && CELLSIDFNAME != "":
+		//Nothing
 	case CELLSIDFNAME != "":
 		CELLDICT = utils.LoadCellDictsToIndex(CELLSIDFNAME)
 	default:
@@ -229,7 +231,6 @@ func makeClusterFileForAll() {
 	}
 
 	CELLDICT = map[string]int{"all":0}
-
 }
 
 
@@ -407,6 +408,7 @@ func processOneBuffer(
 	var inter interval.IntInterface
 	var itrg interval.IntRange
 	var celldict map[string]int
+	var cellIDis0 bool
 
 	defer waiting.Done()
 
@@ -422,12 +424,20 @@ func processOneBuffer(
 
 	indexLimit := 2 * TSSREGION - 2 * FLANKSIZE
 
+	if ALL && CELLSIDFNAME != "" {
+		cellIDis0 = true
+	}
+
 	for i := 0; i < limit; i++ {
 		split = strings.Split(bufferarray[i], "\t")
 		chro = strings.TrimPrefix(split[0], "chr")
 
-		if cellID, isInside = celldict[split[3]];!isInside {
-			continue
+		if cellIDis0 {
+			cellID = 0
+		} else {
+			if cellID, isInside = celldict[split[3]];!isInside {
+				continue
+			}
 		}
 
 		start, err = strconv.Atoi(split[1])
