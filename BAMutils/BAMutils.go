@@ -119,6 +119,9 @@ var NORMBEDGPRAH bool
 /*BAMTOBED bam to bed file */
 var BAMTOBED bool
 
+/*TAG string*/
+var TAG string
+
 
 func main() {
 
@@ -145,7 +148,7 @@ USAGE: BAMutils -split -bed <bedfile> (-out <string> -cellsID <string>)
 USAGE: BAMutils -downsample <float> -bed <bedfile> (-out <string> -cellsID <string>)
 
 -bamtobed: Transform a 10x BAM file to a bed file with each read in a new line and using the "CB:Z" field as barcode
-USAGE: BAMutils -bamtobed -bam <filename> -out <bedfile> (-optionnal -cellsID <filename> -threads <int>)
+USAGE: BAMutils -bamtobed -bam <filename> -out <bedfile> (-optionnal -cellsID <filename> -threads <int> -tag <string>)
 
 `)
 		 flag.PrintDefaults()
@@ -177,6 +180,7 @@ USAGE: BAMutils -bamtobed -bam <filename> -out <bedfile> (-optionnal -cellsID <f
 	flag.IntVar(&THREADNB, "threads", 1, "threads concurrency for reading bam file")
 	flag.IntVar(&BINSIZE, "binsize", 50, "bin size for bedgraph creation")
 	flag.StringVar(&DELIMITER, "delimiter", "\t", "delimiter used")
+	flag.StringVar(&TAG, "tag", "", "Used to tag output barcode")
 	flag.Parse()
 
 	if OUTPUTDIR != "" {
@@ -336,6 +340,7 @@ func bamTobed() {
 		buffer.WriteString(strconv.Itoa(samRecord.End()))
 		buffer.WriteRune('\t')
 		buffer.WriteString(barcodeID)
+		buffer.WriteString(TAG)
 		buffer.WriteRune('\n')
 
 		count++
