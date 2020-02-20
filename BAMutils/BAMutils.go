@@ -116,6 +116,9 @@ var REFCHRFNAME utils.Filename
 /*NORMBEDGPRAH norm bedpgraph value */
 var NORMBEDGPRAH bool
 
+/*BAMTOBED bam to bed file */
+var BAMTOBED bool
+
 
 func main() {
 
@@ -141,6 +144,8 @@ USAGE: BAMutils -split -bed <bedfile> (-out <string> -cellsID <string>)
 -downsample: Downsample the number of reads from a a bed file (downsample = 1.0 is 100 perc. and downsample = 0.0 is 0 perc. of the reads)
 USAGE: BAMutils -downsample <float> -bed <bedfile> (-out <string> -cellsID <string>)
 
+-bamtobed: Transform a 10x BAM file to a bed file with each read in a new line and using the "CB:Z" field as barcode
+USAGE: BAMutils -bamtobed -bam <filename> -out <bedfile> (-optionnal -cellsID <filename> -threads <int>)
 
 `)
 		 flag.PrintDefaults()
@@ -163,6 +168,8 @@ USAGE: BAMutils -downsample <float> -bed <bedfile> (-out <string> -cellsID <stri
 	flag.BoolVar(&DIVIDE, "divide", false, `divide the bam/bed file according to barcode file list`)
 	flag.BoolVar(&DIVIDEPARALLEL, "divide_parallel", false,
 		`divide the bam file according to barcode file list using a parallel version`)
+	flag.BoolVar(&BAMTOBED, "bamtobed", false,
+		`Transform a 10x BAM file to a bed file with each read in a new line and using the "CB:Z" field as barcode`)
 	flag.BoolVar(&SORTFILE, "sort", false, "sort output file of cell index")
 	flag.BoolVar(&ADDRG, "add_rg", false, "add cell ID as RG group to bam file")
 	flag.BoolVar(&SPLIT, "split", false, `split file per chromosomes`)
@@ -173,6 +180,10 @@ USAGE: BAMutils -downsample <float> -bed <bedfile> (-out <string> -cellsID <stri
 	flag.Parse()
 
 	if OUTPUTDIR != "" {
+		if FILENAMEOUT == "" {
+			panic("Error -out must be provided when -output_dir is used")
+		}
+
 		FILENAMEOUT = fmt.Sprintf("%s/%s", OUTPUTDIR, FILENAMEOUT)
 	}
 
@@ -245,10 +256,107 @@ USAGE: BAMutils -downsample <float> -bed <bedfile> (-out <string> -cellsID <stri
 
 	case DOWNSAMPLE < 1.0 && DOWNSAMPLE > 0.0:
 		downSampleBedFile()
+	case BAMTOBED:
+		bamTobed()
+	default:
+		panic("Wrong options provided!")
 	}
 
 	tDiff := time.Since(tStart)
 	fmt.Printf("done in time: %f s \n", tDiff.Seconds())
+}
+
+func bamTobed() {
+	var useRefBarcodes bool
+	var err error
+	var samRecord *sam.Record
+	var ref *sam.Reference
+	var count int
+	var barcodeID string
+	var buffer bytes.Buffer
+	var aux sam.Aux
+	var val interface{}
+
+	tStart := time.Now()
+
+	tag := sam.NewTag("CB")
+
+	if FILENAMEOUT == "" {
+		ext := path.Ext(BAMFILENAME)
+		FILENAMEOUT = fmt.Sprintf("%s.bed.gz", BAMFILENAME[:len(BAMFILENAME) - len(ext)])
+	}
+
+	if NUCLEIFILE != "" {
+		loadCellIDDict(NUCLEIFILE)
+		useRefBarcodes = true
+	}
+
+	bamReader, file := utils.ReturnReaderForBamfile(BAMFILENAME, THREADNB)
+	defer utils.CloseFile(file)
+	defer utils.CloseFile(bamReader)
+
+	writer := utils.ReturnWriter(FILENAMEOUT)
+	defer utils.CloseFile(writer)
+
+	loop:
+	for {
+		samRecord, err = bamReader.Read()
+
+		switch err {
+		case io.EOF:
+			break loop
+		case nil:
+		default:
+			fmt.Printf("ERROR: %s\n",err)
+			break loop
+
+		}
+
+		aux = samRecord.AuxFields.Get(tag)
+
+		if aux == nil {
+			continue loop
+		}
+
+		val = aux.Value()
+		barcodeID = val.(string)
+
+		if useRefBarcodes {
+			if !CELLIDDICT[barcodeID] {
+				continue loop
+			}
+		}
+
+		ref = samRecord.Ref
+
+		buffer.WriteString(ref.Name())
+		buffer.WriteRune('\t')
+		buffer.WriteString(strconv.Itoa(samRecord.Start()))
+		buffer.WriteRune('\t')
+		buffer.WriteString(strconv.Itoa(samRecord.End()))
+		buffer.WriteRune('\t')
+		buffer.WriteString(barcodeID)
+		buffer.WriteRune('\n')
+
+		count++
+
+		if count > 50000 {
+			_, err = writer.Write(buffer.Bytes())
+			utils.Check(err)
+			buffer.Reset()
+			count = 0
+		}
+
+	}
+
+	_, err = writer.Write(buffer.Bytes())
+	utils.Check(err)
+	buffer.Reset()
+
+	tDiff := time.Since(tStart)
+	fmt.Printf("done in time: %f s \n", tDiff.Seconds())
+	fmt.Printf("file %s written!\n", FILENAMEOUT)
+
 }
 
 func loadRefChrMap() {
@@ -1495,10 +1603,8 @@ func DivideBam() {
 
 
 func loadCellIDDict(fname string) {
-	f, err := os.Open(fname)
-	check(err)
-	defer utils.CloseFile(f)
-	scanner := bufio.NewScanner(f)
+	scanner, file := utils.ReturnReader(fname, 0)
+	defer utils.CloseFile(file)
 
 	CELLIDDICT = make(map[string]bool)
 

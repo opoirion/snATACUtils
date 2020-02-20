@@ -15,6 +15,8 @@ import (
 	"strconv"
 	"time"
 	originalbzip2  "compress/bzip2"
+	"github.com/biogo/hts/bgzf"
+	"github.com/biogo/hts/bam"
 )
 
 
@@ -220,6 +222,23 @@ func ReturnReaderForGzipfile(fname string, startingLine int) (*bufio.Scanner, *o
 	}
 
 	return bzipScanner, fileOpen
+}
+
+/*ReturnReaderForBamfile ... */
+func ReturnReaderForBamfile(fname string, threadnb int) (*bam.Reader, *os.File) {
+	var fileOpen *os.File
+	var bamReader *bam.Reader
+	var err error
+
+	fileOpen, err = os.Open(fname)
+	Check(err)
+	_, err = bgzf.HasEOF(fileOpen)
+	Check(err)
+
+	bamReader, err = bam.NewReader(fileOpen, threadnb)
+	Check(err)
+
+	return bamReader, fileOpen
 }
 
 /*ReturnReaderForBzipfilePureGo ... */
