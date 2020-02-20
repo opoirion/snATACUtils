@@ -134,7 +134,7 @@ USAGE: ATACtools -clean -filename <fname> -output filename -clean_pattern "\n"
 	flag.StringVar(&COMPLSTRATEGY, "compl_strategy", "split_10_compl_second", `Strategy to use when writing the complement of a fastq file (default split_10_compl_second: split after 10 bases and complementary only second)`)
 	flag.BoolVar(&CREATEBARCODEDICT, "create_barcode_dict", false, `create a barcode key / value count file`)
 	flag.BoolVar(&CLEAN, "clean", false, `clean files with unwanted lines`)
-	flag.StringVar(&TAG, "clean_pattern", "\n", "pattern used to clean files with unwanted lines")
+	flag.StringVar(&CLEANPATTERN, "clean_pattern", "\n", "pattern used to clean files with unwanted lines")
 	flag.IntVar(&MAXSCANTOKENSIZE, "max_scan_size", 0, "MaxScanTokenSize variable that defines the length of a line that a buffer can read (set if differnt than 0)")
 	flag.Parse()
 
