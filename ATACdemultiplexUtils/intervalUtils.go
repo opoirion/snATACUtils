@@ -21,6 +21,14 @@ type IntInterval struct {
 }
 
 
+//PeakIntervalTreeObject Peak IntervalTree Object
+type PeakIntervalTreeObject struct {
+	chrintervaldict map[string]*interval.IntTree
+	intervalmapping map[uintptr]string
+	peakiddict *map[string]uint
+}
+
+
 //Overlap rule for two Interval
 func (i IntInterval) Overlap(b interval.IntRange) bool {
 	// Search for intersection
@@ -218,6 +226,55 @@ func CreatePeakIntervalTree() {
 
 	tDiff := time.Since(tStart)
 	fmt.Printf("Create peak index done in time: %f s \n", tDiff.Seconds())
+}
+
+
+/*CreatePeakIntervalTreeObject create a peak intervall dict object*/
+func CreatePeakIntervalTreeObject(peakiddict map[string]uint) (
+	intervalObject PeakIntervalTreeObject) {
+
+	var split []string
+	var chroStr string
+
+	var start, end int
+	var err error
+	var isInside bool
+
+	fmt.Printf("create peak interval tree...\n")
+	tStart := time.Now()
+
+	intervalObject.chrintervaldict = make(map[string]*interval.IntTree)
+	intervalObject.intervalmapping = make(map[uintptr]string)
+	intervalObject.peakiddict = &peakiddict
+
+	for key, pos := range peakiddict {
+		split = strings.Split(key, "\t")
+		chroStr = split[0]
+
+		start, err = strconv.Atoi(split[1])
+		Check(err)
+
+		end, err = strconv.Atoi(strings.Trim(split[2], "\n"))
+		Check(err)
+
+		int := IntInterval{
+			Start: start, End: end}
+		int.UID = uintptr(uintptr(pos))
+
+		if _, isInside = intervalObject.chrintervaldict[chroStr];!isInside {
+			intervalObject.chrintervaldict[chroStr] = &interval.IntTree{}
+		}
+
+		err = intervalObject.chrintervaldict[chroStr].Insert(int, false)
+		Check(err)
+
+		intervalObject.intervalmapping[int.ID()] = key
+	}
+
+	tDiff := time.Since(tStart)
+	fmt.Printf("Create peak index done in time: %f s \n", tDiff.Seconds())
+
+	return intervalObject
 }
 
 

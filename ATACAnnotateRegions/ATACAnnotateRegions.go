@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"bytes"
 	"time"
+	"math"
 )
 
 
@@ -36,6 +37,9 @@ var WRITEINTERSECT bool
 /*UNIQ write only unique output peaks */
 var UNIQ bool
 
+/*UNIQREF write only unique output peaks */
+var UNIQREF bool
+
 /*WRITEREF write_ref write bed region from reference file */
 var WRITEREF bool
 
@@ -58,6 +62,7 @@ USAGE: ATACAnnotateRegions -chi2 -bed <fname> -peak <fname> -cluster <fname> (op
 	flag.BoolVar(&IGNOREUNANNOATED, "ignore", false, `ignore unnatotated peak`)
 	flag.BoolVar(&WRITEINTERSECT, "intersect", false, `write intersection only`)
 	flag.BoolVar(&UNIQ, "unique", false, `write only unique output peaks`)
+	flag.BoolVar(&UNIQREF, "unique_ref", false, `write only unique reference using the closest peak`)
 	flag.BoolVar(&WRITEREF, "write_ref", false, `write bed region from reference file`)
 
 	flag.Parse()
@@ -93,7 +98,7 @@ func scanBedFileAndAddAnnotation() {
 	var oneInterval interval.IntInterface
 	var split []string
 	var line, peakstr, symbol string
-	var isInside bool
+	var isInside, isUnique bool
 	var start, end, count int
 	var err error
 	var peak utils.Peak
@@ -101,6 +106,8 @@ func scanBedFileAndAddAnnotation() {
 	var buffer bytes.Buffer
 	var intrange interval.IntRange
 	var uniqueBed map[string]bool
+	var intervalCenter int
+	var centerDistance, minCenterDistance float64
 
 	scanner, file := BEDFILENAME.ReturnReader(0)
 	defer utils.CloseFile(file)
@@ -137,23 +144,34 @@ func scanBedFileAndAddAnnotation() {
 			count++
 		}
 
+		intervalCenter, minCenterDistance = 0, -1
+		isUnique = false
+
 		for _, oneInterval = range intervals {
+			intrange = oneInterval.Range()
+			intervalCenter = intrange.End - intrange.Start
+			centerDistance = math.Abs(float64((start - end) - intervalCenter))
 
-			peakstr = utils.INTERVALMAPPING[oneInterval.ID()]
-			peak.StringToPeak(peakstr)
+			if UNIQ {
 
-			symbol = utils.PEAKSYMBOLDICT[peak]
-
-			switch {
-			case WRITEINTERSECT:
-				peakstr = fmt.Sprintf("%s\t%d\t%d", peak[0],
+				if minCenterDistance < 0 || centerDistance < minCenterDistance {
+					minCenterDistance = centerDistance
+					peakstr, symbol = returnPeakStrAndSymbol(
+						peak,
+						line,
+						oneInterval.ID(),
+						intrange.Start,
+						intrange.End)
+				} else {
+					continue
+				}
+			} else {
+				peakstr, symbol = returnPeakStrAndSymbol(
+					peak,
+					line,
+					oneInterval.ID(),
 					intrange.Start,
 					intrange.End)
-			case WRITEREF:
-				peakstr = peak.PeakToString()
-			default:
-				peakstr = line
-
 			}
 
 			if UNIQ {
@@ -162,8 +180,18 @@ func scanBedFileAndAddAnnotation() {
 				}
 
 				uniqueBed[peakstr] = true
-			}
+				isUnique = true
 
+			} else  {
+				buffer.WriteString(peakstr)
+				buffer.WriteRune('\t')
+				buffer.WriteString(symbol)
+				buffer.WriteRune('\n')
+				count++
+			}
+		}
+
+		if UNIQ && isUnique {
 			buffer.WriteString(peakstr)
 			buffer.WriteRune('\t')
 			buffer.WriteString(symbol)
@@ -185,4 +213,26 @@ func scanBedFileAndAddAnnotation() {
 
 	tDiff := time.Since(tStart)
 	fmt.Printf("done in time: %f s \n", tDiff.Seconds())
+}
+
+
+func returnPeakStrAndSymbol(peak utils.Peak, line string, id uintptr, start, end int) (
+	peakstr, symbol string) {
+	symbol = utils.PEAKSYMBOLDICT[peak]
+	peakstr = utils.INTERVALMAPPING[id]
+	peak.StringToPeak(peakstr)
+
+	switch {
+	case WRITEINTERSECT:
+		peakstr = fmt.Sprintf("%s\t%d\t%d", peak[0],
+			start,
+			end)
+	case WRITEREF:
+		peakstr = peak.PeakToString()
+	default:
+		peakstr = line
+
+	}
+
+	return peakstr, symbol
 }
