@@ -362,13 +362,7 @@ func loadPvalueTable() {
 
 		split = strings.Split(line, "\t")
 
-		_, err = strconv.Atoi(split[1])
-		utils.Check(err)
-
-		_, err = strconv.Atoi(split[2])
-		utils.Check(err)
-
-		peakl = utils.Peak{split[0], split[1], split[2]}
+		peakl.SplitToPeak(split)
 
 		cluster = split[3]
 
@@ -413,15 +407,11 @@ func loadPvalueTable() {
 func createPeakMappingDict() {
 	var peakstr string
 	var peakid uint
-	var peaktuple []string
 
 	PEAKMAPPING = make([]utils.Peak, len(utils.PEAKIDDICT))
 
 	for peakstr, peakid = range utils.PEAKIDDICT {
-
-		peaktuple = strings.Split(peakstr, "\t")
-		PEAKMAPPING[peakid] = [3]string{
-			peaktuple[0], peaktuple[1], peaktuple[2]}
+		PEAKMAPPING[peakid].StringToPeak(peakstr)
 	}
 
 }
@@ -828,11 +818,11 @@ func writePvalueCorrectedTable() {
 			}
 
 			peakl = PEAKMAPPING[peaki.id]
-			buffer.WriteString(peakl[0])
+			buffer.WriteString(peakl.Slice[0])
 			buffer.WriteRune('\t')
-			buffer.WriteString(peakl[1])
+			buffer.WriteString(peakl.Slice[1])
 			buffer.WriteRune('\t')
-			buffer.WriteString(peakl[2])
+			buffer.WriteString(peakl.Slice[2])
 			buffer.WriteRune('\t')
 			buffer.WriteString(cluster)
 
@@ -897,11 +887,11 @@ func writeContingencyTable(filenameout string, header bool) {
 			}
 
 			peakl = PEAKMAPPING[uintptr(peakIndex)]
-			buffer.WriteString(peakl[0])
+			buffer.WriteString(peakl.Slice[0])
 			buffer.WriteRune('\t')
-			buffer.WriteString(peakl[1])
+			buffer.WriteString(peakl.Slice[1])
 			buffer.WriteRune('\t')
-			buffer.WriteString(peakl[2])
+			buffer.WriteString(peakl.Slice[2])
 			buffer.WriteRune('\t')
 			buffer.WriteString(cluster)
 

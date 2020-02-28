@@ -23,9 +23,9 @@ type IntInterval struct {
 
 //PeakIntervalTreeObject Peak IntervalTree Object
 type PeakIntervalTreeObject struct {
-	chrintervaldict map[string]*interval.IntTree
-	intervalmapping map[uintptr]string
-	peakiddict *map[string]uint
+	Chrintervaldict map[string]*interval.IntTree
+	Intervalmapping map[uintptr]string
+	Peakiddict *map[string]uint
 }
 
 
@@ -50,14 +50,18 @@ func (i IntInterval) String() string {
 }
 
 //Peak Descriptor of a peak as string slice
-type Peak [3]string
+type Peak struct{
+	Slice [3]string
+	Start, End int
+}
 
 //StringToPeak Convert Peak string to peak
 func (peak * Peak) StringToPeak(str string) {
+	var err1, err2 error
 	split := strings.Split(str, "\t")
 
-	_, err1 := strconv.Atoi(split[1])
-	_, err2 := strconv.Atoi(split[2])
+	(*peak).Start, err1 = strconv.Atoi(split[1])
+	(*peak).End, err2 = strconv.Atoi(split[2])
 
 	if err1 != nil || err2 != nil {
 		panic(fmt.Sprintf(
@@ -65,24 +69,49 @@ func (peak * Peak) StringToPeak(str string) {
 			str))
 	}
 
-	(*peak)[0] = split[0]
-	(*peak)[1] = split[1]
-	(*peak)[2] = split[2]
+	(*peak).Slice[0] = split[0]
+	(*peak).Slice[1] = split[1]
+	(*peak).Slice[2] = split[2]
+}
+
+//SplitToPeak Convert string split to peak
+func (peak * Peak) SplitToPeak(split []string) {
+	var err1, err2 error
+
+	(*peak).Start, err1 = strconv.Atoi(split[1])
+	(*peak).End, err2 = strconv.Atoi(split[2])
+
+	if err1 != nil || err2 != nil {
+		panic(fmt.Sprintf(
+			"Error when converting Peak: %s cannot be used as int ####\n",
+			split))
+	}
+
+	(*peak).Slice[0] = split[0]
+	(*peak).Slice[1] = split[1]
+	(*peak).Slice[2] = split[2]
 }
 
 /*PeakToString Convert Peak to string*/
 func (peak * Peak) PeakToString() (peakstr string)  {
-	return fmt.Sprintf("%s\t%s\t%s", peak[0], peak[1], peak[2])
+	return fmt.Sprintf("%s\t%s\t%s", (*peak).Slice[0],
+		(*peak).Slice[1],
+		(*peak).Slice[2])
 
+}
+
+/*Chr return the chromosome of the peak */
+func (peak * Peak) Chr() (chr string)  {
+	return (*peak).Slice[0]
 }
 
 //StringToPeakNoCheck Convert Peak string to peak
 func (peak * Peak) StringToPeakNoCheck(str string) {
 	split := strings.Split(str, "\t")
 
-	(*peak)[0] = split[0]
-	(*peak)[1] = split[1]
-	(*peak)[2] = split[2]
+	(*peak).Slice[0] = split[0]
+	(*peak).Slice[1] = split[1]
+	(*peak).Slice[2] = split[2]
 }
 
 /*PEAKIDDICT peak ID<->pos */
@@ -105,7 +134,7 @@ var PEAKSYMBOLDICT map[Peak]string
 func LoadSymbolFile(peaksymbolfile, peakfile  Filename) {
 	var scannerPeak *bufio.Scanner
 	var filePeak *os.File
-	var split, split2 []string
+	var split []string
 	var peakl Peak
 	var symbol string
 
@@ -144,11 +173,10 @@ func LoadSymbolFile(peaksymbolfile, peakfile  Filename) {
 
 		if isOption1 {
 			scannerPeak.Scan()
-			split2 = strings.Split(scannerPeak.Text(), "\t")
-			peakl = Peak{split2[0], split2[1], split2[2]}
+			peakl.StringToPeak(scannerPeak.Text())
 
 		} else {
-			peakl = Peak{split[1], split2[2], split2[3]}
+			peakl.SplitToPeak(split)
 		}
 
 		PEAKSYMBOLDICT[peakl] = symbol
@@ -178,7 +206,7 @@ func LoadRefBedFileWithSymbol(peaksymbolfile Filename) {
 		}
 
 		symbol = split[3]
-		peakl = Peak{split[0], split[1], split[2]}
+		peakl.SplitToPeak(split)
 
 		PEAKSYMBOLDICT[peakl] = symbol
 	}
@@ -243,9 +271,9 @@ func CreatePeakIntervalTreeObject(peakiddict map[string]uint) (
 	fmt.Printf("create peak interval tree...\n")
 	tStart := time.Now()
 
-	intervalObject.chrintervaldict = make(map[string]*interval.IntTree)
-	intervalObject.intervalmapping = make(map[uintptr]string)
-	intervalObject.peakiddict = &peakiddict
+	intervalObject.Chrintervaldict = make(map[string]*interval.IntTree)
+	intervalObject.Intervalmapping = make(map[uintptr]string)
+	intervalObject.Peakiddict = &peakiddict
 
 	for key, pos := range peakiddict {
 		split = strings.Split(key, "\t")
@@ -261,14 +289,14 @@ func CreatePeakIntervalTreeObject(peakiddict map[string]uint) (
 			Start: start, End: end}
 		int.UID = uintptr(uintptr(pos))
 
-		if _, isInside = intervalObject.chrintervaldict[chroStr];!isInside {
-			intervalObject.chrintervaldict[chroStr] = &interval.IntTree{}
+		if _, isInside = intervalObject.Chrintervaldict[chroStr];!isInside {
+			intervalObject.Chrintervaldict[chroStr] = &interval.IntTree{}
 		}
 
-		err = intervalObject.chrintervaldict[chroStr].Insert(int, false)
+		err = intervalObject.Chrintervaldict[chroStr].Insert(int, false)
 		Check(err)
 
-		intervalObject.intervalmapping[int.ID()] = key
+		intervalObject.Intervalmapping[int.ID()] = key
 	}
 
 	tDiff := time.Since(tStart)
@@ -277,10 +305,33 @@ func CreatePeakIntervalTreeObject(peakiddict map[string]uint) (
 	return intervalObject
 }
 
+/*CreatePeakIntervalTreeObjectFromFile create a peak intervall dict object*/
+func CreatePeakIntervalTreeObjectFromFile(bedfile Filename) (intervalObject PeakIntervalTreeObject) {
+	peakiddict := LoadPeaksDict(bedfile)
+
+	intervalObject = CreatePeakIntervalTreeObject(peakiddict)
+	return intervalObject
+}
 
 
-/*LoadPeaks load peak file and return peak peak id -> dict*/
+/*LoadPeaksDict load peak file return map[string]int*/
+func LoadPeaksDict(fname Filename) (peakiddict map[string]uint)  {
+	peakiddict = make(map[string]uint)
+
+	loadPeaks(fname, peakiddict)
+
+	return peakiddict
+}
+
+/*LoadPeaks load peak file globally*/
 func LoadPeaks(fname Filename) int {
+	PEAKIDDICT = make(map[string]uint)
+
+	return loadPeaks(fname, PEAKIDDICT)
+}
+
+/*loadPeaks load peak file globally*/
+func loadPeaks(fname Filename, peakiddict map[string]uint) int {
 	var scanner *bufio.Scanner
 	var file *os.File
 	var split []string
@@ -291,10 +342,7 @@ func LoadPeaks(fname Filename) int {
 
 	defer CloseFile(file)
 
-
 	var count uint
-
-	PEAKIDDICT = make(map[string]uint)
 	count = 0
 
 	for scanner.Scan() {
@@ -317,7 +365,7 @@ func LoadPeaks(fname Filename) int {
 				line, count, fname))
 		}
 
-		PEAKIDDICT[line] = count
+		peakiddict[line] = count
 		count++
 	}
 

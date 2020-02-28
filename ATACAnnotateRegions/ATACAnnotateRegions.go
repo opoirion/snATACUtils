@@ -98,16 +98,17 @@ func scanBedFileAndAddAnnotation() {
 	var oneInterval interval.IntInterface
 	var split []string
 	var line, peakstr, symbol string
-	var isInside, isUnique bool
+	var isInside, isUnique, isUniqueRef bool
 	var start, end, count int
 	var err error
-	var peak utils.Peak
 	var inttree *interval.IntTree
 	var buffer bytes.Buffer
 	var intrange interval.IntRange
 	var uniqueBed map[string]bool
 	var intervalCenter int
 	var centerDistance, minCenterDistance float64
+	var oneIntervalID uintptr
+	var peakIntervalTreeObject utils.PeakIntervalTreeObject
 
 	scanner, file := BEDFILENAME.ReturnReader(0)
 	defer utils.CloseFile(file)
@@ -119,6 +120,12 @@ func scanBedFileAndAddAnnotation() {
 
 	if UNIQ {
 		uniqueBed = make(map[string]bool)
+	}
+
+
+	if UNIQREF {
+		peakIntervalTreeObject = utils.CreatePeakIntervalTreeObjectFromFile(
+			BEDFILENAME)
 	}
 
 	for scanner.Scan() {
@@ -146,20 +153,21 @@ func scanBedFileAndAddAnnotation() {
 
 		intervalCenter, minCenterDistance = 0, -1
 		isUnique = false
+		isUniqueRef = true
 
 		for _, oneInterval = range intervals {
 			intrange = oneInterval.Range()
+			oneIntervalID = oneInterval.ID()
 			intervalCenter = intrange.End - intrange.Start
 			centerDistance = math.Abs(float64((start - end) - intervalCenter))
 
 			if UNIQ {
-
 				if minCenterDistance < 0 || centerDistance < minCenterDistance {
 					minCenterDistance = centerDistance
+
 					peakstr, symbol = returnPeakStrAndSymbol(
-						peak,
 						line,
-						oneInterval.ID(),
+						oneIntervalID,
 						intrange.Start,
 						intrange.End)
 				} else {
@@ -167,11 +175,16 @@ func scanBedFileAndAddAnnotation() {
 				}
 			} else {
 				peakstr, symbol = returnPeakStrAndSymbol(
-					peak,
 					line,
-					oneInterval.ID(),
+					oneIntervalID,
 					intrange.Start,
 					intrange.End)
+			}
+
+			if UNIQREF {
+				isUniqueRef = checkifUniqueRef(peakstr,
+					oneIntervalID,
+					&peakIntervalTreeObject)
 			}
 
 			if UNIQ {
@@ -183,15 +196,18 @@ func scanBedFileAndAddAnnotation() {
 				isUnique = true
 
 			} else  {
-				buffer.WriteString(peakstr)
-				buffer.WriteRune('\t')
-				buffer.WriteString(symbol)
-				buffer.WriteRune('\n')
-				count++
+
+				if isUniqueRef {
+					buffer.WriteString(peakstr)
+					buffer.WriteRune('\t')
+					buffer.WriteString(symbol)
+					buffer.WriteRune('\n')
+					count++
+				}
 			}
 		}
 
-		if UNIQ && isUnique {
+		if UNIQ && isUnique && isUniqueRef {
 			buffer.WriteString(peakstr)
 			buffer.WriteRune('\t')
 			buffer.WriteString(symbol)
@@ -216,15 +232,18 @@ func scanBedFileAndAddAnnotation() {
 }
 
 
-func returnPeakStrAndSymbol(peak utils.Peak, line string, id uintptr, start, end int) (
+func returnPeakStrAndSymbol(line string, id uintptr, start, end int) (
 	peakstr, symbol string) {
-	symbol = utils.PEAKSYMBOLDICT[peak]
+
+	var peak utils.Peak
+
 	peakstr = utils.INTERVALMAPPING[id]
 	peak.StringToPeak(peakstr)
+	symbol = utils.PEAKSYMBOLDICT[peak]
 
 	switch {
 	case WRITEINTERSECT:
-		peakstr = fmt.Sprintf("%s\t%d\t%d", peak[0],
+		peakstr = fmt.Sprintf("%s\t%d\t%d", peak.Slice[0],
 			start,
 			end)
 	case WRITEREF:
@@ -235,4 +254,48 @@ func returnPeakStrAndSymbol(peak utils.Peak, line string, id uintptr, start, end
 	}
 
 	return peakstr, symbol
+}
+
+func checkifUniqueRef(peakstr string, refpeakID uintptr,
+	intervalObject *utils.PeakIntervalTreeObject ) bool {
+
+	if !UNIQREF {
+		return true
+	}
+
+	var refpeak utils.Peak
+	var topID uintptr
+	var centerDistance, minCenterDistance float64
+	var intervalCenter int
+	var toppeakstr, refpeakstr string
+
+	refpeakstr = utils.INTERVALMAPPING[refpeakID]
+
+	refpeak.StringToPeak(refpeakstr)
+
+	inttree := intervalObject.Chrintervaldict[refpeak.Chr()]
+
+	intervals := inttree.Get(
+		utils.IntInterval{Start: refpeak.Start, End: refpeak.End})
+
+	intervalCenter, minCenterDistance = 0, -1
+
+	for _, oneInterval := range intervals {
+		intrange := oneInterval.Range()
+		intervalCenter = intrange.End - intrange.Start
+		centerDistance = math.Abs(float64((refpeak.Start - refpeak.End) - intervalCenter))
+
+		if minCenterDistance < 0 || centerDistance < minCenterDistance {
+			minCenterDistance = centerDistance
+			topID = oneInterval.ID()
+		}
+	}
+
+	toppeakstr = (*intervalObject).Intervalmapping[topID]
+
+	if toppeakstr == peakstr {
+		return true
+	}
+
+	return false
 }
