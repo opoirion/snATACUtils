@@ -183,9 +183,18 @@ func LoadSymbolFile(peaksymbolfile, peakfile  Filename) {
 	}
 }
 
-
 /*LoadRefBedFileWithSymbol  peaksymbolfile, peakfile  Filename*/
 func LoadRefBedFileWithSymbol(peaksymbolfile Filename) {
+	loadRefBedFileWithSymbol(peaksymbolfile, "\t")
+}
+
+/*LoadRefCustomFileWithSymbol  peaksymbolfile, peakfile  Filename*/
+func LoadRefCustomFileWithSymbol(peaksymbolfile Filename, sep string) {
+	loadRefBedFileWithSymbol(peaksymbolfile, sep)
+}
+
+/*loadRefBedFileWithSymbol  peaksymbolfile, peakfile  Filename*/
+func loadRefBedFileWithSymbol(peaksymbolfile Filename, sep string) {
 	var split []string
 	var peakl Peak
 	var symbol string
@@ -197,7 +206,7 @@ func LoadRefBedFileWithSymbol(peaksymbolfile Filename) {
 	defer CloseFile(file)
 
 	for scanner.Scan() {
-		split = strings.Split(scanner.Text(), "\t")
+		split = strings.SplitN(scanner.Text(), sep, 4)
 
 		if len(split) < 4 {
 			panic(fmt.Sprintf(
@@ -318,7 +327,7 @@ func CreatePeakIntervalTreeObjectFromFile(bedfile Filename) (intervalObject Peak
 func LoadPeaksDict(fname Filename) (peakiddict map[string]uint)  {
 	peakiddict = make(map[string]uint)
 
-	loadPeaks(fname, peakiddict)
+	loadPeaks(fname, peakiddict, "\t")
 
 	return peakiddict
 }
@@ -327,11 +336,18 @@ func LoadPeaksDict(fname Filename) (peakiddict map[string]uint)  {
 func LoadPeaks(fname Filename) int {
 	PEAKIDDICT = make(map[string]uint)
 
-	return loadPeaks(fname, PEAKIDDICT)
+	return loadPeaks(fname, PEAKIDDICT, "\t")
+}
+
+/*LoadPeaksCustomSeparator load peak file globally*/
+func LoadPeaksCustomSeparator(fname Filename, sep string) int {
+	PEAKIDDICT = make(map[string]uint)
+
+	return loadPeaks(fname, PEAKIDDICT, sep)
 }
 
 /*loadPeaks load peak file globally*/
-func loadPeaks(fname Filename, peakiddict map[string]uint) int {
+func loadPeaks(fname Filename, peakiddict map[string]uint, sep string) int {
 	var scanner *bufio.Scanner
 	var file *os.File
 	var split []string
@@ -348,7 +364,7 @@ func loadPeaks(fname Filename, peakiddict map[string]uint) int {
 	for scanner.Scan() {
 		line = scanner.Text()
 
-		split = strings.Split(line, "\t")
+		split = strings.Split(line, sep)
 
 		if len(split) < 3 {
 			panic(fmt.Sprintf(

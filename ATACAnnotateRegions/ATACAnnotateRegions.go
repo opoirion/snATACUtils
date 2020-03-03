@@ -43,6 +43,9 @@ var UNIQREF bool
 /*WRITEREF write_ref write bed region from reference file */
 var WRITEREF bool
 
+/*REFSEP separator used to identify the reference region in the -ref file */
+var REFSEP string
+
 
 func main() {
 	flag.Usage = func() {
@@ -50,7 +53,7 @@ func main() {
 #################### MODULE TO ANNOTATE GENOMIC REGIONS FROM BED FILES ########################
 
 """Annotate bed file using a reference bed file containing the annotations"""
-USAGE: ATACAnnotateRegions -bed <file> -ref <file> (optionnal -out <string> -unique -unique_ref -intersect -write_ref)
+USAGE: ATACAnnotateRegions -bed <file> -ref <file> (optionnal -out <string> -unique -unique_ref -intersect -write_ref -edit -ref_sep <string>)
 `)
 		flag.PrintDefaults()
 	}
@@ -64,6 +67,7 @@ USAGE: ATACAnnotateRegions -bed <file> -ref <file> (optionnal -out <string> -uni
 	flag.BoolVar(&UNIQ, "unique", false, `write only unique output peaks`)
 	flag.BoolVar(&UNIQREF, "unique_ref", false, `write only unique reference using the closest peak`)
 	flag.BoolVar(&WRITEREF, "write_ref", false, `write bed region from reference file`)
+	flag.StringVar(&REFSEP, "ref_seq", "\t", "separator to define the bed region for the ref file")
 
 	flag.Parse()
 
@@ -77,8 +81,8 @@ USAGE: ATACAnnotateRegions -bed <file> -ref <file> (optionnal -out <string> -uni
 		panic(fmt.Sprintf("Error! options -write_ref and -intersect cannot be TRUE together. Please chose one!\n"))
 	}
 
-	utils.LoadRefBedFileWithSymbol(REFBEDFILENAME)
-	utils.LoadPeaks(REFBEDFILENAME)
+	utils.LoadRefCustomFileWithSymbol(REFBEDFILENAME, REFSEP)
+	utils.LoadPeaksCustomSeparator(REFBEDFILENAME, REFSEP)
 	utils.CreatePeakIntervalTree()
 
 	scanBedFileAndAddAnnotation()
