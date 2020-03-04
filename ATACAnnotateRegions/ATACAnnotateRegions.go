@@ -46,6 +46,9 @@ var WRITEREF bool
 /*REFSEP separator used to identify the reference region in the -ref file */
 var REFSEP string
 
+/*REFPOS separator used to identify the reference region in the -ref file */
+var REFPOS string
+
 
 func main() {
 	flag.Usage = func() {
@@ -67,9 +70,18 @@ USAGE: ATACAnnotateRegions -bed <file> -ref <file> (optionnal -out <string> -uni
 	flag.BoolVar(&UNIQ, "unique", false, `write only unique output peaks`)
 	flag.BoolVar(&UNIQREF, "unique_ref", false, `write only unique reference using the closest peak`)
 	flag.BoolVar(&WRITEREF, "write_ref", false, `write bed region from reference file`)
-	flag.StringVar(&REFSEP, "ref_seq", "\t", "separator to define the bed region for the ref file")
+	flag.StringVar(&REFSEP, "ref_sep", "\t", "separator to define the bed region for the ref file")
+	flag.StringVar(&REFPOS, "ref_pos", "0 1 2", "separator to the bed region in ref for the ref file")
 
 	flag.Parse()
+
+	tail := flag.Args()
+
+	if len(tail) > 0 {
+		panic(fmt.Sprintf("Error wrongly formatted arguments: %s\n", tail))
+	}
+
+	refPos := returnRefPos()
 
 	if FILENAMEOUT == "" {
 		ext := path.Ext(BEDFILENAME.String())
@@ -82,8 +94,8 @@ USAGE: ATACAnnotateRegions -bed <file> -ref <file> (optionnal -out <string> -uni
 	}
 
 	utils.LoadRefCustomFileWithSymbol(REFBEDFILENAME, REFSEP)
-	utils.LoadPeaksCustomSeparator(REFBEDFILENAME, REFSEP)
-	utils.CreatePeakIntervalTree()
+	utils.LoadPeaksCustom(REFBEDFILENAME, REFSEP, refPos)
+	utils.CreatePeakIntervalTreeCustom(refPos, REFSEP)
 
 	scanBedFileAndAddAnnotation()
 
@@ -96,6 +108,26 @@ USAGE: ATACAnnotateRegions -bed <file> -ref <file> (optionnal -out <string> -uni
 	}
 }
 
+func returnRefPos() (refPos [3]int) {
+
+	refPosSplit := strings.Split(REFPOS, " ")
+
+	if len(refPosSplit) != 3 {
+		panic(fmt.Sprintf("Error with ref_pos argument: %s should be an array of 3 ints (such as: 0 1 2) \n", REFPOS))
+	}
+
+	var err1, err2, err3 error
+
+	refPos[0], err1 = strconv.Atoi(refPosSplit[0])
+	refPos[1], err2 = strconv.Atoi(refPosSplit[1])
+	refPos[2], err3 = strconv.Atoi(refPosSplit[2])
+
+	if err1 != nil || err2 != nil || err3 != nil {
+		panic(fmt.Sprintf("Error with ref_pos argument: %s should be an array of 3 ints (such as: 0 1 2) \n", REFPOS))
+	}
+
+	return refPos
+}
 
 func scanBedFileAndAddAnnotation() {
 	var intervals []interval.IntInterface

@@ -206,7 +206,7 @@ func loadRefBedFileWithSymbol(peaksymbolfile Filename, sep string) {
 	defer CloseFile(file)
 
 	for scanner.Scan() {
-		split = strings.SplitN(scanner.Text(), sep, 4)
+		split = strings.Split(scanner.Text(), sep)
 
 		if len(split) < 4 {
 			panic(fmt.Sprintf(
@@ -221,9 +221,19 @@ func loadRefBedFileWithSymbol(peaksymbolfile Filename, sep string) {
 	}
 }
 
+/*CreatePeakIntervalTreeCustom ...*/
+func CreatePeakIntervalTreeCustom(peakPos [3]int, sep string) {
+	createPeakIntervalTree(peakPos, sep)
+}
+
 
 /*CreatePeakIntervalTree ...*/
 func CreatePeakIntervalTree() {
+	createPeakIntervalTree([3]int{0, 1, 2}, "\t")
+}
+
+/*createPeakIntervalTree ...*/
+func createPeakIntervalTree(peakPos [3]int, sep string) {
 	var split []string
 	var chroStr string
 
@@ -238,13 +248,13 @@ func CreatePeakIntervalTree() {
 	INTERVALMAPPING = make(map[uintptr]string)
 
 	for key, pos := range PEAKIDDICT {
-		split = strings.Split(key, "\t")
-		chroStr = split[0]
+		split = strings.Split(key, sep)
+		chroStr = split[peakPos[0]]
 
-		start, err = strconv.Atoi(split[1])
+		start, err = strconv.Atoi(split[peakPos[1]])
 		Check(err)
 
-		end, err = strconv.Atoi(strings.Trim(split[2], "\n"))
+		end, err = strconv.Atoi(strings.Trim(split[peakPos[2]], "\n"))
 		Check(err)
 
 		int := IntInterval{
@@ -327,7 +337,7 @@ func CreatePeakIntervalTreeObjectFromFile(bedfile Filename) (intervalObject Peak
 func LoadPeaksDict(fname Filename) (peakiddict map[string]uint)  {
 	peakiddict = make(map[string]uint)
 
-	loadPeaks(fname, peakiddict, "\t")
+	loadPeaks(fname, peakiddict, "\t", [3]int{0, 1, 2})
 
 	return peakiddict
 }
@@ -336,18 +346,18 @@ func LoadPeaksDict(fname Filename) (peakiddict map[string]uint)  {
 func LoadPeaks(fname Filename) int {
 	PEAKIDDICT = make(map[string]uint)
 
-	return loadPeaks(fname, PEAKIDDICT, "\t")
+	return loadPeaks(fname, PEAKIDDICT, "\t", [3]int{0, 1, 2})
 }
 
-/*LoadPeaksCustomSeparator load peak file globally*/
-func LoadPeaksCustomSeparator(fname Filename, sep string) int {
+/*LoadPeaksCustom load peak file globally*/
+func LoadPeaksCustom(fname Filename, sep string, peakPos [3]int) int {
 	PEAKIDDICT = make(map[string]uint)
 
-	return loadPeaks(fname, PEAKIDDICT, sep)
+	return loadPeaks(fname, PEAKIDDICT, sep, peakPos)
 }
 
 /*loadPeaks load peak file globally*/
-func loadPeaks(fname Filename, peakiddict map[string]uint, sep string) int {
+func loadPeaks(fname Filename, peakiddict map[string]uint, sep string, pos [3]int) int {
 	var scanner *bufio.Scanner
 	var file *os.File
 	var split []string
@@ -361,19 +371,27 @@ func loadPeaks(fname Filename, peakiddict map[string]uint, sep string) int {
 	var count uint
 	count = 0
 
+	max := 3
+
+	for p := range pos {
+		if p >= max {
+			max = p + 1
+		}
+	}
+
 	for scanner.Scan() {
 		line = scanner.Text()
 
 		split = strings.Split(line, sep)
 
-		if len(split) < 3 {
+		if len(split) < max {
 			panic(fmt.Sprintf(
 				"Peak: %s at line %d from file %s cannot be cut in chr int int ####\n",
 				line, count, fname))
 		}
 
-		_, err1 = strconv.Atoi(split[1])
-		_, err2 = strconv.Atoi(split[2])
+		_, err1 = strconv.Atoi(split[pos[1]])
+		_, err2 = strconv.Atoi(split[pos[2]])
 
 		if err1 != nil || err2 != nil {
 			panic(fmt.Sprintf(
