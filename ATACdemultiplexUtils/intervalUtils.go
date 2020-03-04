@@ -185,20 +185,22 @@ func LoadSymbolFile(peaksymbolfile, peakfile  Filename) {
 
 /*LoadRefBedFileWithSymbol  peaksymbolfile, peakfile  Filename*/
 func LoadRefBedFileWithSymbol(peaksymbolfile Filename) {
-	loadRefBedFileWithSymbol(peaksymbolfile, "\t")
+	loadRefBedFileWithSymbol(peaksymbolfile, "\t", []int{3})
 }
 
 /*LoadRefCustomFileWithSymbol  peaksymbolfile, peakfile  Filename*/
-func LoadRefCustomFileWithSymbol(peaksymbolfile Filename, sep string) {
-	loadRefBedFileWithSymbol(peaksymbolfile, sep)
+func LoadRefCustomFileWithSymbol(peaksymbolfile Filename, sep string, symbolPos []int) {
+	loadRefBedFileWithSymbol(peaksymbolfile, sep, symbolPos)
 }
 
 /*loadRefBedFileWithSymbol  peaksymbolfile, peakfile  Filename*/
-func loadRefBedFileWithSymbol(peaksymbolfile Filename, sep string) {
+func loadRefBedFileWithSymbol(peaksymbolfile Filename, sep string, symbolPos []int) {
 	var split []string
 	var peakl Peak
-	var symbol string
+	var symbol []string
+	var pos, i int
 
+	symbol = make([]string, len(symbolPos))
 	PEAKSYMBOLDICT = make(map[Peak]string)
 
 
@@ -214,10 +216,13 @@ func loadRefBedFileWithSymbol(peaksymbolfile Filename, sep string) {
 				split))
 		}
 
-		symbol = split[3]
+		for i, pos = range symbolPos {
+			symbol[i] = split[pos]
+		}
+
 		peakl.SplitToPeak(split)
 
-		PEAKSYMBOLDICT[peakl] = symbol
+		PEAKSYMBOLDICT[peakl] = strings.Join(symbol, sep)
 	}
 }
 

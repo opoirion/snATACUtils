@@ -46,9 +46,11 @@ var WRITEREF bool
 /*REFSEP separator used to identify the reference region in the -ref file */
 var REFSEP string
 
-/*REFPOS separator used to identify the reference region in the -ref file */
+/*REFPOS position of reference region in the -ref file */
 var REFPOS string
 
+/*SYMBOLPOS position of the coulmns used for annotations in the -ref file */
+var SYMBOLPOS string
 
 func main() {
 	flag.Usage = func() {
@@ -56,7 +58,13 @@ func main() {
 #################### MODULE TO ANNOTATE GENOMIC REGIONS FROM BED FILES ########################
 
 """Annotate bed file using a reference bed file containing the annotations"""
-USAGE: ATACAnnotateRegions -bed <file> -ref <file> (optionnal -out <string> -unique -unique_ref -intersect -write_ref -edit -ref_sep <string>)
+USAGE: ATACAnnotateRegions -bed <file> -ref <file> (optionnal -out <string> -unique -unique_ref -intersect -write_ref -edit -ref_sep "[3]int" -ref_symbol "[]int")
+
+for -ref_sep and -ref_symbol options, the input should be a string of numbers separated by whitespace and delimited with ". -ref_sep needs exactly three positions: 1) for the chromosomes column, 2) for the begining and 3) for the end of the region
+
+Example: ATACAnnotateRegions -bed regionToAnnotate.bed -ref referenceAnnotation.tsv -ref_sep "0 1 2" -ref_symbol "4 5"
+
+Here the three first columns of referenceAnnotation.tsv will be used to identify chromosome (column 0), start (column 1), and end (column 2) of each region, and regionToAnnotate.bed will be annotatd using columns 4 and 5 from referenceAnnotation.tsv
 `)
 		flag.PrintDefaults()
 	}
@@ -72,16 +80,20 @@ USAGE: ATACAnnotateRegions -bed <file> -ref <file> (optionnal -out <string> -uni
 	flag.BoolVar(&WRITEREF, "write_ref", false, `write bed region from reference file`)
 	flag.StringVar(&REFSEP, "ref_sep", "\t", "separator to define the bed region for the ref file")
 	flag.StringVar(&REFPOS, "ref_pos", "0 1 2", "separator to the bed region in ref for the ref file")
+	flag.StringVar(&SYMBOLPOS, "symbol_pos", "3", "separator to the bed region in ref for the ref file")
 
 	flag.Parse()
 
 	tail := flag.Args()
 
 	if len(tail) > 0 {
-		panic(fmt.Sprintf("Error wrongly formatted arguments: %s\n", tail))
+		panic(fmt.Sprintf(`Error wrongly formatted arguments: %s for -ref_sep and -ref_symbol options, the input should be a string of numbers separated by whitespace and delimited with ". -ref_sep needs exactly three positions: 1) for the chromosomes column, 2) for the begining and 3) for the end of the region
+
+Example: ATACAnnotateRegions -bed regionToAnnotate.bed -ref referenceAnnotation.tsv -ref_sep "0 1 2" -ref_symbol "4 5"\n`, tail))
 	}
 
 	refPos := returnRefPos()
+	symbolPos := returnSymbolPos()
 
 	if FILENAMEOUT == "" {
 		ext := path.Ext(BEDFILENAME.String())
@@ -93,7 +105,7 @@ USAGE: ATACAnnotateRegions -bed <file> -ref <file> (optionnal -out <string> -uni
 		panic(fmt.Sprintf("Error! options -write_ref and -intersect cannot be TRUE together. Please chose one!\n"))
 	}
 
-	utils.LoadRefCustomFileWithSymbol(REFBEDFILENAME, REFSEP)
+	utils.LoadRefCustomFileWithSymbol(REFBEDFILENAME, REFSEP, symbolPos)
 	utils.LoadPeaksCustom(REFBEDFILENAME, REFSEP, refPos)
 	utils.CreatePeakIntervalTreeCustom(refPos, REFSEP)
 
@@ -127,6 +139,26 @@ func returnRefPos() (refPos [3]int) {
 	}
 
 	return refPos
+}
+
+
+func returnSymbolPos() (SymbolPos []int) {
+
+	symbolPosSplit := strings.Split(SYMBOLPOS, " ")
+
+	var err error
+
+	SymbolPos = make([]int, len(symbolPosSplit))
+
+	for pos, symbol := range symbolPosSplit {
+		SymbolPos[pos], err = strconv.Atoi(symbol)
+
+		if err != nil  {
+			panic(fmt.Sprintf("Error with ref_pos argument: %s should be an array of ints \n", SYMBOLPOS))
+	}
+	}
+
+	return SymbolPos
 }
 
 func scanBedFileAndAddAnnotation() {
