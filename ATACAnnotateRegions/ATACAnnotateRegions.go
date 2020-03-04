@@ -40,6 +40,9 @@ var UNIQ bool
 /*UNIQREF write only unique output peaks */
 var UNIQREF bool
 
+/*UNIQSYMBOL write only unique output peaks */
+var UNIQSYMBOL bool
+
 /*WRITEREF write_ref write bed region from reference file */
 var WRITEREF bool
 
@@ -77,6 +80,7 @@ Here the three first columns of referenceAnnotation.tsv will be used to identify
 	flag.BoolVar(&WRITEINTERSECT, "intersect", false, `write intersection only`)
 	flag.BoolVar(&UNIQ, "unique", false, `write only unique output peaks`)
 	flag.BoolVar(&UNIQREF, "unique_ref", false, `write only unique reference using the closest peak`)
+	flag.BoolVar(&UNIQSYMBOL, "unique_symbols", true, `write only unique symbols per peak`)
 	flag.BoolVar(&WRITEREF, "write_ref", false, `write bed region from reference file`)
 	flag.StringVar(&REFSEP, "ref_sep", "\t", "separator to define the bed region for the ref file")
 	flag.StringVar(&REFPOS, "ref_pos", "0 1 2", "separator to the bed region in ref for the ref file")
@@ -177,6 +181,7 @@ func scanBedFileAndAddAnnotation() {
 	var centerDistance, minCenterDistance float64
 	var oneIntervalID uintptr
 	var peakIntervalTreeObject utils.PeakIntervalTreeObject
+	var uniqueSymbolDict map[string]bool
 
 	scanner, file := BEDFILENAME.ReturnReader(0)
 	defer utils.CloseFile(file)
@@ -219,6 +224,10 @@ func scanBedFileAndAddAnnotation() {
 			count++
 		}
 
+		if UNIQSYMBOL {
+			uniqueSymbolDict = make(map[string]bool)
+		}
+
 		intervalCenter, minCenterDistance = 0, -1
 		isUnique = false
 		isUniqueRef = true
@@ -247,6 +256,14 @@ func scanBedFileAndAddAnnotation() {
 					oneIntervalID,
 					intrange.Start,
 					intrange.End)
+			}
+
+			if UNIQSYMBOL {
+				if uniqueSymbolDict[symbol] {
+					continue
+				}
+
+				uniqueSymbolDict[symbol] = true
 			}
 
 			if UNIQREF {
