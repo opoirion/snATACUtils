@@ -235,8 +235,8 @@ func scanBedFileAndAddAnnotation() {
 		for _, oneInterval = range intervals {
 			intrange = oneInterval.Range()
 			oneIntervalID = oneInterval.ID()
-			intervalCenter = intrange.End - intrange.Start
-			centerDistance = math.Abs(float64((start - end) - intervalCenter))
+			intervalCenter = intrange.Start - (intrange.End - intrange.Start) / 2
+			centerDistance = math.Abs(float64((start - (end - start) / 2) - intervalCenter))
 
 			if UNIQ {
 				if minCenterDistance < 0 || centerDistance < minCenterDistance {
@@ -351,7 +351,7 @@ func checkifUniqueRef(peakstr string, refpeakID uintptr,
 	var refpeak utils.Peak
 	var topID uintptr
 	var centerDistance, minCenterDistance float64
-	var intervalCenter int
+	var intervalCenter, tss int
 	var toppeakstr, refpeakstr string
 
 	refpeakstr = utils.INTERVALMAPPING[refpeakID]
@@ -365,10 +365,13 @@ func checkifUniqueRef(peakstr string, refpeakID uintptr,
 
 	intervalCenter, minCenterDistance = 0, -1
 
+	tss = refpeak.Start + (refpeak.End - refpeak.Start) / 2
+
 	for _, oneInterval := range intervals {
 		intrange := oneInterval.Range()
-		intervalCenter = intrange.End - intrange.Start
-		centerDistance = math.Abs(float64((refpeak.Start - refpeak.End) - intervalCenter))
+		intervalCenter = intrange.Start - (intrange.End - intrange.Start) / 2
+
+		centerDistance = math.Abs(float64((tss) - intervalCenter))
 
 		if minCenterDistance < 0 || centerDistance < minCenterDistance {
 			minCenterDistance = centerDistance
@@ -378,9 +381,5 @@ func checkifUniqueRef(peakstr string, refpeakID uintptr,
 
 	toppeakstr = (*intervalObject).Intervalmapping[topID]
 
-	if toppeakstr == peakstr {
-		return true
-	}
-
-	return false
+	return toppeakstr == peakstr
 }
