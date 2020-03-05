@@ -127,7 +127,7 @@ var CHRINTERVALDICTTHREAD map[int]map[string]*interval.IntTree
 var INTERVALMAPPING map[uintptr]string
 
 /*PEAKSYMBOLDICT map[peak]symbol */
-var PEAKSYMBOLDICT map[Peak]string
+var PEAKSYMBOLDICT map[Peak][]string
 
 
 /*LoadSymbolFile  peaksymbolfile, peakfile  Filename*/
@@ -138,7 +138,7 @@ func LoadSymbolFile(peaksymbolfile, peakfile  Filename) {
 	var peakl Peak
 	var symbol string
 
-	PEAKSYMBOLDICT = make(map[Peak]string)
+	PEAKSYMBOLDICT = make(map[Peak][]string)
 
 	if peaksymbolfile == "" {
 		return
@@ -179,7 +179,7 @@ func LoadSymbolFile(peaksymbolfile, peakfile  Filename) {
 			peakl.SplitToPeak(split)
 		}
 
-		PEAKSYMBOLDICT[peakl] = symbol
+		PEAKSYMBOLDICT[peakl] = append(PEAKSYMBOLDICT[peakl], symbol)
 	}
 }
 
@@ -201,7 +201,7 @@ func loadRefBedFileWithSymbol(peaksymbolfile Filename, sep string, symbolPos []i
 	var pos, i int
 
 	symbol = make([]string, len(symbolPos))
-	PEAKSYMBOLDICT = make(map[Peak]string)
+	PEAKSYMBOLDICT = make(map[Peak][]string)
 
 
 	scanner, file := peaksymbolfile.ReturnReader(0)
@@ -222,7 +222,7 @@ func loadRefBedFileWithSymbol(peaksymbolfile Filename, sep string, symbolPos []i
 
 		peakl.SplitToPeak(split)
 
-		PEAKSYMBOLDICT[peakl] = strings.Join(symbol, sep)
+		PEAKSYMBOLDICT[peakl] = append(PEAKSYMBOLDICT[peakl], strings.Join(symbol, sep))
 	}
 }
 
@@ -373,9 +373,7 @@ func loadPeaks(fname Filename, peakiddict map[string]uint, sep string, pos [3]in
 
 	defer CloseFile(file)
 
-	var count uint
-	count = 0
-
+	count := uint(0)
 	max := 3
 
 	for p := range pos {

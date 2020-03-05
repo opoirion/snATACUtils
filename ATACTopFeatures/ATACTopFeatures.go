@@ -389,7 +389,8 @@ func loadPvalueTable() {
 
 		if !isSymbolFile && len(split) == 6 {
 			symbol = split[4]
-			utils.PEAKSYMBOLDICT[peakl] = symbol
+			utils.PEAKSYMBOLDICT[peakl] = append(
+				utils.PEAKSYMBOLDICT[peakl], symbol)
 		}
 	}
 
@@ -828,7 +829,8 @@ func writePvalueCorrectedTable() {
 
 			if writeSymbol {
 				buffer.WriteRune('\t')
-				buffer.WriteString(utils.PEAKSYMBOLDICT[peakl])
+				buffer.WriteString(
+					strings.Join(utils.PEAKSYMBOLDICT[peakl], "-"))
 			}
 
 			buffer.WriteRune('\t')
@@ -897,7 +899,8 @@ func writeContingencyTable(filenameout string, header bool) {
 
 			if writeSymbol {
 				buffer.WriteRune('\t')
-				buffer.WriteString(utils.PEAKSYMBOLDICT[peakl])
+				buffer.WriteString(
+					strings.Join(utils.PEAKSYMBOLDICT[peakl], "-"))
 			}
 
 			buffer.WriteRune('\t')

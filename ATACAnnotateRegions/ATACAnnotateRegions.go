@@ -168,7 +168,7 @@ func returnSymbolPos() (SymbolPos []int) {
 func scanBedFileAndAddAnnotation() {
 	var intervals []interval.IntInterface
 	var oneInterval interval.IntInterface
-	var split []string
+	var split, symbols []string
 	var line, peakstr, symbol string
 	var isInside, isUnique, isUniqueRef bool
 	var start, end, count int
@@ -242,7 +242,7 @@ func scanBedFileAndAddAnnotation() {
 				if minCenterDistance < 0 || centerDistance < minCenterDistance {
 					minCenterDistance = centerDistance
 
-					peakstr, symbol = returnPeakStrAndSymbol(
+					peakstr, symbols = returnPeakStrAndSymbol(
 						line,
 						oneIntervalID,
 						intrange.Start,
@@ -251,7 +251,7 @@ func scanBedFileAndAddAnnotation() {
 					continue
 				}
 			} else {
-				peakstr, symbol = returnPeakStrAndSymbol(
+				peakstr, symbols = returnPeakStrAndSymbol(
 					line,
 					oneIntervalID,
 					intrange.Start,
@@ -283,21 +283,25 @@ func scanBedFileAndAddAnnotation() {
 			} else  {
 
 				if isUniqueRef {
-					buffer.WriteString(peakstr)
-					buffer.WriteRune('\t')
-					buffer.WriteString(symbol)
-					buffer.WriteRune('\n')
-					count++
+					for _, symbol = range symbols {
+						buffer.WriteString(peakstr)
+						buffer.WriteRune('\t')
+						buffer.WriteString(symbol)
+						buffer.WriteRune('\n')
+						count++
+					}
 				}
 			}
 		}
 
 		if UNIQ && isUnique && isUniqueRef {
-			buffer.WriteString(peakstr)
-			buffer.WriteRune('\t')
-			buffer.WriteString(symbol)
-			buffer.WriteRune('\n')
-			count++
+			for _, symbol = range symbols {
+				buffer.WriteString(peakstr)
+				buffer.WriteRune('\t')
+				buffer.WriteString(symbol)
+				buffer.WriteRune('\n')
+				count++
+			}
 		}
 
 		if count >= 5000 {
@@ -318,13 +322,13 @@ func scanBedFileAndAddAnnotation() {
 
 
 func returnPeakStrAndSymbol(line string, id uintptr, start, end int) (
-	peakstr, symbol string) {
+	peakstr string, symbols []string) {
 
 	var peak utils.Peak
 
 	peakstr = utils.INTERVALMAPPING[id]
 	peak.StringToPeak(peakstr)
-	symbol = utils.PEAKSYMBOLDICT[peak]
+	symbols = utils.PEAKSYMBOLDICT[peak]
 
 	switch {
 	case WRITEINTERSECT:
@@ -338,7 +342,7 @@ func returnPeakStrAndSymbol(line string, id uintptr, start, end int) (
 
 	}
 
-	return peakstr, symbol
+	return peakstr, symbols
 }
 
 func checkifUniqueRef(peakstr string, refpeakID uintptr,
