@@ -247,7 +247,6 @@ func initIntSparseMatrix() {
 	INTSPARSEMATRIX = make([]map[uint]int, XGIDIM)
 
 	for _, pos := range CELLIDDICT {
-		fmt.Printf("pos: %d\n", pos)
 		INTSPARSEMATRIX[pos] = make(map[uint]int)
 	}
 }
