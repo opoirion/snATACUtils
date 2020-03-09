@@ -74,6 +74,25 @@ func (peak * Peak) StringToPeak(str string) {
 	(*peak).Slice[2] = split[2]
 }
 
+//StringToPeakWithPos Convert Peak string to peak
+func (peak * Peak) StringToPeakWithPos(str string, refPos [3]int) {
+	var err1, err2 error
+	split := strings.Split(str, "\t")
+
+	(*peak).Start, err1 = strconv.Atoi(split[refPos[1]])
+	(*peak).End, err2 = strconv.Atoi(split[refPos[2]])
+
+	if err1 != nil || err2 != nil {
+		panic(fmt.Sprintf(
+			"Error when converting Peak: %s cannot be used as int ####\n",
+			str))
+	}
+
+	(*peak).Slice[0] = split[refPos[0]]
+	(*peak).Slice[1] = split[refPos[1]]
+	(*peak).Slice[2] = split[refPos[2]]
+}
+
 //SplitToPeak Convert string split to peak
 func (peak * Peak) SplitToPeak(split []string) {
 	var err1, err2 error
@@ -185,22 +204,22 @@ func LoadSymbolFile(peaksymbolfile, peakfile  Filename) {
 
 /*LoadRefBedFileWithSymbol  peaksymbolfile, peakfile  Filename*/
 func LoadRefBedFileWithSymbol(peaksymbolfile Filename) {
-	loadRefBedFileWithSymbol(peaksymbolfile, "\t", []int{3})
+	loadRefBedFileWithSymbol(peaksymbolfile, "\t", []int{3}, [3]int{0, 1, 2})
 }
 
 /*LoadRefCustomFileWithSymbol  peaksymbolfile, peakfile  Filename*/
-func LoadRefCustomFileWithSymbol(peaksymbolfile Filename, sep string, symbolPos []int) {
-	loadRefBedFileWithSymbol(peaksymbolfile, sep, symbolPos)
+func LoadRefCustomFileWithSymbol(peaksymbolfile Filename, sep string, symbolPos []int, refPos [3]int) {
+	loadRefBedFileWithSymbol(peaksymbolfile, sep, symbolPos, refPos)
 }
 
 /*loadRefBedFileWithSymbol  peaksymbolfile, peakfile  Filename*/
-func loadRefBedFileWithSymbol(peaksymbolfile Filename, sep string, symbolPos []int) {
-	var split []string
+func loadRefBedFileWithSymbol(peaksymbolfile Filename, sep string, symbolPos []int, peakPos [3]int) {
 	var peakl Peak
-	var symbol []string
+	var symbol, split, peaksplit []string
 	var pos, i int
 
 	symbol = make([]string, len(symbolPos))
+	peaksplit = make([]string, 3)
 	PEAKSYMBOLDICT = make(map[Peak][]string)
 
 
@@ -220,7 +239,11 @@ func loadRefBedFileWithSymbol(peaksymbolfile Filename, sep string, symbolPos []i
 			symbol[i] = split[pos]
 		}
 
-		peakl.SplitToPeak(split)
+		for i, pos = range peakPos {
+			peaksplit[i] = split[pos]
+		}
+
+		peakl.SplitToPeak(peaksplit)
 
 		PEAKSYMBOLDICT[peakl] = append(PEAKSYMBOLDICT[peakl], strings.Join(symbol, sep))
 	}
