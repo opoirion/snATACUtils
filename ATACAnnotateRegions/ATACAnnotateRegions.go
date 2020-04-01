@@ -236,7 +236,7 @@ func scanBedFileAndAddAnnotation(refPos [3]int) {
 		utils.Check(err)
 
 		if inttree, isInside = utils.CHRINTERVALDICT[split[0]];!isInside {
-			if IGNOREUNANNOATED || WRITEDIFF{
+			if !IGNOREUNANNOATED || WRITEDIFF{
 				buffer.WriteString(line)
 				buffer.WriteRune('\n')
 				count++
@@ -249,7 +249,7 @@ func scanBedFileAndAddAnnotation(refPos [3]int) {
 
 		switch {
 		case len(intervals) == 0 :
-			if IGNOREUNANNOATED || WRITEDIFF{
+			if !IGNOREUNANNOATED || WRITEDIFF{
 				buffer.WriteString(line)
 				buffer.WriteRune('\n')
 				count++
