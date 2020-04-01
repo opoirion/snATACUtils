@@ -114,7 +114,10 @@ Example: ATACAnnotateRegions -bed regionToAnnotate.bed -ref referenceAnnotation.
 		panic(fmt.Sprintf("Error! options -write_ref and -intersect cannot be TRUE together. Please chose one!\n"))
 	}
 
-	utils.LoadRefCustomFileWithSymbol(REFBEDFILENAME, REFSEP, symbolPos, refPos)
+	if !WRITEDIFF {
+		utils.LoadRefCustomFileWithSymbol(REFBEDFILENAME, REFSEP, symbolPos, refPos)
+	}
+
 	utils.LoadPeaksCustom(REFBEDFILENAME, REFSEP, refPos)
 	utils.CreatePeakIntervalTreeCustom(refPos, REFSEP)
 
@@ -233,20 +236,26 @@ func scanBedFileAndAddAnnotation(refPos [3]int) {
 		utils.Check(err)
 
 		if inttree, isInside = utils.CHRINTERVALDICT[split[0]];!isInside {
+			if IGNOREUNANNOATED || WRITEDIFF{
+				buffer.WriteString(line)
+				buffer.WriteRune('\n')
+				count++
+			}
 			continue
 		}
 
 		intervals = inttree.Get(
 			utils.IntInterval{Start: start, End: end})
 
-
 		switch {
-
 		case len(intervals) == 0 :
 			if IGNOREUNANNOATED || WRITEDIFF{
 				buffer.WriteString(line)
 				buffer.WriteRune('\n')
 				count++
+			}
+			if !isInside {
+				continue
 			}
 
 		case  WRITEDIFF:
