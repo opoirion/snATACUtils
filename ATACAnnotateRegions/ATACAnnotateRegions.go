@@ -203,6 +203,11 @@ func scanBedFileAndAddAnnotation(refPos [3]int) {
 
 	for scanner.Scan() {
 		line = scanner.Text()
+
+		if line[0] == '#' {
+			continue
+		}
+
 		split = strings.Split(line, "\t")
 
 		start, err = strconv.Atoi(split[1])
