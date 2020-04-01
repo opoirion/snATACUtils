@@ -46,6 +46,9 @@ var UNIQSYMBOL bool
 /*WRITEREF write_ref write bed region from reference file */
 var WRITEREF bool
 
+/*WRITEDIFF write only element that are not intersecting */
+var WRITEDIFF bool
+
 /*REFSEP separator used to identify the reference region in the -ref file */
 var REFSEP string
 
@@ -55,13 +58,14 @@ var REFPOS string
 /*SYMBOLPOS position of the coulmns used for annotations in the -ref file */
 var SYMBOLPOS string
 
+
 func main() {
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, `
 #################### MODULE TO ANNOTATE GENOMIC REGIONS FROM BED FILES ########################
 
 """Annotate bed file using a reference bed file containing the annotations"""
-USAGE: ATACAnnotateRegions -bed <file> -ref <file> (optionnal -out <string> -unique -unique_ref -intersect -write_ref -edit -ref_sep "[3]int" -ref_symbol "[]int")
+USAGE: ATACAnnotateRegions -bed <file> -ref <file> (optionnal -out <string> -unique -unique_ref -intersect -write_ref -edit -ref_sep "[3]int" -ref_symbol "[]int" -diff)
 
 for -ref_sep and -ref_symbol options, the input should be a string of numbers separated by whitespace and delimited with ". -ref_sep needs exactly three positions: 1) for the chromosomes column, 2) for the begining and 3) for the end of the region
 
@@ -81,6 +85,7 @@ Here the three first columns of referenceAnnotation.tsv will be used to identify
 	flag.BoolVar(&UNIQ, "unique", false, `write only unique output peaks`)
 	flag.BoolVar(&UNIQREF, "unique_ref", false, `write only unique reference using the closest peak`)
 	flag.BoolVar(&UNIQSYMBOL, "unique_symbols", true, `write only unique symbols per peak`)
+	flag.BoolVar(&WRITEDIFF, "diff", false, `write bed region if no intersection is found`)
 	flag.BoolVar(&WRITEREF, "write_ref", false, `write bed region from reference file`)
 	flag.StringVar(&REFSEP, "ref_sep", "\t", "separator to define the bed region for the ref file")
 	flag.StringVar(&REFPOS, "ref_pos", "0 1 2", "separator to the bed region in ref for the ref file")
@@ -125,8 +130,13 @@ Example: ATACAnnotateRegions -bed regionToAnnotate.bed -ref referenceAnnotation.
 }
 
 func returnRefPos() (refPos [3]int) {
+	splitChar := " "
 
-	refPosSplit := strings.Split(REFPOS, " ")
+	if strings.Count(REFPOS, ",") > 0 {
+		splitChar = ","
+	}
+
+	refPosSplit := strings.Split(REFPOS, splitChar)
 
 	if len(refPosSplit) != 3 {
 		panic(fmt.Sprintf("Error with ref_pos argument: %s should be an array of 3 ints (such as: 0 1 2) \n", REFPOS))
@@ -148,7 +158,13 @@ func returnRefPos() (refPos [3]int) {
 
 func returnSymbolPos() (SymbolPos []int) {
 
-	symbolPosSplit := strings.Split(SYMBOLPOS, " ")
+	splitChar := " "
+
+	if strings.Count(SYMBOLPOS, ",") > 0 {
+		splitChar = ","
+	}
+
+	symbolPosSplit := strings.Split(SYMBOLPOS, splitChar)
 
 	var err error
 
@@ -218,10 +234,18 @@ func scanBedFileAndAddAnnotation() {
 		intervals = inttree.Get(
 			utils.IntInterval{Start: start, End: end})
 
-		if len(intervals) == 0 && !IGNOREUNANNOATED {
-			buffer.WriteString(line)
-			buffer.WriteRune('\n')
-			count++
+
+		switch {
+
+		case len(intervals) == 0 :
+			if IGNOREUNANNOATED || WRITEDIFF{
+				buffer.WriteString(line)
+				buffer.WriteRune('\n')
+				count++
+			}
+
+		case  WRITEDIFF:
+			continue
 		}
 
 		if UNIQSYMBOL {
