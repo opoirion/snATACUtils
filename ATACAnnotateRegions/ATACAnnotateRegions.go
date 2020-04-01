@@ -114,11 +114,11 @@ Example: ATACAnnotateRegions -bed regionToAnnotate.bed -ref referenceAnnotation.
 		panic(fmt.Sprintf("Error! options -write_ref and -intersect cannot be TRUE together. Please chose one!\n"))
 	}
 
-	utils.LoadRefCustomFileWithSymbol(REFBEDFILENAME, REFSEP, symbolPos)
+	utils.LoadRefCustomFileWithSymbol(REFBEDFILENAME, REFSEP, symbolPos, refPos)
 	utils.LoadPeaksCustom(REFBEDFILENAME, REFSEP, refPos)
 	utils.CreatePeakIntervalTreeCustom(refPos, REFSEP)
 
-	scanBedFileAndAddAnnotation()
+	scanBedFileAndAddAnnotation(refPos)
 
 	if REPLACEINPUT {
 		utils.Check(os.Remove(string(BEDFILENAME)))
@@ -181,7 +181,7 @@ func returnSymbolPos() (SymbolPos []int) {
 	return SymbolPos
 }
 
-func scanBedFileAndAddAnnotation() {
+func scanBedFileAndAddAnnotation(refPos [3]int) {
 	var intervals []interval.IntInterface
 	var oneInterval interval.IntInterface
 	var split, symbols []string
@@ -270,7 +270,8 @@ func scanBedFileAndAddAnnotation() {
 						line,
 						oneIntervalID,
 						intrange.Start,
-						intrange.End)
+						intrange.End,
+						refPos)
 				} else {
 					continue
 				}
@@ -279,7 +280,8 @@ func scanBedFileAndAddAnnotation() {
 					line,
 					oneIntervalID,
 					intrange.Start,
-					intrange.End)
+					intrange.End,
+					refPos)
 			}
 
 			if UNIQSYMBOL {
@@ -292,7 +294,7 @@ func scanBedFileAndAddAnnotation() {
 
 			if UNIQREF {
 				isUniqueRef = checkifUniqueRef(peakstr,
-					oneIntervalID,
+					oneIntervalID, refPos,
 					&peakIntervalTreeObject)
 			}
 
@@ -345,13 +347,14 @@ func scanBedFileAndAddAnnotation() {
 }
 
 
-func returnPeakStrAndSymbol(line string, id uintptr, start, end int) (
+func returnPeakStrAndSymbol(line string, id uintptr, start, end int, refPos [3]int) (
 	peakstr string, symbols []string) {
 
 	var peak utils.Peak
 
 	peakstr = utils.INTERVALMAPPING[id]
-	peak.StringToPeak(peakstr)
+
+	peak.StringToPeakWithPos(peakstr, refPos)
 	symbols = utils.PEAKSYMBOLDICT[peak]
 
 	switch {
@@ -369,7 +372,7 @@ func returnPeakStrAndSymbol(line string, id uintptr, start, end int) (
 	return peakstr, symbols
 }
 
-func checkifUniqueRef(peakstr string, refpeakID uintptr,
+func checkifUniqueRef(peakstr string, refpeakID uintptr, refPos [3]int,
 	intervalObject *utils.PeakIntervalTreeObject ) bool {
 
 	if !UNIQREF {
@@ -384,7 +387,7 @@ func checkifUniqueRef(peakstr string, refpeakID uintptr,
 
 	refpeakstr = utils.INTERVALMAPPING[refpeakID]
 
-	refpeak.StringToPeak(refpeakstr)
+	refpeak.StringToPeakWithPos(refpeakstr, refPos)
 
 	inttree := intervalObject.Chrintervaldict[refpeak.Chr()]
 

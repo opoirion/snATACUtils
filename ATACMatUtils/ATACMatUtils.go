@@ -1163,6 +1163,7 @@ func loadCellIDDict(fname utils.Filename) {
 	defer utils.CloseFile(file)
 	var count uint
 	var cellID string
+	var isInside bool
 
 	CELLIDDICT = make(map[string]uint)
 	count = 0
@@ -1170,6 +1171,12 @@ func loadCellIDDict(fname utils.Filename) {
 	for scanner.Scan() {
 		line := scanner.Text()
 		cellID = strings.Split(line, "\t")[0]
+
+		if _, isInside = CELLIDDICT[cellID];isInside {
+			panic(fmt.Sprintf("At line: %d cellID: %s is present twice in: %s",
+				count, cellID, fname))
+		}
+
 		CELLIDDICT[cellID] = count
 		count++
 	}
