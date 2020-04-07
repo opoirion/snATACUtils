@@ -887,47 +887,8 @@ func divideMultipleBamFileOneThread(threadID int, waiting *sync.WaitGroup){
 	}
 }
 
-func divideMultipleBedFileOneThread(threadID int, waiting *sync.WaitGroup){
-	defer waiting.Done()
 
-	var readID string
-	var isInside bool
-	var filename string
-	var line string
-	var buffer bytes.Buffer
-	var flist []string
-
-	bedReader, file := utils.ReturnReader(BEDFILENAME, 0)
-	defer utils.CloseFile(file)
-
-	count := 0
-	chunkSize := len(CELLIDDICTMULTIPLE) / (THREADNB - 1)
-	startIndex := chunkSize * threadID
-	endIndex := chunkSize * (threadID + 1)
-
-	for bedReader.Scan() {
-		line = bedReader.Text()
-		count++
-
-		readID = strings.Split(line, "\t")[3]
-
-		if  flist, isInside = CELLIDDICTMULTIPLE[readID];isInside {
-			buffer.WriteString(line)
-			buffer.WriteRune('\n')
-
-			for _, filename = range flist {
-				if !((startIndex <= INPUTFNAMEINDEX[filename]) && (INPUTFNAMEINDEX[filename]  < endIndex)) {
-					continue
-				}
-				BEDWRITERDICT[filename].Write(buffer.Bytes())
-			}
-			buffer.Reset()
-		}
-	}
-}
-
-
-/*DivideMultipleBedFile divide the bam file */
+/*DivideMultipleBedFileParallel divide the bam file */
 func DivideMultipleBedFileParallel() {
 	var line string
 	var readID string
@@ -1273,9 +1234,17 @@ func collectAndProcessMultipleBedGraphDict(filenameout string) {
 
 	if !SPLIT {
 		tStart = time.Now()
-		cmd := fmt.Sprintf("cat %s > %s.bedgraph", strings.Join(fileList," "), filenameout)
 
+		cmd := fmt.Sprintf("cat %s > %s.bedgraph", fileList[0], filenameout)
 		utils.ExceCmd(cmd)
+
+		if len(fileList) > 1 {
+			for _, file := range fileList[1:] {
+				cmd = fmt.Sprintf("cat %s >> %s.bedgraph", file, filenameout)
+				utils.ExceCmd(cmd)
+			}
+		}
+
 		fmt.Printf("%s.bedgraph created!\n", filenameout)
 
 		cmd = fmt.Sprintf("rm %s", strings.Join(fileList, " "))
