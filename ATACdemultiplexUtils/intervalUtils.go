@@ -229,6 +229,10 @@ func loadRefBedFileWithSymbol(peaksymbolfile Filename, sep string, symbolPos []i
 	for scanner.Scan() {
 		split = strings.Split(scanner.Text(), sep)
 
+		if split[0][0] == '#' {
+			continue
+		}
+
 		if len(split) < 4 {
 			panic(fmt.Sprintf(
 				"Error line %s from symbol file should be <chromosome>\t<start>\t<stop>\tsymbol>\n",
@@ -407,6 +411,10 @@ func loadPeaks(fname Filename, peakiddict map[string]uint, sep string, pos [3]in
 
 	for scanner.Scan() {
 		line = scanner.Text()
+
+		if line[0] == '#' {
+			continue
+		}
 
 		split = strings.Split(line, sep)
 
