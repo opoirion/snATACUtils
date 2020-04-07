@@ -1247,8 +1247,11 @@ func collectAndProcessMultipleBedGraphDict(filenameout string) {
 
 		fmt.Printf("%s.bedgraph created!\n", filenameout)
 
-		cmd = fmt.Sprintf("rm %s", strings.Join(fileList, " "))
-		utils.ExceCmd(cmd)
+		for _, file := range fileList {
+			cmd = fmt.Sprintf("rm %s", file)
+			utils.ExceCmd(cmd)
+		}
+
 		fmt.Printf(" concatenation and cleaning done in: %f sec \n", tDiff.Seconds())
 	} else {
 		for _,f := range fileList {
