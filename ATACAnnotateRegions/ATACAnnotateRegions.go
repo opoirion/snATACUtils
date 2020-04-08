@@ -12,6 +12,7 @@ import (
 	"bytes"
 	"time"
 	"math"
+	"io"
 )
 
 
@@ -58,6 +59,9 @@ var REFPOS string
 /*SYMBOLPOS position of the coulmns used for annotations in the -ref file */
 var SYMBOLPOS string
 
+/*STDOUT write to stdout*/
+var STDOUT bool
+
 
 func main() {
 	flag.Usage = func() {
@@ -65,7 +69,7 @@ func main() {
 #################### MODULE TO ANNOTATE GENOMIC REGIONS FROM BED FILES ########################
 
 """Annotate bed file using a reference bed file containing the annotations"""
-USAGE: ATACAnnotateRegions -bed <file> -ref <file> (optionnal -out <string> -unique -unique_ref -intersect -write_ref -edit -ref_sep "[3]int" -ref_symbol "[]int" -diff)
+USAGE: ATACAnnotateRegions -bed <file> -ref <file> (optionnal -out <string> -unique -unique_ref -intersect -write_ref -edit -ref_sep "[3]int" -ref_symbol "[]int" -diff -stdout)
 
 for -ref_sep and -ref_symbol options, the input should be a string of numbers separated by whitespace and delimited with ". -ref_sep needs exactly three positions: 1) for the chromosomes column, 2) for the begining and 3) for the end of the region
 
@@ -87,6 +91,7 @@ Here the three first columns of referenceAnnotation.tsv will be used to identify
 	flag.BoolVar(&UNIQSYMBOL, "unique_symbols", true, `write only unique symbols per peak`)
 	flag.BoolVar(&WRITEDIFF, "diff", false, `write bed region if no intersection is found`)
 	flag.BoolVar(&WRITEREF, "write_ref", false, `write bed region from reference file`)
+	flag.BoolVar(&STDOUT, "stdout", false, `write to stdout`)
 	flag.StringVar(&REFSEP, "ref_sep", "\t", "separator to define the bed region for the ref file")
 	flag.StringVar(&REFPOS, "ref_pos", "0 1 2", "separator to the bed region in ref for the ref file")
 	flag.StringVar(&SYMBOLPOS, "symbol_pos", "3", "separator to the bed region in ref for the ref file")
@@ -201,11 +206,17 @@ func scanBedFileAndAddAnnotation(refPos [3]int) {
 	var oneIntervalID uintptr
 	var peakIntervalTreeObject utils.PeakIntervalTreeObject
 	var uniqueSymbolDict map[string]bool
+	var writer io.WriteCloser
 
 	scanner, file := BEDFILENAME.ReturnReader(0)
 	defer utils.CloseFile(file)
 
-	writer := utils.ReturnWriter(FILENAMEOUT)
+	if STDOUT {
+		writer = os.Stdout
+	} else {
+		writer = utils.ReturnWriter(FILENAMEOUT)
+	}
+
 	defer utils.CloseFile(writer)
 
 	tStart := time.Now()

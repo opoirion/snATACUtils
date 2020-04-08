@@ -222,6 +222,7 @@ func loadRefBedFileWithSymbol(peaksymbolfile Filename, sep string, symbolPos []i
 	peaksplit = make([]string, 3)
 	PEAKSYMBOLDICT = make(map[Peak][]string)
 
+	maxPeakPos := MaxIntList(peakPos[:])
 
 	scanner, file := peaksymbolfile.ReturnReader(0)
 	defer CloseFile(file)
@@ -233,10 +234,10 @@ func loadRefBedFileWithSymbol(peaksymbolfile Filename, sep string, symbolPos []i
 			continue
 		}
 
-		if len(split) < 4 {
+		if len(split) < maxPeakPos {
 			panic(fmt.Sprintf(
-				"Error line %s from symbol file should be <chromosome>\t<start>\t<stop>\tsymbol>\n",
-				split))
+				"Error line %s from symbol file should have at least enough fields as decribe in pos index: %d\n",
+				split, peakPos))
 		}
 
 		for i, pos = range symbolPos {
@@ -534,4 +535,17 @@ func InitIntervalDictsThreading(threadnb int) {
 		       Check(err)
                }
        }
+}
+
+
+/*MaxIntList int give the max of list */
+func MaxIntList(intlist []int) (max int) {
+
+	for _, pos := range intlist {
+		if pos > max {
+			max = pos
+		}
+	}
+
+	return max
 }
