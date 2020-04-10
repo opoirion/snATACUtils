@@ -67,6 +67,7 @@ func main() {
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, `
 #################### MODULE TO ANNOTATE GENOMIC REGIONS FROM BED FILES ########################
+This software presents some similarities with bedtools usage however it provides better customisations for bed file annotation when comparing two bed files with interesecting regions
 
 """Annotate bed file using a reference bed file containing the annotations"""
 USAGE: ATACAnnotateRegions -bed <file> -ref <file> (optionnal -out <string> -unique -unique_ref -intersect -write_ref -edit -ref_sep "[3]int" -ref_symbol "[]int|str" -diff -stdout)
@@ -373,7 +374,10 @@ func scanBedFileAndAddAnnotation(refPos [3]int) {
 	buffer.Reset()
 
 	tDiff := time.Since(tStart)
-	fmt.Printf("done in time: %f s \n", tDiff.Seconds())
+
+	if !STDOUT {
+		fmt.Printf("done in time: %f s \n", tDiff.Seconds())
+	}
 }
 
 

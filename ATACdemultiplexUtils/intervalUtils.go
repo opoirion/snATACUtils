@@ -271,17 +271,17 @@ func loadRefBedFileWithSymbol(peaksymbolfile Filename, sep string, symbol Symbol
 
 /*CreatePeakIntervalTreeCustom ...*/
 func CreatePeakIntervalTreeCustom(peakPos [3]int, sep string) {
-	createPeakIntervalTree(peakPos, sep)
+	createPeakIntervalTree(peakPos, sep, false)
 }
 
 
 /*CreatePeakIntervalTree ...*/
 func CreatePeakIntervalTree() {
-	createPeakIntervalTree([3]int{0, 1, 2}, "\t")
+	createPeakIntervalTree([3]int{0, 1, 2}, "\t", false)
 }
 
 /*createPeakIntervalTree ...*/
-func createPeakIntervalTree(peakPos [3]int, sep string) {
+func createPeakIntervalTree(peakPos [3]int, sep string, verbose bool) {
 	var split []string
 	var chroStr string
 
@@ -289,7 +289,6 @@ func createPeakIntervalTree(peakPos [3]int, sep string) {
 	var err error
 	var isInside bool
 
-	fmt.Printf("create peak interval tree...\n")
 	tStart := time.Now()
 
 	CHRINTERVALDICT = make(map[string]*interval.IntTree)
@@ -320,12 +319,15 @@ func createPeakIntervalTree(peakPos [3]int, sep string) {
 	}
 
 	tDiff := time.Since(tStart)
-	fmt.Printf("Create peak index done in time: %f s \n", tDiff.Seconds())
+
+	if verbose {
+		fmt.Printf("Create peak index done in time: %f s \n", tDiff.Seconds())
+	}
 }
 
 
 /*CreatePeakIntervalTreeObject create a peak intervall dict object*/
-func CreatePeakIntervalTreeObject(peakiddict map[string]uint) (
+func CreatePeakIntervalTreeObject(peakiddict map[string]uint, verbose bool) (
 	intervalObject PeakIntervalTreeObject) {
 
 	var split []string
@@ -335,7 +337,6 @@ func CreatePeakIntervalTreeObject(peakiddict map[string]uint) (
 	var err error
 	var isInside bool
 
-	fmt.Printf("create peak interval tree...\n")
 	tStart := time.Now()
 
 	intervalObject.Chrintervaldict = make(map[string]*interval.IntTree)
@@ -367,7 +368,10 @@ func CreatePeakIntervalTreeObject(peakiddict map[string]uint) (
 	}
 
 	tDiff := time.Since(tStart)
-	fmt.Printf("Create peak index done in time: %f s \n", tDiff.Seconds())
+
+	if verbose {
+		fmt.Printf("Create peak index done in time: %f s \n", tDiff.Seconds())
+	}
 
 	return intervalObject
 }
@@ -376,7 +380,7 @@ func CreatePeakIntervalTreeObject(peakiddict map[string]uint) (
 func CreatePeakIntervalTreeObjectFromFile(bedfile Filename) (intervalObject PeakIntervalTreeObject) {
 	peakiddict := LoadPeaksDict(bedfile)
 
-	intervalObject = CreatePeakIntervalTreeObject(peakiddict)
+	intervalObject = CreatePeakIntervalTreeObject(peakiddict, false)
 	return intervalObject
 }
 
