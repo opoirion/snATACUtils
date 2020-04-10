@@ -62,6 +62,9 @@ var SYMBOLPOS string
 /*STDOUT write to stdout*/
 var STDOUT bool
 
+/*ANNOTATELINE annotate the full line rather than peak region*/
+var ANNOTATELINE bool
+
 
 func main() {
 	flag.Usage = func() {
@@ -70,7 +73,7 @@ func main() {
 This software presents some similarities with bedtools usage however it provides better customisations for bed file annotation when comparing two bed files with interesecting regions
 
 """Annotate bed file using a reference bed file containing the annotations"""
-USAGE: ATACAnnotateRegions -bed <file> -ref <file> (optionnal -out <string> -unique -unique_ref -intersect -write_ref -edit -ref_sep "[3]int" -ref_symbol "[]int|str" -diff -stdout)
+USAGE: ATACAnnotateRegions -bed <file> -ref <file> (optionnal -out <string> -unique -unique_ref -intersect -write_ref -edit -ref_sep "[3]int" -ref_symbol "[]int|str" -diff -stdout -annotate_line)
 
 for -ref_sep and -ref_symbol options, the input should be a string of numbers separated by whitespace and delimited with ". -ref_sep needs exactly three positions: 1) for the chromosomes column, 2) for the begining and 3) for the end of the region
 
@@ -90,6 +93,7 @@ Here the three first columns of referenceAnnotation.tsv will be used to identify
 	flag.BoolVar(&IGNOREUNANNOATED, "ignore", false, `ignore unnatotated peak`)
 	flag.BoolVar(&WRITEINTERSECT, "intersect", false, `write intersection only`)
 	flag.BoolVar(&UNIQ, "unique", false, `write only unique output peaks`)
+	flag.BoolVar(&ANNOTATELINE, "annotate_line", false, `annotate the full line rather than the defined peak region`)
 	flag.BoolVar(&UNIQREF, "unique_ref", false, `write only unique reference using the closest peak`)
 	flag.BoolVar(&UNIQSYMBOL, "unique_symbols", true, `write only unique symbols per peak`)
 	flag.BoolVar(&WRITEDIFF, "diff", false, `write bed region if no intersection is found`)
@@ -167,6 +171,24 @@ func returnRefPos() (refPos [3]int) {
 }
 
 
+func writeDefault(line string, peak utils.Peak, buffer *bytes.Buffer) (count int) {
+
+	if !ANNOTATELINE {
+		line = peak.PeakToString()
+	}
+
+	buffer.WriteString(line)
+
+	if WRITEDIFF {
+		buffer.WriteRune('\n')
+	} else {
+		buffer.WriteString("\t\n")
+	}
+	count++
+
+	return count
+}
+
 func returnSymbolType() (symbol utils.SymbolType) {
 
 	splitChar := " "
@@ -198,10 +220,10 @@ func returnSymbolType() (symbol utils.SymbolType) {
 func scanBedFileAndAddAnnotation(refPos [3]int) {
 	var intervals []interval.IntInterface
 	var oneInterval interval.IntInterface
-	var split, symbols []string
+	var symbols []string
 	var line, peakstr, symbol string
 	var isInside, isUnique, isUniqueRef bool
-	var start, end, count int
+	var count int
 	var err error
 	var inttree *interval.IntTree
 	var buffer bytes.Buffer
@@ -213,6 +235,7 @@ func scanBedFileAndAddAnnotation(refPos [3]int) {
 	var peakIntervalTreeObject utils.PeakIntervalTreeObject
 	var uniqueSymbolDict map[string]bool
 	var writer io.WriteCloser
+	var peak utils.Peak
 
 	scanner, file := BEDFILENAME.ReturnReader(0)
 	defer utils.CloseFile(file)
@@ -244,35 +267,23 @@ func scanBedFileAndAddAnnotation(refPos [3]int) {
 			continue
 		}
 
-		split = strings.Split(line, "\t")
+		peak.StringToPeak(line)
 
-		start, err = strconv.Atoi(split[1])
-		utils.Check(err)
-
-		end, err = strconv.Atoi(split[2])
-		utils.Check(err)
-
-		if inttree, isInside = utils.CHRINTERVALDICT[split[0]];!isInside {
-			if !IGNOREUNANNOATED || WRITEDIFF{
-				buffer.WriteString(line)
-				buffer.WriteRune('\n')
-				count++
+		if inttree, isInside = utils.CHRINTERVALDICT[peak.Chr()];!isInside {
+			if !IGNOREUNANNOATED || WRITEDIFF {
+				count = writeDefault(line, peak, &buffer)
 			}
+
 			continue
 		}
 
 		intervals = inttree.Get(
-			utils.IntInterval{Start: start, End: end})
+			utils.IntInterval{Start: peak.Start, End: peak.End})
 
 		switch {
 		case len(intervals) == 0 :
-			if !IGNOREUNANNOATED || WRITEDIFF{
-				buffer.WriteString(line)
-				buffer.WriteRune('\n')
-				count++
-			}
-			if !isInside {
-				continue
+			if !IGNOREUNANNOATED || WRITEDIFF {
+				count = writeDefault(line, peak, &buffer)
 			}
 
 		case  WRITEDIFF:
@@ -291,7 +302,7 @@ func scanBedFileAndAddAnnotation(refPos [3]int) {
 			intrange = oneInterval.Range()
 			oneIntervalID = oneInterval.ID()
 			intervalCenter = intrange.Start - (intrange.End - intrange.Start) / 2
-			centerDistance = math.Abs(float64((start - (end - start) / 2) - intervalCenter))
+			centerDistance = math.Abs(float64((peak.Start - (peak.End - peak.Start) / 2) - intervalCenter))
 
 			if UNIQ {
 				if minCenterDistance < 0 || centerDistance < minCenterDistance {
@@ -398,9 +409,11 @@ func returnPeakStrAndSymbol(line string, id uintptr, start, end int, refPos [3]i
 			end)
 	case WRITEREF:
 		peakstr = peak.PeakToString()
-	default:
+	case ANNOTATELINE:
 		peakstr = line
-
+	default:
+		peak.StringToPeak(line)
+		peakstr = peak.PeakToString()
 	}
 
 	return peakstr, symbols
