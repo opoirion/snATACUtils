@@ -55,6 +55,12 @@ type Peak struct{
 	Start, End int
 }
 
+//SymbolType Descriptor of a symbol: either a string or int slice
+type SymbolType struct {
+	SymbolPos []int
+	SymbolStr string
+}
+
 //StringToPeak Convert Peak string to peak
 func (peak * Peak) StringToPeak(str string) {
 	var err1, err2 error
@@ -204,25 +210,28 @@ func LoadSymbolFile(peaksymbolfile, peakfile  Filename) {
 
 /*LoadRefBedFileWithSymbol  peaksymbolfile, peakfile  Filename*/
 func LoadRefBedFileWithSymbol(peaksymbolfile Filename) {
-	loadRefBedFileWithSymbol(peaksymbolfile, "\t", []int{3}, [3]int{0, 1, 2})
+	symbol := SymbolType{}
+	symbol.SymbolPos = []int{3}
+	loadRefBedFileWithSymbol(peaksymbolfile, "\t", symbol, [3]int{0, 1, 2})
 }
 
 /*LoadRefCustomFileWithSymbol  peaksymbolfile, peakfile  Filename*/
-func LoadRefCustomFileWithSymbol(peaksymbolfile Filename, sep string, symbolPos []int, refPos [3]int) {
-	loadRefBedFileWithSymbol(peaksymbolfile, sep, symbolPos, refPos)
+func LoadRefCustomFileWithSymbol(peaksymbolfile Filename, sep string, symbol SymbolType, refPos [3]int) {
+	loadRefBedFileWithSymbol(peaksymbolfile, sep, symbol, refPos)
 }
 
 /*loadRefBedFileWithSymbol  peaksymbolfile, peakfile  Filename*/
-func loadRefBedFileWithSymbol(peaksymbolfile Filename, sep string, symbolPos []int, peakPos [3]int) {
+func loadRefBedFileWithSymbol(peaksymbolfile Filename, sep string, symbol SymbolType, peakPos [3]int) {
 	var peakl Peak
-	var symbol, split, peaksplit []string
+	var symbolSlice, split, peaksplit []string
 	var pos, i int
+	var symbolStr string
 
-	symbol = make([]string, len(symbolPos))
+	symbolSlice = make([]string, len(symbol.SymbolPos))
 	peaksplit = make([]string, 3)
 	PEAKSYMBOLDICT = make(map[Peak][]string)
 
-	maxPeakPos := MaxIntList(peakPos[:])
+	maxPeakPos := MaxIntList(append(peakPos[:], symbol.SymbolPos...))
 
 	scanner, file := peaksymbolfile.ReturnReader(0)
 	defer CloseFile(file)
@@ -240,8 +249,8 @@ func loadRefBedFileWithSymbol(peaksymbolfile Filename, sep string, symbolPos []i
 				split, peakPos))
 		}
 
-		for i, pos = range symbolPos {
-			symbol[i] = split[pos]
+		for i, pos = range symbol.SymbolPos {
+			symbolSlice[i] = split[pos]
 		}
 
 		for i, pos = range peakPos {
@@ -250,7 +259,13 @@ func loadRefBedFileWithSymbol(peaksymbolfile Filename, sep string, symbolPos []i
 
 		peakl.SplitToPeak(peaksplit)
 
-		PEAKSYMBOLDICT[peakl] = append(PEAKSYMBOLDICT[peakl], strings.Join(symbol, sep))
+		if symbol.SymbolStr != "" {
+			symbolStr = symbol.SymbolStr
+		} else {
+			symbolStr = strings.Join(symbolSlice, sep)
+		}
+
+		PEAKSYMBOLDICT[peakl] = append(PEAKSYMBOLDICT[peakl], symbolStr)
 	}
 }
 

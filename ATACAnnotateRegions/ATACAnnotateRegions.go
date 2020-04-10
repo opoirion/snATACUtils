@@ -56,7 +56,7 @@ var REFSEP string
 /*REFPOS position of reference region in the -ref file */
 var REFPOS string
 
-/*SYMBOLPOS position of the coulmns used for annotations in the -ref file */
+/*SYMBOLPOS generic string or position of the coulmns used for annotations in the -ref file */
 var SYMBOLPOS string
 
 /*STDOUT write to stdout*/
@@ -69,11 +69,13 @@ func main() {
 #################### MODULE TO ANNOTATE GENOMIC REGIONS FROM BED FILES ########################
 
 """Annotate bed file using a reference bed file containing the annotations"""
-USAGE: ATACAnnotateRegions -bed <file> -ref <file> (optionnal -out <string> -unique -unique_ref -intersect -write_ref -edit -ref_sep "[3]int" -ref_symbol "[]int" -diff -stdout)
+USAGE: ATACAnnotateRegions -bed <file> -ref <file> (optionnal -out <string> -unique -unique_ref -intersect -write_ref -edit -ref_sep "[3]int" -ref_symbol "[]int|str" -diff -stdout)
 
 for -ref_sep and -ref_symbol options, the input should be a string of numbers separated by whitespace and delimited with ". -ref_sep needs exactly three positions: 1) for the chromosomes column, 2) for the begining and 3) for the end of the region
 
 Example: ATACAnnotateRegions -bed regionToAnnotate.bed -ref referenceAnnotation.tsv -ref_sep "0 1 2" -ref_symbol "4 5"
+
+-ref_sep and -symbol_pos can be blank with " or comma separated: i.e."0 1 2" or 0,1,2. Also symbol_pos an be a generic string to annotate all ref regions
 
 Here the three first columns of referenceAnnotation.tsv will be used to identify chromosome (column 0), start (column 1), and end (column 2) of each region, and regionToAnnotate.bed will be annotatd using columns 4 and 5 from referenceAnnotation.tsv
 `)
@@ -107,7 +109,7 @@ Example: ATACAnnotateRegions -bed regionToAnnotate.bed -ref referenceAnnotation.
 	}
 
 	refPos := returnRefPos()
-	symbolPos := returnSymbolPos()
+	symbol := returnSymbolType()
 
 	if FILENAMEOUT == "" {
 		ext := path.Ext(BEDFILENAME.String())
@@ -120,7 +122,7 @@ Example: ATACAnnotateRegions -bed regionToAnnotate.bed -ref referenceAnnotation.
 	}
 
 	if !WRITEDIFF {
-		utils.LoadRefCustomFileWithSymbol(REFBEDFILENAME, REFSEP, symbolPos, refPos)
+		utils.LoadRefCustomFileWithSymbol(REFBEDFILENAME, REFSEP, symbol, refPos)
 	}
 
 	utils.LoadPeaksCustom(REFBEDFILENAME, REFSEP, refPos)
@@ -164,7 +166,7 @@ func returnRefPos() (refPos [3]int) {
 }
 
 
-func returnSymbolPos() (SymbolPos []int) {
+func returnSymbolType() (symbol utils.SymbolType) {
 
 	splitChar := " "
 
@@ -176,17 +178,20 @@ func returnSymbolPos() (SymbolPos []int) {
 
 	var err error
 
-	SymbolPos = make([]int, len(symbolPosSplit))
+	symbol.SymbolPos = make([]int, len(symbolPosSplit))
 
-	for pos, symbol := range symbolPosSplit {
-		SymbolPos[pos], err = strconv.Atoi(symbol)
+	for pos, sym := range symbolPosSplit {
+		symbol.SymbolPos[pos], err = strconv.Atoi(sym)
 
 		if err != nil  {
-			panic(fmt.Sprintf("Error with ref_pos argument: %s should be an array of ints \n", SYMBOLPOS))
-	}
+			symbol.SymbolPos = []int{}
+			symbol.SymbolStr = SYMBOLPOS
+			goto end
+		}
 	}
 
-	return SymbolPos
+	end:
+	return symbol
 }
 
 func scanBedFileAndAddAnnotation(refPos [3]int) {
