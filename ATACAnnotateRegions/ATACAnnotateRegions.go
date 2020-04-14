@@ -56,6 +56,9 @@ var REFSEP string
 /*REFPOS position of reference region in the -ref file */
 var REFPOS string
 
+/*BEDPOS position of reference region in the -bed file */
+var BEDPOS string
+
 /*SYMBOLPOS generic string or position of the coulmns used for annotations in the -ref file */
 var SYMBOLPOS string
 
@@ -101,6 +104,7 @@ Here the three first columns of referenceAnnotation.tsv will be used to identify
 	flag.BoolVar(&STDOUT, "stdout", false, `write to stdout`)
 	flag.StringVar(&REFSEP, "ref_sep", "\t", "separator to define the bed region for the ref file")
 	flag.StringVar(&REFPOS, "ref_pos", "0 1 2", "separator to the bed region in ref for the ref file")
+	flag.StringVar(&BEDPOS, "bed_pos", "0 1 2", "separator to the bed region in genomic coordinates for the bed file")
 	flag.StringVar(&SYMBOLPOS, "symbol_pos", "3", "separator to the bed region in ref for the ref file")
 
 	flag.Parse()
@@ -113,7 +117,7 @@ Here the three first columns of referenceAnnotation.tsv will be used to identify
 Example: ATACAnnotateRegions -bed regionToAnnotate.bed -ref referenceAnnotation.tsv -ref_sep "0 1 2" -ref_symbol "4 5"\n`, tail))
 	}
 
-	refPos := returnRefPos()
+	refPos := returnPosIntSlice(REFPOS)
 	symbol := returnSymbolType()
 
 	if FILENAMEOUT == "" {
@@ -144,17 +148,17 @@ Example: ATACAnnotateRegions -bed regionToAnnotate.bed -ref referenceAnnotation.
 	}
 }
 
-func returnRefPos() (refPos [3]int) {
+func returnPosIntSlice(refpos string) (refPos [3]int) {
 	splitChar := " "
 
-	if strings.Count(REFPOS, ",") > 0 {
+	if strings.Count(refpos, ",") > 0 {
 		splitChar = ","
 	}
 
-	refPosSplit := strings.Split(REFPOS, splitChar)
+	refPosSplit := strings.Split(refpos, splitChar)
 
 	if len(refPosSplit) != 3 {
-		panic(fmt.Sprintf("Error with ref_pos argument: %s should be an array of 3 ints (such as: 0 1 2) \n", REFPOS))
+		panic(fmt.Sprintf("Error with bed positional argument: %s should be an array of 3 ints (such as: 0 1 2) \n", refpos))
 	}
 
 	var err1, err2, err3 error
@@ -164,7 +168,7 @@ func returnRefPos() (refPos [3]int) {
 	refPos[2], err3 = strconv.Atoi(refPosSplit[2])
 
 	if err1 != nil || err2 != nil || err3 != nil {
-		panic(fmt.Sprintf("Error with ref_pos argument: %s should be an array of 3 ints (such as: 0 1 2) \n", REFPOS))
+		panic(fmt.Sprintf("Error with bed positional argument: %s should be an array of 3 ints (such as: 0 1 2) \n", refpos))
 	}
 
 	return refPos
@@ -260,6 +264,8 @@ func scanBedFileAndAddAnnotation(refPos [3]int) {
 			BEDFILENAME)
 	}
 
+	bedPos := returnPosIntSlice(BEDPOS)
+
 	for scanner.Scan() {
 		line = scanner.Text()
 
@@ -267,7 +273,7 @@ func scanBedFileAndAddAnnotation(refPos [3]int) {
 			continue
 		}
 
-		peak.StringToPeak(line)
+		peak.StringToPeakWithPos(line, bedPos)
 
 		if inttree, isInside = utils.CHRINTERVALDICT[peak.Chr()];!isInside {
 			if !IGNOREUNANNOATED || WRITEDIFF {
