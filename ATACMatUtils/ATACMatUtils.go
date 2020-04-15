@@ -17,6 +17,7 @@ import(
 	"bytes"
 	"sync"
 	"path"
+	"sort"
 )
 
 
@@ -92,6 +93,12 @@ var YGIDIM int
 /*XGIDIM dim of xgi when reading a COO file */
 var XGIDIM int
 
+/*YGISYMBOL use 4th columns  as ygi */
+var YGISYMBOL bool
+
+/*YGITOSYMBOL link ygi featurePos to symbol feature pos */
+var YGITOSYMBOL []uint
+
 /*BUFFERSIZE buffer size for multithreading */
 const BUFFERSIZE = 1000000
 
@@ -116,7 +123,7 @@ func main() {
 #################### MODULE TO CREATE (cell x genomic region) SPARSE MATRIX ########################
 """Boolean / interger Peak matrix """
 transform one (-bed) or multiple bed files into a sparse matrix
-USAGE: ATACMatTools -coo -bed  <bedFile> -ygi <bedFile> -xgi <fname> (-threads <int> -out <fname> -use_count -taiji -bed <fileName2>)
+USAGE: ATACMatTools -coo -bed  <bedFile> -ygi <bedFile> -xgi <file> (-threads <int> -out <fname> -use_count -taiji -bed <bedFile2> -use_symbol)
 
 """Create a cell x bin matrix: -bin """
 transform one (-bed) or multiple (use multiple -bed options) bed file into a bin (using float) sparse matrix. If ygi provided, reads intersecting these bin are ignored
@@ -130,6 +137,11 @@ USAGE: ATACMatTools -count  -xgi <fname> -ygi <bedfile> -bed <bedFile> (optionna
 It can be used to convert taiji to coo or coo to taiji formats.
 USAGE: ATACMatTools -coo/taiji -merge -xgi <fname> -in <matrixFile1> -in <matrixFile2> ... (optional -bin -use_count -out <fname>)
 
+USAGE for the -use_symbol option:
+Optional use of the 4th column of -ygi as symbol.
+This option is usefull to reduce the signal of multiple loci (i.e. multiple vectors) corresponding to the same function into one single vector per distinct symbol.
+if used, the program will output the list of ordered symbol corresponding to the new ygi index.
+
 `)
 		 flag.PrintDefaults()
 	}
@@ -141,6 +153,7 @@ USAGE: ATACMatTools -coo/taiji -merge -xgi <fname> -in <matrixFile1> -in <matrix
 	flag.Var(&BEDFILENAME, "bed", "name of the bed file")
 	flag.Var(&INFILES, "in", "name of the input file(s)")
 	flag.Var(&PEAKFILE, "ygi", "name of the bed file containing the region of interest( i.e. PEAK )")
+	flag.BoolVar(&YGISYMBOL, "use_symbol", false, "Optional use of the 4th column of -ygi as symbol")
 	flag.Var(&CELLSIDFNAME, "xgi", "name of the file containing the ordered list of cell IDs (one ID per line)")
 	flag.StringVar(&SEP, "delimiter", "\t", "delimiter used to write the output file (default \t)")
 	flag.StringVar(&YGIOUT, "ygi_out", "", "Write the output bin bed file in this specific file")
@@ -218,6 +231,88 @@ USAGE: ATACMatTools -coo/taiji -merge -xgi <fname> -in <matrixFile1> -in <matrix
 }
 
 
+func loadSymbolFileWriteOutputSymbol() int {
+	if !YGISYMBOL {
+		return YGIDIM
+	}
+
+	if YGIDIM == 0 {
+		panic(fmt.Sprintf("YGDIM is 0 when loading symbol"))
+	}
+
+	var symbol,line string
+	var split []string
+
+	symbolList := []string{}
+
+	scanner, file := PEAKFILE.ReturnReader(0)
+
+	defer utils.CloseFile(file)
+
+	symbolMap := make(map[int]string)
+	symbolMapRev := make(map[string]int)
+	symbolSet := make(map[string]bool)
+
+	i := 0
+	for scanner.Scan() {
+		line = scanner.Text()
+		split = strings.Split(line, "\t")
+
+		if len(split) < 4 {
+			panic(fmt.Sprintf(
+				"Error when extracting symbol from %s cannot split line nb %d: %s in 4",
+				PEAKFILE,
+				i,
+				line))
+		}
+
+		symbol = split[3]
+
+		if !symbolSet[symbol] {
+			symbolSet[symbol] = true
+			symbolList = append(symbolList, symbol)
+		}
+
+		symbolMap[i] = symbol
+		symbolMapRev[symbol] = i
+		i++
+	}
+
+	sort.Strings(symbolList)
+
+	YGITOSYMBOL = make([]uint, YGIDIM)
+
+	for indexNew, symbol  := range symbolList {
+		indexOld := symbolMapRev[symbol]
+		YGITOSYMBOL[indexOld] = uint(indexNew)
+	}
+
+	fmt.Printf("symbol file loaded. New dim: %d\n", len(symbolList))
+	writeSymbol(symbolList)
+
+	return 	len(symbolList)
+}
+
+func writeSymbol(symbolList []string) {
+	var buffer bytes.Buffer
+
+	ext := path.Ext(FILENAMEOUT)
+	filename := fmt.Sprintf("%s.symbol.ygi", FILENAMEOUT[:len(FILENAMEOUT) - len(ext)])
+
+	writer := utils.ReturnWriter(filename)
+	defer utils.CloseFile(writer)
+
+	for _, symbol := range symbolList {
+		buffer.WriteString(symbol)
+		buffer.WriteRune('\n')
+	}
+
+	writer.Write(buffer.Bytes())
+	buffer.Reset()
+
+	fmt.Printf("symbol file index written: %s\n", filename)
+}
+
 func computeReadsInPeaksForCell(){
 	fmt.Printf("load indexes...\n")
 
@@ -258,6 +353,7 @@ func createIntSparseMatrix(){
 
 	XGIDIM = len(CELLIDDICT)
 	YGIDIM = utils.LoadPeaks(PEAKFILE)
+	YGIDIM = loadSymbolFileWriteOutputSymbol()
 
 	initIntSparseMatrix()
 	utils.CreatePeakIntervalTree()
@@ -294,9 +390,10 @@ func createIntSparseMatrixSplit(){
 	loadCellIDDict(CELLSIDFNAME)
 	XGIDIM = len(CELLIDDICT)
 	YGIDIM = utils.LoadPeaks(PEAKFILE)
+	YGIDIM = loadSymbolFileWriteOutputSymbol()
 
-	chunk := len(CELLIDDICT) / SPLIT
-	celliddict := make([]string, len(CELLIDDICT))
+	chunk := XGIDIM / SPLIT
+	celliddict := make([]string, XGIDIM)
 
 	for cellID, pos := range CELLIDDICT {
 		celliddict[pos] = cellID
@@ -932,6 +1029,8 @@ func updateIntSparseMatrixOneThread(bufferLine * [BUFFERSIZE]string, bufferStart
 	var int interval.IntInterface
 	var cellPos,featPos uint
 
+	useSymbol := len(YGITOSYMBOL) != 0
+
 	for i := bufferStart; i < bufferStop;i++ {
 
 		split = strings.Split(bufferLine[i], "\t")
@@ -961,6 +1060,10 @@ func updateIntSparseMatrixOneThread(bufferLine * [BUFFERSIZE]string, bufferStart
 
 		for _, int = range intervals {
 			featPos = utils.PEAKIDDICT[utils.INTERVALMAPPING[int.ID()]]
+
+			if useSymbol {
+				featPos = YGITOSYMBOL[featPos]
+			}
 
 			switch USECOUNT {
 			case true:
