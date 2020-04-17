@@ -102,6 +102,9 @@ var YGITOSYMBOL []uint
 /*BUFFERSIZE buffer size for multithreading */
 const BUFFERSIZE = 1000000
 
+/*ALL bool indicating if all cells should be merged for count option */
+var ALL bool
+
 type mattype string
 
 func (i *mattype) Set(mtype string) mattype {
@@ -131,7 +134,7 @@ transform one (-bed) or multiple (use multiple -bed options) bed file into a bin
 USAGE: ATACMatTools -bin -bed  <bedFile> (optional -ygi <bedFile> -xgi <fname> -bin_size <int> -ygi_out <string> -norm -taiji -coo)
 
 """Count the number of reads in peaks for each cell: -count """
-USAGE: ATACMatTools -count  -xgi <fname> -ygi <bedfile> -bed <bedFile> (optionnal: -out <fname> -norm)
+USAGE: ATACMatTools -count  -xgi <fname> -ygi <bedfile> -bed <bedFile> (optionnal: -out <fname> -norm -all)
 
 """Merge multiple matrices results into one output file: -merge """
 It can be used to convert taiji to coo or coo to taiji formats.
@@ -163,6 +166,8 @@ if used, the program will output the list of ordered symbol corresponding to the
 		`Use read count instead of boolean value`)
 	flag.BoolVar(&COO, "coo", false,
 		`Use COO format as output`)
+	flag.BoolVar(&ALL, "all", false,
+		`Count the reads in peaks for the input bed file in its hole`)
 
 	flag.BoolVar(&NORM, "norm", false, "Normalize bin matrix / count per read depth for each cell")
 
@@ -961,17 +966,20 @@ func updateReadInPeakThread(bufferLine * [BUFFERSIZE]string, bufferStart ,buffer
 	for i := bufferStart; i < bufferStop;i++ {
 
 		split = strings.Split(bufferLine[i], "\t")
+		if ALL {
+			cellid = "all"
+		} else {
+			cellid = split[3]
+		}
 
 		if isCellsID {
-
 			if _, isInside = CELLIDDICT[split[3]];!isInside {
 				continue
 			}
-
 		}
 
 		if NORM {
-			cellcount[count] = split[3]
+			cellcount[count] = cellid
 			count++
 		}
 
@@ -991,7 +999,7 @@ func updateReadInPeakThread(bufferLine * [BUFFERSIZE]string, bufferStart ,buffer
 		MUTEX.Lock()
 
 		for range intervals {
-			CELLIDCOUNT[split[3]]++
+			CELLIDCOUNT[cellid]++
 		}
 
 		if NORM {

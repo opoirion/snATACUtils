@@ -7,6 +7,7 @@ import(
 	utils "gitlab.com/Grouumf/ATACdemultiplex/ATACdemultiplexUtils"
 	"flag"
 	"os"
+	"io"
 	"fmt"
 	"log"
 	"sync"
@@ -82,6 +83,9 @@ var USEMIDDLE bool
 /*ALL bool*/
 var ALL bool
 
+/*STDOUT write to stdout*/
+var STDOUT bool
+
 
 func main() {
 	flag.Usage = func() {
@@ -106,6 +110,7 @@ if -cluster is provided, TSS is computed per cluster and -xgi argument is ignore
 	flag.IntVar(&TSSFLANKSEARCH, "tss_flank", 50, "search hightest TSS values to define TSS score using this flank size arround TSS")
 	flag.IntVar(&THREADNB, "threads", 1, "threads concurrency")
 	flag.BoolVar(&USEMIDDLE, "use_middle", false, "Use the middle of the peak to determine the TSS ")
+	flag.BoolVar(&STDOUT, "stdout", false, `write to stdout`)
 	flag.BoolVar(&ALL, "all", false, "Compute the general TSS ")
 	flag.Parse()
 
@@ -481,8 +486,14 @@ func processOneBuffer(
 func writeCellTSSScore() {
 	var buffer bytes.Buffer
 	var err error
+	var writer io.WriteCloser
 
-	writer := utils.ReturnWriter(FILENAMEOUT)
+	if STDOUT {
+		writer = os.Stdout
+	} else {
+		writer = utils.ReturnWriter(FILENAMEOUT)
+	}
+
 	defer utils.CloseFile(writer)
 
 	for cellID, tss := range CELLTSS {
