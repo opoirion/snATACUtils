@@ -1,0 +1,1279 @@
+#!/usr/bin/env python
+
+from argparse import ArgumentParser
+
+from os.path import isfile
+
+from scipy.sparse import load_npz
+
+from collections import defaultdict
+
+import numpy as np
+
+from time import time
+
+import pandas as pd
+
+from numpy import vstack
+from numpy import hstack
+
+from scipy import stats
+
+from colour import Color
+
+from sklearn.mixture import GaussianMixture
+
+from sklearn.cluster import KMeans
+
+from sklearn.metrics import davies_bouldin_score
+from sklearn.metrics import silhouette_score
+
+from distutils.dir_util import mkpath
+
+from os.path import isdir
+
+from os.path import split as pathsplit
+
+
+def boolean_string(s):
+    """
+    """
+    if s not in {'False', 'True'}:
+        raise ValueError('Not a valid boolean string')
+    return s == 'True'
+
+
+def saved_mat_style(s):
+    """
+    """
+    if s not in {'False', 'True', 'Frame', 'frame'}:
+        raise ValueError('Not a valid type for saved matrix style.' \
+                         ' Plz select between {False, True, Frame}')
+    if s in ["frame", "Frame"]:
+        s = "Frame"
+    else:
+        s = s == "True"
+    return s
+
+def cl_analysis_type(s='kmeans'):
+    """
+    """
+    if s not in {'kmeans', 'WARD', 'both', 'False', 'None', 'heatmap_only'}:
+        raise ValueError(
+            "Not a valid option: {'kmeans', 'WARD', 'both', 'False', None," \
+            " 'heatmap_only'}")
+
+    if s in {'False', 'None'}:
+        s = False
+
+    return s
+
+
+def cluster_metric_eval(s='daviesbouldin'):
+    """
+    """
+    if s not in {'daviesbouldin', 'silhouette'}:
+        raise ValueError("Not a valid option: {'daviesbouldin', 'silhouette'}")
+
+    return s
+
+class MeanScaler:
+    def fit_transform(self, matrix):
+        """
+        """
+        return matrix / matrix.sum(axis=0)
+
+ARGPARSER = ArgumentParser(
+    description='Feature detection pipeline using shanon entropy',
+    prefix_chars='-')
+
+
+ARGPARSER.add_argument('-sparse_matrix',
+                       required=True,
+                       help='Matrix file (npz)',
+                       type=str,
+                       default='',
+                       metavar='file')
+
+ARGPARSER.add_argument('-xgi',
+                       required=True,
+                       help='File containing ordered sample name',
+                       type=str,
+                       default='',
+                       metavar='file')
+
+ARGPARSER.add_argument('-ygi',
+                       required=True,
+                       help='File containing ordered feature name',
+                       type=str,
+                       default='',
+                       metavar='file')
+
+ARGPARSER.add_argument('-cluster_file',
+                       required=True,
+                       help='File containing cell<->cluster',
+                       type=str,
+                       default='',
+                       metavar='file')
+
+ARGPARSER.add_argument('-read_per_cell',
+                       required=True,
+                       help='File containing cell<->read nb',
+                       type=str,
+                       default='',
+                       metavar='file')
+
+ARGPARSER.add_argument('-perc_significant_peaks',
+                       required=False,
+                       help='Estimate of the percent of significant peaks',
+                       type=float,
+                       default=0.10,
+                       metavar='float')
+
+ARGPARSER.add_argument('-level',
+                       required=False,
+                       help='p-value cutoff (default: 0.05)',
+                       type=float,
+                       default=0.05,
+                       metavar='float')
+
+ARGPARSER.add_argument('-out',
+                       required=True,
+                       help='output file',
+                       type=str,
+                       default='',
+                       metavar='file')
+
+ARGPARSER.add_argument('-top_k',
+                       required=False,
+                       help='top k features to print',
+                       type=int,
+                       default=20,
+                       metavar='int')
+
+ARGPARSER.add_argument('-xgi_subset',
+                       required=False,
+                       help='Subset of xgi to be used',
+                       type=str,
+                       default='',
+                       metavar='file')
+
+ARGPARSER.add_argument('-ygi_subset',
+                       required=False,
+                       help='Subset of ygi to be used',
+                       type=str,
+                       default='',
+                       metavar='file')
+
+ARGPARSER.add_argument('-ygi_to_ignore',
+                       required=False,
+                       help='Subset of ygi to be used',
+                       type=str,
+                       default='',
+                       metavar='file')
+
+ARGPARSER.add_argument('-ygi_to_focus',
+                       required=False,
+                       help='Subset of ygi to be used as subset after normalisation',
+                       type=str,
+                       default='',
+                       metavar='file')
+
+ARGPARSER.add_argument('-do_feature_cl_analysis',
+                       required=False,
+                       help='Perform feature clustering analysis',
+                       type=cl_analysis_type,
+                       default='False',
+                       metavar="{'kmeans', 'WARD', 'both', 'False', None, 'heatmap_only'}")
+
+ARGPARSER.add_argument('-show_figs',
+                       required=False,
+                       help='show figures',
+                       type=boolean_string,
+                       default='True',
+                       metavar='Bool')
+
+ARGPARSER.add_argument('-save_figs',
+                       required=False,
+                       help='save figures',
+                       type=boolean_string,
+                       default='False',
+                       metavar='Bool')
+
+ARGPARSER.add_argument('-save_mat',
+                       required=False,
+                       help='save matrix(ces)',
+                       type=saved_mat_style,
+                       default='False',
+                       metavar='Bool')
+
+ARGPARSER.add_argument('-write_all_feature_scores',
+                       required=False,
+                       help='Write all feature scores for the different group',
+                       type=boolean_string,
+                       default='False',
+                       metavar='Bool')
+
+ARGPARSER.add_argument('-kmeans_clusters',
+                       required=False,
+                       help='perform kmeans clustering',
+                       type=int,
+                       nargs='+',
+                       default=[],
+                       metavar='int (default: [])')
+
+ARGPARSER.add_argument('-cluster_eval_metric',
+                       required=False,
+                       help='evaluation metric',
+                       type=cluster_metric_eval,
+                       default="daviesbouldin",
+                       metavar="str {'daviesbouldin', 'silhouette'}")
+
+ARGPARSER.add_argument('-ext',
+                       required=False,
+                       help='Output image extention (default png)',
+                       type=str,
+                       default='png',
+                       metavar='str (default: "png")')
+
+ARGPARSER.add_argument('-load_agg',
+                       required=False,
+                       help='load agg backend for saving figures (for server)',
+                       type=boolean_string,
+                       default='False',
+                       metavar='bool (default: False)')
+
+ARGPARSER.add_argument('-row_norm',
+                       required=False,
+                       help='Normalise per row for clustering and heatmap. (i.e. RAS_feat-cl = RAS_feat-cl / sum_cl(RAS_feat-cl) )',
+                       type=boolean_string,
+                       default='True',
+                       metavar='bool (default: True)')
+
+ARGPARSER.add_argument('-use_RAS_norm',
+                       help='Use Relative Accessibilty Score)',
+                       type=boolean_string,
+                       default='True',
+                       metavar='bool (default: True)')
+
+ARGPARSER.add_argument('-use_zscore',
+                       required=False,
+                       help='Use Z-score instead/after RAS normalisation and for row_norm)',
+                       type=boolean_string,
+                       default='False',
+                       metavar='bool (default: False)')
+
+ARGPARSER.add_argument('-seed',
+                       required=False,
+                       help='seed',
+                       type=int,
+                       default=None,
+                       metavar='seed (default: None)')
+
+ARGPARSER.add_argument('-row_max_norm_for_viz',
+                       required=False,
+                       help='Normalise by the row max for visualisation ',
+                       type=boolean_string,
+                       default='False',
+                       metavar='bool (default: False)')
+
+ARGPARSER.add_argument('-col_cluster',
+                       required=False,
+                       help='Cluster columns for visualisation (only works with kmeans viz) ',
+                       type=boolean_string,
+                       default='False',
+                       metavar='bool (default: False)')
+
+ARGPARSER.add_argument('-mark_features',
+                       required=False,
+                       help='Features to mark in the heatmaps',
+                       type=str,
+                       default=None,
+                       metavar='file')
+
+ARGPARSER.add_argument('-plot_cbar',
+                       required=False,
+                       help='plot cbar in the heatmaps',
+                       type=boolean_string,
+                       default="False",
+                       metavar='file')
+
+
+ARGS = ARGPARSER.parse_args()
+
+if ARGS.seed:
+    np.random.seed(ARGS.seed)
+
+if ARGS.load_agg:
+    import matplotlib as mpl
+    mpl.use('Agg')
+
+import seaborn as sns
+import pylab as plt
+
+FIG, AXES = plt.subplots(3, 2, figsize=(16, 16))
+
+assert(isfile(ARGS.sparse_matrix))
+assert(isfile(ARGS.cluster_file))
+assert(isfile(ARGS.xgi))
+assert(isfile(ARGS.ygi))
+assert(isfile(ARGS.read_per_cell))
+
+if ARGS.ygi_to_focus:
+    assert(isfile(ARGS.ygi_to_focus))
+
+if ARGS.mark_features and ARGS.mark_features != "all":
+    assert(isfile(ARGS.mark_features))
+
+global MATRIX, QT_MATRIX
+
+YGI_INDEX = {}
+YGI_INDEX_REV = {}
+XGI_INDEX = {}
+XGI_INDEX_REV = {}
+
+XGI_DIM, YGI_DIM = None, None
+
+CLUSTER_DICT = defaultdict(list)
+MATRIX = None
+READ_VECTOR = None
+
+BOTTOM_QT, BOTTOM_NORM = {}, {}
+
+CLUSTER_NORM = {}
+CLUSTER_LABELS = []
+MARKED_FEATURES = []
+CLUSTER_RATIO = {}
+QT_MATRIX = None
+NORM_MATRIX = None
+NORM_MATRIX_MEAN = None
+NORM_MATRIX_SUM = None
+ENTROPY = None
+QT_CUTOFF = 0
+
+KMEANS_LABEL = {}
+
+INDIVIDUAL_QT_CUTOFF = {}
+
+CLUSTER_ARGMAX = defaultdict(list)
+
+MEAN_GLOBAL, STD_GLOBAL = None, None
+
+
+def main():
+    """
+    """
+    create_indexes()
+    load_read_per_cell()
+    load_matrix()
+    subset_matrix()
+    load_cluster_file()
+    normalize_features_per_cluster()
+    draw_boxplot()
+    compute_entropy_per_cluster()
+    load_marked_features()
+    draw_normalized_heatmap()
+
+    if ARGS.do_feature_cl_analysis == "heatmap_only":
+        return
+
+    see_tail_distribution()
+    process_global_significant_features()
+    process_top_features()
+    see_individual_tail_distribution()
+    process_individual_significant_features()
+    do_feature_cl_analysis()
+
+    if ARGS.save_figs:
+        outname = '{0}.entropy_report.{1}'.format(
+            ARGS.out,
+            ARGS.ext)
+        plt.tight_layout()
+        FIG.savefig(fname=outname)
+        print("figure file: {0} saved!".format(outname))
+
+    if ARGS.show_figs:
+        plt.tight_layout()
+        plt.show()
+
+
+def load_marked_features():
+    """
+    """
+    global MARKED_FEATURES
+
+    if not ARGS.mark_features:
+        MARKED_FEATURES = False
+        return
+
+    if ARGS.mark_features != "all":
+        marked_features = set([
+            "\t".join(ygi.strip().split("\t")[:3])
+            for ygi in open(ARGS.mark_features)])
+
+    for pos, ygi in YGI_INDEX_REV.items():
+        if ARGS.mark_features == "all":
+            MARKED_FEATURES.append(ygi)
+        elif ygi in marked_features:
+            MARKED_FEATURES.append("*")
+        else:
+            MARKED_FEATURES.append("")
+
+    MARKED_FEATURES = np.asarray(MARKED_FEATURES)
+
+def draw_normalized_heatmap():
+    """
+    """
+    if ARGS.do_feature_cl_analysis != "heatmap_only":
+        return
+
+    matrix = NORM_MATRIX
+
+    if ARGS.row_norm:
+        if ARGS.use_zscore:
+            scaler = MeanScaler()
+            matrix = scaler.fit_transform(matrix)
+        else:
+            matrix /= NORM_MATRIX_SUM
+
+    if ARGS.row_max_norm_for_viz:
+        matrix = (matrix / matrix.max(axis=1))
+
+    fig2, ax = plt.subplots(1,1)
+
+    sns.set(font_scale=2.0)
+    heat2 = sns.heatmap(data=matrix.T,
+                        yticklabels=MARKED_FEATURES,
+                        xticklabels=CLUSTER_LABELS,
+                        cmap=sns.color_palette("Blues"),
+                        cbar=ARGS.plot_cbar,)
+
+    heat2.set_yticklabels(
+        heat2.get_yticklabels(), fontsize=8)
+
+    outname = '{0}.normalized_heatmap.{1}'.format(
+        ARGS.out,
+        ARGS.ext)
+
+    heat2.set_title('{0} features'.format(
+        matrix.shape[1]), fontsize=18)
+
+    plt.tight_layout()
+
+    if ARGS.save_figs:
+        heat2.figure.savefig(fname=outname)
+        print("figure file: {0} saved!".format(outname))
+
+    if ARGS.show_figs:
+        plt.show()
+
+    if ARGS.save_mat:
+        mat_file = '{0}.normalized_heatmap.mat.txt'.format(
+            ARGS.out)
+
+        if ARGS.save_mat == "Frame":
+            ygis = [YGI_INDEX_REV[i] for i in YGI_INDEX_REV]
+            frame = pd.DataFrame(matrix.T,
+                                 columns=CLUSTER_LABELS,
+                                 index=ygis)
+            frame.to_csv(mat_file)
+        else:
+            np.savetxt(fname=mat_file, X=matrix)
+        print("Matrix file created: {0}".format(
+            mat_file))
+
+def draw_boxplot():
+    """
+    """
+    top = 10000
+    frame = {}
+    frame_ratio = {}
+    for cluster in CLUSTER_NORM:
+        frame[cluster] = sorted(CLUSTER_NORM[cluster], reverse=True)[:top]
+        frame_ratio[cluster] = sorted(
+            CLUSTER_RATIO[cluster], reverse=True)[:top]
+
+    frame = pd.DataFrame(frame)
+    frame_ratio = pd.DataFrame(frame_ratio)
+
+    sns.boxplot(data=frame, ax=AXES[0][0])
+    AXES[0][0].set_title(
+        'Normalized cluster-peak accessibility (Top {0} features)'.format(top))
+
+    sns.boxplot(data=frame_ratio, ax=AXES[0][1])
+    AXES[0][1].set_title(
+        'Unnormalized cluster-peak accessibility (Top {0} features)'.format(
+            top))
+
+
+def normalize_features_per_cluster():
+    """
+    Shannon entropy first step
+    """
+    global NORM_MATRIX, NORM_MATRIX_MEAN, NORM_MATRIX_SUM, CLUSTER_LABELS
+
+    t_start = time()
+    print("Iterating over matrix")
+
+    for cluster in CLUSTER_DICT:
+        index = CLUSTER_DICT[cluster]
+        matrix = MATRIX[index]
+        matrix_mean = np.asarray(matrix.mean(axis=0))[0]
+        # Remove empty cells
+        matrix_mean = matrix_mean + 1.0 / MATRIX.shape[0]
+
+        if ARGS.use_RAS_norm:
+            m_read = np.median(READ_VECTOR[index])
+            vector = 1 - np.power((1 - matrix_mean), 1 / m_read)
+        else:
+            vector = matrix_mean
+
+        # bring the column sum to 1
+        vector = vector / vector.sum()
+
+        if cluster.isdigit():
+            cluster = int(cluster)
+
+        CLUSTER_NORM[cluster] = vector
+        CLUSTER_RATIO[cluster] = matrix_mean
+
+    CLUSTER_LABELS = sorted(CLUSTER_NORM)
+
+    print("Normalisation done in {0} s".format(
+        time() - t_start))
+
+
+def compute_entropy_per_cluster():
+    """
+    """
+    global QT_MATRIX, NORM_MATRIX, ENTROPY, NORM_MATRIX_MEAN, NORM_MATRIX_SUM
+    global YGI_INDEX, YGI_INDEX_REV, MATRIX
+
+    t_start = time()
+    print("Computing entropy score...")
+
+    QT_MATRIX = vstack([CLUSTER_NORM[cluster] for cluster in
+                        CLUSTER_LABELS])
+    QT_MATRIX = QT_MATRIX / QT_MATRIX.sum(axis=0)
+
+    NORM_MATRIX = vstack([CLUSTER_NORM[cluster] for cluster in
+                          CLUSTER_LABELS]) * 1e6
+
+    if ARGS.use_zscore:
+        scaler = MeanScaler()
+        NORM_MATRIX = scaler.fit_transform(NORM_MATRIX.T).T
+
+    NORM_MATRIX_MEAN = NORM_MATRIX.mean(axis=0)
+    NORM_MATRIX_SUM = NORM_MATRIX.sum(axis=0)
+
+    ENTROPY = - (QT_MATRIX * np.log(QT_MATRIX)).sum(axis=0)
+
+    QT_MATRIX = ENTROPY - np.log(QT_MATRIX)
+
+    print("Entropy matrix done in {0} s".format(time() - t_start))
+
+    if not ARGS.ygi_to_focus:
+        return
+
+    assert(isfile(ARGS.ygi_to_focus))
+
+    ygi_index = {}
+    ygi_index_rev = {}
+
+    for i, ygi in enumerate(open(ARGS.ygi_to_focus)):
+        ygi = "\t".join(ygi.strip().split("\t")[:3])
+        ygi_index[ygi] = i
+        ygi_index_rev[i] = ygi
+
+    index = [YGI_INDEX[ygi_index_rev[i]] for i in range(len(ygi_index_rev))]
+
+    MATRIX = MATRIX.T[index].T
+    QT_MATRIX = QT_MATRIX.T[index].T
+    NORM_MATRIX = NORM_MATRIX.T[index].T
+    NORM_MATRIX_MEAN = NORM_MATRIX_MEAN[index]
+    NORM_MATRIX_SUM = NORM_MATRIX_SUM[index]
+
+    YGI_INDEX = ygi_index
+    YGI_INDEX_REV = ygi_index_rev
+
+
+def see_tail_distribution():
+    """
+    """
+    global QT_CUTOFF, BOTTOM_NORM, BOTTOM_QT, MEAN_GLOBAL, STD_GLOBAL
+
+    cutoff = int(QT_MATRIX.shape[1] * (1.0 - ARGS.perc_significant_peaks))
+
+    for i in range(QT_MATRIX.shape[0]):
+        argmax = np.argsort(QT_MATRIX[i])[::-1]
+        BOTTOM_QT[i] = QT_MATRIX[i][argmax[:cutoff]]
+        BOTTOM_NORM[i] = NORM_MATRIX[i][argmax[:cutoff]] / NORM_MATRIX_MEAN[argmax[:cutoff]]
+
+        CLUSTER_ARGMAX[i] = argmax
+
+    log_bottom_qt_stack = np.log(hstack([BOTTOM_QT.values()]).reshape(-1))
+    # Fitting log normal
+    hist = AXES[1][0].hist(log_bottom_qt_stack, bins=100, normed=True, label="log(Q_t_p)")
+    AXES[1][0].set_title('Distribution of non-significant cluster-peak entropy scores')
+
+    mixture = GaussianMixture(n_components=2)
+    labels = mixture.fit_predict(log_bottom_qt_stack.reshape(-1, 1))
+
+    pdf = stats.norm.pdf(hist[1], np.mean(log_bottom_qt_stack), np.std(log_bottom_qt_stack))
+    AXES[1][0].plot(hist[1], pdf, 'b-', label="norm")
+
+    color= ['r', 'y']
+
+    means, stds = [], []
+
+    for label in set(labels):
+        index = labels == label
+        mean = np.mean(log_bottom_qt_stack[index])
+        means.append(mean)
+        std = np.std(log_bottom_qt_stack[index])
+        stds.append(std)
+
+        pdf = stats.norm.pdf(hist[1],
+                             mean,
+                             std)
+
+        AXES[1][0].plot(hist[1], pdf, '{0}-'.format(color[label]),
+                        label="norm mixture: {0}".format(label))
+
+    AXES[1][0].legend()
+
+    mean_min = np.argmin(means)
+    MEAN_GLOBAL, STD_GLOBAL = means[mean_min], stds[mean_min]
+
+    QT_CUTOFF = np.exp(stats.norm.ppf(ARGS.level, MEAN_GLOBAL, STD_GLOBAL))
+
+def see_individual_tail_distribution():
+    """
+    """
+    global INDIVIDUAL_QT_CUTOFF
+
+    mixture = GaussianMixture(n_components=2)
+
+    for i in range(QT_MATRIX.shape[0]):
+        log_bottom_qt_stack = np.log(BOTTOM_QT[i]).reshape(-1)
+
+        labels = mixture.fit_predict(log_bottom_qt_stack.reshape(-1, 1))
+
+        means, stds = [], []
+
+        for label in set(labels):
+            index = labels == label
+            mean = np.mean(log_bottom_qt_stack[index])
+            means.append(mean)
+            std = np.std(log_bottom_qt_stack[index])
+            stds.append(std)
+
+        mean_min = np.argmin(means)
+        mean_global, std_gobal = means[mean_min], stds[mean_min]
+
+        qt_cutoff = stats.norm.ppf(ARGS.level, mean_global, std_gobal)
+        INDIVIDUAL_QT_CUTOFF[i] = np.exp(qt_cutoff)
+
+
+def _write_entropy_results_to_bed(cluster_feature_list, folder_name_tag):
+    """
+    """
+    current_path, name = pathsplit(ARGS.out)
+
+    if not current_path:
+        current_path = '.'
+
+    bed_path = '{0}/{1}_entropy_{2}_bed/'.format(
+        current_path.rstrip('/'), name, folder_name_tag)
+
+    if not isdir(bed_path):
+        mkpath(bed_path)
+
+        print("Bed folder was created: {0}".format(bed_path))
+
+    bed_dict = {}
+
+    labels, _ = zip(*cluster_feature_list)
+
+    for label in set(labels):
+        fname = '{0}/cluster_{1}.bed'.format(
+            bed_path, CLUSTER_LABELS[label])
+        bed_dict[CLUSTER_LABELS[label]] = open(fname, 'w')
+
+        print("Creating bed file: {0}".format(fname))
+
+    for xgi, ygi in cluster_feature_list:
+        bed_dict[CLUSTER_LABELS[xgi]].write('{0}\n'.format(YGI_INDEX_REV[ygi]))
+
+
+def process_individual_significant_features():
+    """
+    """
+    y_features = []
+    cluster_feature_list = []
+
+    for cluster in INDIVIDUAL_QT_CUTOFF:
+        cutoff = INDIVIDUAL_QT_CUTOFF[cluster]
+        y_feat = np.nonzero(QT_MATRIX[cluster] < cutoff)[0]
+        y_features += y_feat.tolist()
+
+        cluster_feature_list += [(cluster, f) for f in CLUSTER_ARGMAX[cluster]]
+
+    _write_entropy_results_to_bed(cluster_feature_list, "individual_feature")
+
+    f_out_name = '{0}.individual_feature.tsv'.format(ARGS.out)
+    f_out = open(f_out_name, 'w')
+
+    f_out.write('#cluster\tfeatures\tP_score\tQ_t_p_score\tp-values\n'.format())
+
+    for xgi, ygi in cluster_feature_list:
+        f_out.write('{0}\t{1}\t{2}\t{3}\n'.format(
+            CLUSTER_LABELS[xgi],
+            YGI_INDEX_REV[ygi],
+            NORM_MATRIX[xgi][ygi],
+            QT_MATRIX[xgi][ygi]))
+
+    print("File {0} written!".format(f_out_name))
+
+    matrix = NORM_MATRIX.T[y_features].T
+
+    if ARGS.row_norm:
+        if ARGS.use_zscore:
+            scaler = MeanScaler()
+            matrix = scaler.fit_transform(matrix)
+        else:
+            matrix /= NORM_MATRIX_SUM[y_features]
+
+    heat = sns.heatmap(data=matrix.T,
+                       yticklabels=False,
+                       xticklabels=CLUSTER_LABELS,
+                       cmap=sns.color_palette("Blues"),
+                       ax=AXES[2][1])
+
+    heat.set_title('Normalized accessibility for individual significant features ({0} features)'.format(
+        len(y_features)))
+
+    if ARGS.save_figs:
+        fig2, ax = plt.subplots(1,1)
+
+        sns.set(font_scale=2.0)
+        heat2 = sns.heatmap(data=matrix.T,
+                            yticklabels=False,
+                            xticklabels=CLUSTER_LABELS,
+                            cmap=sns.color_palette("Blues"),
+                            cbar=ARGS.plot_cbar,
+                            ax=ax)
+
+        sns.set(font_scale=1.0)
+
+        outname = '{0}.feature_individual_entropy.{1}'.format(
+            ARGS.out,
+            ARGS.ext)
+        heat2.set_title('{0} features'.format(
+            len(y_features)), fontsize=18)
+
+        plt.tight_layout()
+        heat2.figure.savefig(fname=outname)
+        print("figure file: {0} saved!".format(outname))
+
+
+def process_global_significant_features():
+    """
+    """
+    global MEAN_GLOBAL, STD_GLOBAL
+
+    index = QT_MATRIX < QT_CUTOFF
+    x_features, y_features = np.nonzero(index)
+    score = QT_MATRIX[index]
+
+    out = '{0}.tsv'.format(ARGS.out)
+
+    f_out = open(out, 'w')
+
+    f_out.write('#cluster\tfeatures\tP_score\tQ_t_p_score\tp-values\n')
+
+    _write_entropy_results_to_bed(zip(x_features, y_features), "global_feature")
+
+    for xgi in set(x_features):
+        if ARGS.write_all_feature_scores:
+            index1 = np.arange(len(y_features))
+        else:
+            index1 = x_features == xgi
+
+        index2 = np.argsort(score[index1])
+
+        used_ygi = set()
+
+        for ygi in y_features[index1][index2]:
+            if ygi in used_ygi:
+                continue
+
+            used_ygi.add(ygi)
+
+            f_out.write('{0}\t{1}\t{2}\t{3}\t{4}\n'.format(
+                CLUSTER_LABELS[xgi],
+                YGI_INDEX_REV[ygi],
+                NORM_MATRIX[xgi][ygi],
+                QT_MATRIX[xgi][ygi],
+                stats.norm.cdf(np.log(QT_MATRIX[xgi][ygi]),
+                               MEAN_GLOBAL, STD_GLOBAL)
+            ))
+
+    print("File {0} written!".format(out))
+
+    matrix = NORM_MATRIX.T[y_features].T
+
+    if ARGS.row_norm:
+        if ARGS.use_zscore:
+            scaler = MeanScaler()
+            matrix = scaler.fit_transform(matrix)
+        else:
+            matrix /= NORM_MATRIX_SUM[y_features]
+
+    heat = sns.heatmap(data=matrix.T,
+                       xticklabels=CLUSTER_LABELS,
+                       yticklabels=False,
+                       cmap=sns.color_palette("Blues"),
+                       ax=AXES[1][1])
+
+    heat.set_title('Normalized accessibility for global significant cluster peak features ({0} peaks)'.format(
+        len(y_features)))
+
+    if ARGS.save_figs:
+        fig2, ax = plt.subplots(1,1)
+        sns.set(font_scale=2.0)
+        heat2 = sns.heatmap(data=matrix.T,
+                            yticklabels=False,
+                            xticklabels=CLUSTER_LABELS,
+                            cmap=sns.color_palette("Blues"),
+                            cbar=ARGS.plot_cbar,
+                            ax=ax)
+        sns.set(font_scale=1.0)
+
+        heat2.set_title('{0} features'.format(
+            len(y_features)), fontsize=18)
+        outname = '{0}.feature_global_entropy.{1}'.format(
+            ARGS.out,
+            ARGS.ext)
+        plt.tight_layout()
+        heat2.figure.savefig(fname=outname)
+        print("figure file: {0} saved!".format(outname))
+
+
+def process_top_features():
+    """
+    """
+    y_features = []
+    cluster_feature_list = []
+
+    for cluster in CLUSTER_ARGMAX:
+        argmax = CLUSTER_ARGMAX[cluster]
+        cl_features = argmax[::-1][:ARGS.top_k].tolist()
+        y_features += cl_features
+
+        cluster_feature_list += [(cluster, f) for f in cl_features]
+
+    _write_entropy_results_to_bed(cluster_feature_list,
+                                  "top_{0}_feature".format(ARGS.top_k))
+
+    f_out_name = '{0}.top_feature.tsv'.format(ARGS.out)
+    f_out = open(f_out_name, 'w')
+
+    f_out.write('#cluster\tfeatures\tP_score\tQ_t_p_score\tp-values\n'.format())
+
+    for xgi, ygi in cluster_feature_list:
+        f_out.write('{0}\t{1}\t{2}\t{3}\t{4}\n'.format(
+            CLUSTER_LABELS[xgi],
+            YGI_INDEX_REV[ygi],
+            NORM_MATRIX[xgi][ygi],
+            QT_MATRIX[xgi][ygi],
+            stats.norm.cdf(np.log(QT_MATRIX[xgi][ygi]), MEAN_GLOBAL, STD_GLOBAL)
+        ))
+
+    print("File {0} written!".format(f_out_name))
+
+    matrix = NORM_MATRIX.T[y_features].T
+
+    if ARGS.row_norm:
+        if ARGS.use_zscore:
+            scaler = MeanScaler()
+            matrix = scaler.fit_transform(matrix)
+        else:
+            matrix /= NORM_MATRIX_SUM[y_features]
+
+    heat = sns.heatmap(data=matrix.T,
+                       xticklabels=CLUSTER_LABELS,
+                       yticklabels=False,
+                       cmap=sns.color_palette("Blues"),
+                       ax=AXES[2][0])
+
+    heat.set_title('Normalized accessibility for top {0} cluster peak features'.format(
+        ARGS.top_k))
+
+def load_read_per_cell():
+    """
+    """
+    global READ_VECTOR
+
+    cell_dict = defaultdict(int)
+
+    for line in open(ARGS.read_per_cell):
+        line = line.replace(' ', '\t').split('\t')
+
+        cell_dict[line[0]] = int(line[1])
+
+    READ_VECTOR = np.array([cell_dict[XGI_INDEX_REV[xgi]]
+                            for xgi in range(len(XGI_INDEX))])
+
+def create_indexes():
+    """
+    Create indexes to use with the matrix
+    """
+    global XGI_INDEX, XGI_INDEX_REV, YGI_INDEX_REV
+    global XGI_DIM, YGI_DIM
+
+    for i, line in enumerate(open(ARGS.ygi)):
+        ygi = "\t".join(line.strip().split("\t")[:3])
+        YGI_INDEX[ygi] = i
+        YGI_INDEX_REV[i] = ygi
+
+    YGI_DIM = len(YGI_INDEX)
+
+    XGI_INDEX = {line.strip().split('\t')[0]: i for i, line in
+                 enumerate(open(ARGS.xgi))}
+
+    for i, j in XGI_INDEX.items():
+        XGI_INDEX_REV[j] = i
+
+    XGI_DIM = len(XGI_INDEX)
+
+def subset_matrix():
+    """
+    """
+    global MATRIX, XGI_INDEX, XGI_INDEX_REV, YGI_INDEX, YGI_INDEX_REV
+
+    if not ARGS.xgi_subset and not ARGS.ygi_subset:
+        return
+
+    xgi_subset = set()
+    ygi_subset = set()
+
+    ygi_to_ignore = set()
+    ygi_order = {}
+
+    if ARGS.ygi_to_ignore:
+        for ygi in open(ARGS.ygi_to_ignore):
+            ygi = "\t".join(ygi.strip().split("\t")[:3])
+            ygi_to_ignore.add(ygi)
+
+    if ARGS.xgi_subset:
+        assert(isfile(ARGS.xgi_subset))
+
+        for xgi in open(ARGS.xgi_subset):
+            xgi = xgi.strip().split('\t')[0]
+
+            xgi_subset.add(xgi)
+
+    if ARGS.ygi_subset:
+        assert(isfile(ARGS.ygi_subset))
+
+        for i, ygi in enumerate(open(ARGS.ygi_subset)):
+            ygi = "\t".join(ygi.strip().split('\t')[:3])
+            ygi_subset.add(ygi)
+            ygi_order[i] = ygi
+
+    xgi_subset = list(xgi_subset)
+
+    if xgi_subset:
+        xgi_index = {xgi.split("\t")[0]:i for i, xgi in enumerate(xgi_subset)}
+
+        xgi_index_rev = {}
+
+        for i, j in xgi_index.items():
+            xgi_index_rev[j] = i
+
+        index = [XGI_INDEX[xgi2] for xgi2 in xgi_subset]
+        MATRIX = MATRIX[index]
+
+        XGI_INDEX = xgi_index
+        XGI_INDEX_REV = xgi_index_rev
+
+        print("Subsetting matrix with {0} samples".format(len(xgi_subset)))
+
+    if ygi_subset or ygi_to_ignore:
+        if not ygi_subset:
+            ygi_subset = set(YGI_INDEX.keys())
+            ygi_order = {j:i for i, j in YGI_INDEX.items()}
+
+        ygi_subset = ygi_subset.difference(ygi_to_ignore)
+        ygi_subset = list(ygi_subset)
+
+        ygi_subset = [ygi_order[i] for i in sorted(ygi_order)]
+
+        ygi_index = {}
+        ygi_index_rev = {}
+
+        for i, ygi in enumerate(ygi_subset):
+            ygi_index[ygi] = i
+            ygi_index_rev[i] = ygi
+
+        index = [YGI_INDEX[ygi2] for ygi2 in ygi_subset]
+
+        MATRIX = MATRIX.T[index].T
+
+        YGI_INDEX = ygi_index
+        YGI_INDEX_REV = ygi_index_rev
+
+        print("Subsetting matrix with {0} features".format(len(ygi_subset)))
+
+
+def load_matrix():
+    """
+    """
+    global MATRIX
+    t_start = time()
+    print("Loading sparse matrix...")
+    MATRIX = load_npz(ARGS.sparse_matrix).tocsr()
+
+    try:
+        assert(MATRIX.shape[0] == XGI_DIM)
+        assert(MATRIX.shape[1] == YGI_DIM)
+    except Exception:
+        raise(Exception(
+            "dimension of xgi ygi files: ({0}, {1}) do not match matrix dim: {2}".format(
+                XGI_DIM, YGI_DIM, MATRIX.shape)))
+
+    print("Sparse matrix loaded in {0} s".format(time() - t_start))
+
+
+def load_cluster_file():
+    """
+    """
+    for line in open(ARGS.cluster_file):
+        line = line.strip().split('\t')
+
+        xgi, cluster = line[0].strip(), line[1].strip()
+
+        if xgi not in XGI_INDEX:
+            continue
+
+        CLUSTER_DICT[cluster].append(XGI_INDEX[xgi])
+
+    for cluster in CLUSTER_DICT:
+        CLUSTER_DICT[cluster] = np.asarray(CLUSTER_DICT[cluster])
+
+
+def do_feature_cl_analysis():
+    """
+    """
+    if not ARGS.do_feature_cl_analysis:
+        return
+
+    matrix = NORM_MATRIX.T
+
+    if ARGS.row_norm:
+        if ARGS.use_zscore:
+            scaler = MeanScaler()
+            matrix = scaler.fit_transform(matrix.T).T
+        else:
+            matrix = (matrix.T / NORM_MATRIX_SUM).T
+
+    t_start = time()
+
+    (labels, reindex), K_max = _do_feature_cl_analysis_kmeans_silhouette(matrix)
+
+    if reindex is not None and ARGS.do_feature_cl_analysis == 'kmeans':
+        _write_kmeans_results(labels, K_max)
+
+        matrix = matrix[reindex]
+        labels = labels[reindex]
+
+        if MARKED_FEATURES is not False:
+            marked_features = MARKED_FEATURES[reindex]
+        else:
+            marked_features = False
+
+    sns.set(font_scale=2.0)
+
+    if ARGS.do_feature_cl_analysis == "kmeans":
+
+        if ARGS.row_max_norm_for_viz:
+            matrix = (matrix / matrix.max(axis=1))
+
+        t_start = time()
+        clmap = sns.clustermap(
+            data=matrix,
+            yticklabels=marked_features,
+            xticklabels=CLUSTER_LABELS,
+            row_colors=_get_color_dict(labels),
+            row_cluster=False,
+            col_cluster=ARGS.col_cluster,
+            cmap=sns.color_palette("Blues"))
+
+        if not ARGS.plot_cbar:
+            clmap.cax.set_visible(False)
+
+        print("Kmeans clustermap done in {0} s".format(time() - t_start))
+
+        clmap.ax_heatmap.set_yticklabels(
+            clmap.ax_heatmap.get_yticklabels(), fontsize=8)
+
+        clmap.ax_heatmap.set_title('{0} features'.format(
+            NORM_MATRIX.shape[1]), fontsize=20)
+
+    else:
+        clmap = sns.clustermap(
+            data=matrix,
+            yticklabels=False,
+            xticklabels=CLUSTER_LABELS,
+            row_colors=_get_color_dict(labels),
+            row_cluster=True,
+            col_cluster=True,
+            # cbar=False,
+            cmap=sns.color_palette("Blues"))
+
+        print("Clustermap for feature analysis done in {0} s".format(
+            time() - t_start))
+
+        clmap.fig.suptitle('{0} features'.format(
+            NORM_MATRIX.shape[1]), fontsize=20)
+
+    if ARGS.save_figs:
+        plt.tight_layout()
+        if labels is not None:
+            outname = '{0}.feature_clustermap.{2}_best_K_{1}.{3}'.format(
+                ARGS.out,
+                K_max,
+                ARGS.do_feature_cl_analysis,
+                ARGS.ext)
+
+            t_start = time()
+            clmap.savefig(fname=outname)
+            print("Figure saved in {0} s".format(time() - t_start))
+
+        else:
+            outname = '{0}.feature_clustermap.{1}'.format(
+                ARGS.out,
+                ARGS.ext)
+            clmap.savefig(fname=outname)
+
+        print("figure file: {0} saved!".format(outname))
+
+
+def _write_kmeans_results(labels, K_max):
+    """
+    """
+    current_path, name = pathsplit(ARGS.out)
+
+    if not current_path:
+        current_path = '.'
+
+    bed_path = '{0}/{1}_kmeans_K_{2}_bed/'.format(
+        current_path.rstrip('/'), name, K_max)
+
+    if not isdir(bed_path):
+        mkpath(bed_path)
+
+        print("Bed folder was created: {0}".format(bed_path))
+
+    bed_dict = {}
+
+    for label in set(labels):
+        fname = '{0}/cluster_{1}.bed'.format(
+            bed_path, label)
+        bed_dict[label] = open(fname, 'w')
+
+        print("Creating bed file: {0}".format(fname))
+
+    for pos, label in enumerate(labels):
+        bed_dict[label].write('{0}\n'.format(YGI_INDEX_REV[pos]))
+
+
+def _do_feature_cl_analysis_kmeans_silhouette(matrix):
+    """
+    """
+    if ARGS.kmeans_clusters and isinstance(ARGS.kmeans_clusters, int):
+        ARGS.kmeans_clusters = [ARGS.kmeans_clusters]
+
+    if not ARGS.kmeans_clusters:
+        return None, None
+
+    res = {}
+    K_max = None
+
+    if ARGS.cluster_eval_metric == "daviesbouldin":
+        score_max = 10000000
+    else:
+        score_max = 0
+
+    for K in ARGS.kmeans_clusters:
+        labels, reindex = _do_feature_cl_analysis_kmeans(matrix, K)
+        t_start = time()
+
+        if ARGS.cluster_eval_metric == "daviesbouldin":
+            sil_score = davies_bouldin_score(matrix, labels)
+            print("Davis computed in {0} s".format(time() - t_start))
+            print("## Davis Bouldin score: {0} K: {1}".format(sil_score, K))
+        else:
+            sil_score = silhouette_score(matrix, labels)
+            print("Silhouette score computed in {0} s".format(time() - t_start))
+            print("## Silhouette score: {0} K: {1}".format(sil_score, K))
+
+        res[K] = (labels, reindex)
+
+        if ARGS.cluster_eval_metric == "daviesbouldin":
+            cond = sil_score < score_max
+        else:
+            cond = sil_score > score_max
+
+        if cond:
+            score_max = sil_score
+            K_max = K
+
+    print("#### Best score: {0} K: {1}".format(score_max, K_max))
+
+    return res[K_max], K_max
+
+
+def _do_feature_cl_analysis_kmeans(matrix, K=None):
+    """
+    """
+    if not K:
+        return None, None
+
+    kmeans = KMeans(n_clusters=K)
+
+    t_start = time()
+    labels = kmeans.fit_predict(matrix)
+    print("Kmeans done in {0} s".format(time() - t_start))
+
+    reindex_dict = defaultdict(list)
+
+    for pos, label in enumerate(labels):
+        reindex_dict[label].append(pos)
+
+    reindex = [pos for label in reindex_dict
+               for pos in reindex_dict[label]]
+
+    return labels, reindex
+
+
+def _get_color_dict(cluster_labels):
+    """
+    """
+    if cluster_labels is None:
+        return None
+
+    cluster_set = set(cluster_labels)
+
+    blue = Color("blue")
+
+    color_range = list(blue.range_to("red", len(cluster_set)))
+    color_dict = {c:color_range[c].get_hex_l() for c in range(len(cluster_set))}
+
+    return [color_dict[c] for c in cluster_labels]
+
+
+
+if __name__ == '__main__':
+    main()

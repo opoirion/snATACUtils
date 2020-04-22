@@ -1,0 +1,8 @@
+scikit-learn
+numpy
+scipy
+pandas
+matplotlib
+pylab
+seaborn
+colour
