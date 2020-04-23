@@ -258,7 +258,6 @@ func scanBedFileAndAddAnnotation(refPos [3]int) {
 		uniqueBed = make(map[string]bool)
 	}
 
-
 	if UNIQREF {
 		peakIntervalTreeObject = utils.CreatePeakIntervalTreeObjectFromFile(
 			BEDFILENAME)
@@ -432,7 +431,7 @@ func checkifUniqueRef(peakstr string, refpeakID uintptr, refPos [3]int,
 		return true
 	}
 
-	var refpeak utils.Peak
+	var refpeak, toppeak utils.Peak
 	var topID uintptr
 	var centerDistance, minCenterDistance float64
 	var intervalCenter, tss int
@@ -441,7 +440,6 @@ func checkifUniqueRef(peakstr string, refpeakID uintptr, refPos [3]int,
 	refpeakstr = utils.INTERVALMAPPING[refpeakID]
 
 	refpeak.StringToPeakWithPos(refpeakstr, refPos)
-
 	inttree := intervalObject.Chrintervaldict[refpeak.Chr()]
 
 	intervals := inttree.Get(
@@ -464,6 +462,7 @@ func checkifUniqueRef(peakstr string, refpeakID uintptr, refPos [3]int,
 	}
 
 	toppeakstr = (*intervalObject).Intervalmapping[topID]
+	toppeak.StringToPeak(toppeakstr)
 
-	return toppeakstr == peakstr
+	return peakstr == toppeak.PeakToString()
 }
