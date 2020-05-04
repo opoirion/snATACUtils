@@ -48,6 +48,7 @@ ATACSimUtils -h
 ATACtools -h
 ATACTopFeatures -h
 BAMutils -h
+ATACAnnotateRegions -h
 ```
 
 ## ATACdemultiplex: Fastq files demultiplexification
@@ -66,20 +67,21 @@ if -cluster is provided, TSS is computed per cluster and -xgi argument is ignore
 
 ```bash
 #################### MODULE TO CREATE (cell x genomic region) SPARSE MATRIX ########################
-"""Boolean peak matrix: -coo """
-transform one (-bed) or multiple (use multiple -beds option) into a boolean sparse matrix in COO format
-                USAGE: ATACMatTools -coo -bed  <bedFile> -ygi <bedFile> -xgi <fname>
+"""Boolean / interger Peak matrix """
+transform one (-bed) or multiple bed files into a sparse matrix
+USAGE: ATACMatTools -coo -bed  <bedFile> -ygi <bedFile> -xgi <fname> (-threads <int> -out <fname> -use_count -taiji -bed <fileName2>)
 
 """Create a cell x bin matrix: -bin """
-transform one (-bed) or multiple (use multiple -beds option) into a bin (using float) sparse matrix in COO format. If ygi provided, reads intersecting these bin are ignored
+transform one (-bed) or multiple (use multiple -bed options) bed file into a bin (using float) sparse matrix. If ygi provided, reads intersecting these bin are ignored
 
-USAGE: ATACMatTools -bin -bed  <bedFile> (optionnal -ygi <bedFile> -xgi <fname>) -norm
+USAGE: ATACMatTools -bin -bed  <bedFile> (optional -ygi <bedFile> -xgi <fname> -bin_size <int> -ygi_out <string> -norm -taiji -coo)
 
 """Count the number of reads in peaks for each cell: -count """
-USAGE: ATACMatTools -count  -xgi <fname> -ygi <bedfile> -bed <bedFile>
+USAGE: ATACMatTools -count  -xgi <fname> -ygi <bedfile> -bed <bedFile> (optionnal: -out <fname> -norm)
 
 """Merge multiple matrices results into one output file: -merge """
-USAGE: ATACMatTools -coo -merge -xgi <fname> -in <matrixFile1> -in <matrixFile2> ...
+It can be used to convert taiji to coo or coo to taiji formats.
+USAGE: ATACMatTools -coo/taiji -merge -xgi <fname> -in <matrixFile1> -in <matrixFile2> ... (optional -bin -use_count -out <fname>)
 ```
 
 ## BAMutils: Suite of functions dedicated to process BAM or BED files
@@ -88,13 +90,13 @@ USAGE: ATACMatTools -coo -merge -xgi <fname> -in <matrixFile1> -in <matrixFile2>
 #################### Suite of functions dedicated to process BAM or BED files ########################
 
 -bed_to_bedgraph: Transform one (-bed) or multiple (use multiple -beds option) into bedgraph
-USAGE: BAMutils -bed_to_bedgraph -bed <fname> (-out <fname> -threads <int> -cellsID <fname> -split)
+USAGE: BAMutils -bed_to_bedgraph -bed <fname> (-out <fname> -threads <int> -cellsID <fname> -split -binsize <int> -refchr <filename>)
 
 -create_cell_index: Create cell index (cell -> read Counts) for a bam or bed file
 USAGE: BAMutils -create_cell_index -bed/bam <name> -out <output name> (-sort)
 
 -divide: Divide the bam/bed file according to barcode file list
-USAGE: BAMutils -divide -bed/bam <fname> (-cell_index <fname> -threads <int> -cellsID <fname>)
+USAGE: BAMutils -divide -bed/bam <fname> (-cell_index <fname> -threads <int> -cellsID <fname> -out <fname>)
 
 -divide_parallel: Divide the bam file according to barcode file list using a parallel version
 USAGE: BAMutils -divide_parallel -cell_index <fname> -bed/bam <fname> (-threads <int>)
@@ -104,6 +106,9 @@ USAGE: BAMutils -split -bed <bedfile> (-out <string> -cellsID <string>)
 
 -downsample: Downsample the number of reads from a a bed file (downsample = 1.0 is 100 perc. and downsample = 0.0 is 0 perc. of the reads)
 USAGE: BAMutils -downsample <float> -bed <bedfile> (-out <string> -cellsID <string>)
+
+-bamtobed: Transform a 10x BAM file to a bed file with each read in a new line and using the "CB:Z" field as barcode
+USAGE: BAMutils -bamtobed -bam <filename> -out <bedfile> (-optionnal -cellsID <filename> -threads <int> -tag <string>)
 ```
 
 ## ATACTopFeatures: Module to inter significant cluster peaks using a peak list, a bed file and cell ID <-> cluster ID file
@@ -112,13 +117,13 @@ USAGE: BAMutils -downsample <float> -bed <bedfile> (-out <string> -cellsID <stri
 ```bash
 #################### MODULE TO INFER SIGNIFICANT CLUSTER PEAKS ########################
 
--chi2: Full individual chi2 computation for each peak with FDR correction using Benjamini-Hochberg correction. Not recommended because using golang suboptimal chi2 implementation
+"""full individual chi2 computation for each peak with FDR correction using Benjamini-Hochberg correction. Not recommended because using golang suboptimal chi2 implementation"""
 USAGE: ATACTopFeatures -chi2 -bed <fname> -peak <fname> -cluster <fname> (optionnal -out <string> -threads <int> -alpha <float> -write_all -split <int>)
 
--create_contingency: Create contingency table for each feature and each cluster
+"""Create contingency table for each feature and each cluster"""
 USAGE: ATACTopFeatures -create_contingency -bed <fname> -peak <fname> -cluster <fname> (optionnal -out <string> -threads <int>)
 
--pvalue_correction: Correct feature pvalue for multiple tests performed or each cluster using the Benjamini-Hochberg correction
+"""correct feature pvalue for multiple tests performed or each cluster"""
 USAGE: ATACTopFeatures -pvalue_correction -ptable <fname> (optionnal -out <string> -threads <int> -alpha <float> -write_all)
 ```
 
@@ -142,7 +147,7 @@ USAGE: ATACSimUtils -simulate -nb <int> -mean <float> std <float> -bed <bedfile>
 USAGE: ATACtools -bed_to_cicero -filename <bedfile> (-filenames <bedfile2> -filenames <bedfile3> ...  -ignoreerror)
 
 -create_ref_fastq: Create a ref FASTQ file using a reference barcode list
-USAGE: ATACtools -create_ref_bed -filename <fname> (-ref_barcode_list <fname> -tag <string>)
+USAGE: ATACtools -create_ref_bed -filename <fname> (-ref_barcode_list <fname> -tag <string> -output <string>)
 
 -merge: Merge input log files together
 USAGE: ATACtools -merge -filenames <fname1> -filenames <fname2> -filenames <fname3> ...  (-sortfile -delimiter "<string>" -ignoreerror -ignore_sorting_category)
@@ -157,7 +162,31 @@ USAGE: ATACtools -write_compl <fastq_file> (-compl_strategy <"split_10_compl_sec
 USAGE ATACtools -scan -filename <string> (-printlastline -printlastlines <int> -search_in_line <string> -gotoline <int>)
 
 -create_barcode_dict: Create a barcode key / value count file
-USAGE: ATACtools -create_barcode_list -filename <fname> (-sortfile -delimiter <string>)
+USAGE: ATACtools -create_barcode_dict -filename <fname> (-sortfile -delimiter <string>)
+
+-clean: clean file from unwanted lines
+USAGE: ATACtools -clean -filename <fname> -output filename -clean_pattern "\n"
+```
+
+
+## ATACAnnotateregions: Module to annotate genomic regions from bed file using a reference bed file containing annotation
+
+```bash
+
+#################### MODULE TO ANNOTATE GENOMIC REGIONS FROM BED FILES ########################
+This software presents some similarities with bedtools usage however it provides better customisations for bed file annotation when comparing two bed files with interesecting regions
+
+"""Annotate bed file using a reference bed file containing the annotations"""
+USAGE: ATACAnnotateRegions -bed <file> -ref <file> (optionnal -out <string> -unique -unique_ref -intersect -write_ref -edit -ref_sep "[3]int" -ref_symbol "[]int|str" -diff -stdout -annotate_line)
+
+for -ref_sep and -ref_symbol options, the input should be a string of numbers separated by whitespace and delimited with ". -ref_sep needs exactly three positions: 1) for the chromosomes column, 2) for the begining and 3) for the end of the region
+
+Example: ATACAnnotateRegions -bed regionToAnnotate.bed -ref referenceAnnotation.tsv -ref_sep "0 1 2" -ref_symbol "4 5"
+
+-ref_sep and -symbol_pos can be blank with " or comma separated: i.e."0 1 2" or 0,1,2. Also symbol_pos an be a generic string to annotate all ref regions
+
+Here the three first columns of referenceAnnotation.tsv will be used to identify chromosome (column 0), start (column 1), and end (column 2) of each region, and regionToAnnotate.bed will be annotatd using columns 4 and 5 from referenceAnnotation.tsv
+
 ```
 
 ## ATACeQTLUtils: Module to deal with eQTL from bed files and snATAC-Seq

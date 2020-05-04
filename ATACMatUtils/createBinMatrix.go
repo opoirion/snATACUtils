@@ -21,12 +21,6 @@ type binPos struct {
 /*BININDEX dict for bin index: map[bin]index */
 var BININDEX map[binPos]uint
 
-/*TOTALREADSCELL dict for total number of reads per cell map[cellID]total */
-var TOTALREADSCELL map[uint]float64
-
-/*BINSPARSEMATRIX map[cellID]map[bin]float64*/
-var BINSPARSEMATRIX []map[uint]float64
-
 /*BINSIZE bin size for bin matrix */
 var BINSIZE int
 
@@ -38,11 +32,11 @@ var BININDEXMUTEX sync.Mutex
 
 
 func createBinSparseMatrix() {
-	CELLIDCOUNT = make(map[string]int)
-
 	loadCellIDDict(CELLSIDFNAME)
+
 	XGIDIM = len(CELLIDDICT)
-	initBinSparseMatrix()
+	initIntSparseMatrix()
+	BININDEX = make(map[binPos]uint)
 
 	if PEAKFILE != "" {
 		YGIDIM = utils.LoadPeaks(PEAKFILE)
@@ -54,18 +48,9 @@ func createBinSparseMatrix() {
 	}
 
 	if TAIJI {
-		writeBinMatrixToTaijiFile(FILENAMEOUT)
+		writeIntMatrixToTaijiFile(FILENAMEOUT, true)
 	} else {
-		writeBinMatrixToCOOFile(FILENAMEOUT)
-	}
-}
-
-func initBinSparseMatrix() {
-	BINSPARSEMATRIX = make([]map[uint]float64, XGIDIM)
-	BININDEX = make(map[binPos]uint)
-
-	for _, pos := range CELLIDDICT {
-		BINSPARSEMATRIX[pos] = make(map[uint]float64)
+		writeIntMatrixToCOOFile(FILENAMEOUT)
 	}
 }
 
@@ -84,10 +69,6 @@ func scanBedFileForBinMat() {
 
 	bedReader, file := BEDFILENAME.ReturnReader(0)
 	defer utils.CloseFile(file)
-
-	if NORM {
-		TOTALREADSCELL = make(map[uint]float64)
-	}
 
 	for bedReader.Scan() {
 		line = bedReader.Text()
@@ -116,7 +97,7 @@ func scanBedFileForBinMat() {
 			TOTALREADSCELL[cellID]++
 		}
 
-		BINSPARSEMATRIX[cellID][featureID]++
+		INTSPARSEMATRIX[cellID][featureID]++
 	}
 
 	YGIDIM = len(binList)
@@ -163,61 +144,6 @@ func writeBinList(binList []binPos) {
 	fmt.Printf("File %s written!\n", outfname)
 }
 
-
-func writeBinMatrixToCOOFile(outfile string) {
-	fmt.Printf("writing Bin matrix to output file...\n")
-	tStart := time.Now()
-
-	var buffer bytes.Buffer
-	var cellPos int
-	var index uint
-	var binValue float64
-	var err error
-
-	writer := utils.ReturnWriter(outfile)
-
-	defer utils.CloseFile(writer)
-
-	count := 0
-
-	for cellPos = range BINSPARSEMATRIX {
-		for index = range BINSPARSEMATRIX[cellPos] {
-			buffer.WriteString(strconv.Itoa(cellPos))
-			buffer.WriteString(SEP)
-			buffer.WriteString(strconv.Itoa(int(index)))
-			buffer.WriteString(SEP)
-
-			binValue = BINSPARSEMATRIX[cellPos][index]
-
-			if NORM {
-				binValue = binValue / TOTALREADSCELL[uint(cellPos)]
-			}
-
-			buffer.WriteString(strconv.FormatFloat(binValue, 'f', 10, 64))
-			buffer.WriteRune('\n')
-
-			count++
-
-			if count > 100000 {
-				_, err = writer.Write(buffer.Bytes())
-				utils.Check(err)
-				buffer.Reset()
-				count = 0
-
-			}
-		}
-	}
-
-	_, err = writer.Write(buffer.Bytes())
-	utils.Check(err)
-	buffer.Reset()
-
-	fmt.Printf("file: %s created!\n", outfile)
-	tDiff := time.Since(tStart)
-	fmt.Printf("Writting done in time: %f s \n", tDiff.Seconds())
-}
-
-
 func createBinSparseMatrixOneFileThreading(bedfilename utils.Filename) {
 	var nbReads uint
 	var bufferLine1 [BUFFERSIZE]string
@@ -231,10 +157,6 @@ func createBinSparseMatrixOneFileThreading(bedfilename utils.Filename) {
 	var waiting sync.WaitGroup
 
 	bedReader, file := bedfilename.ReturnReader(0)
-
-	if NORM {
-		TOTALREADSCELL = make(map[uint]float64)
-	}
 
 	defer utils.CloseFile(file)
 
@@ -383,7 +305,7 @@ func updateBinSparseMatrixOneThread(bufferLine * [BUFFERSIZE]string, bufferStart
 			TOTALREADSCELL[cellID]++
 		}
 
-		BINSPARSEMATRIX[cellID][featureID]++
+		INTSPARSEMATRIX[cellID][featureID]++
 	}
 
 	BININDEXMUTEX.Unlock()

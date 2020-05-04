@@ -304,18 +304,18 @@ func createPeakIntervalTree(peakPos [3]int, sep string, verbose bool) {
 		end, err = strconv.Atoi(strings.Trim(split[peakPos[2]], "\n"))
 		Check(err)
 
-		int := IntInterval{
+		inter := IntInterval{
 			Start: start, End: end}
-		int.UID = uintptr(uintptr(pos))
+		inter.UID = uintptr(uintptr(pos))
 
 		if _, isInside = CHRINTERVALDICT[chroStr];!isInside {
 			CHRINTERVALDICT[chroStr] = &interval.IntTree{}
 		}
 
-		err = CHRINTERVALDICT[chroStr].Insert(int, false)
+		err = CHRINTERVALDICT[chroStr].Insert(inter, false)
 		Check(err)
 
-		INTERVALMAPPING[int.ID()] = key
+		INTERVALMAPPING[inter.ID()] = key
 	}
 
 	tDiff := time.Since(tStart)

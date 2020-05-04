@@ -18,6 +18,7 @@ import(
 	"sync"
 	"path"
 	"sort"
+	"math"
 )
 
 
@@ -60,14 +61,20 @@ var SPLIT int
 /*SEP separator for writing output */
 var SEP string
 
-/*CELLIDCOUNT cell ID<->count */
-var CELLIDCOUNT map[string]int
+/*TOTALREADSCELL dict for total number of reads per cell map[cellID]total */
+var TOTALREADSCELL []int
 
-/*CELLIDCOUNT2 cell ID<->count */
-var CELLIDCOUNT2 map[string]int
+/*CELLIDREADINPEAK cell ID<->count reads in peaks  */
+var CELLIDREADINPEAK map[string]int
+
+/*CELLIDCOUNTALL cell ID<->count tot number of reads per cell */
+var CELLIDCOUNTALL map[string]int
 
 /*CELLIDDICT cell ID<->pos */
 var CELLIDDICT map[string]uint
+
+/*CELLIDDICTCOMP cell ID<->pos */
+var CELLIDDICTCOMP []string
 
 /*MUTEX global mutex */
 var MUTEX *sync.Mutex
@@ -77,6 +84,9 @@ var CELLMUTEXDICT map[uint]*sync.Mutex
 
 /*INTSPARSEMATRIX cell x feature sparse matrix  */
 var INTSPARSEMATRIX []map[uint]int
+
+/*FLOATSPARSEMATRIX cell x feature sparse matrix  */
+var FLOATSPARSEMATRIX []map[uint]float64
 
 /*FILENAMEOUT  output file name output */
 var FILENAMEOUT string
@@ -99,11 +109,54 @@ var YGISYMBOL bool
 /*YGITOSYMBOL link ygi featurePos to symbol feature pos */
 var YGITOSYMBOL []uint
 
+/*YGISIZE size of YGI */
+var YGISIZE []int
+
+/*SYMBOLLIST ordered list of symbol */
+var SYMBOLLIST []string
+
+/*NORMTYPESTR string */
+var NORMTYPESTR string
+
+/*NORMTYPE normType */
+var NORMTYPE normType
+
 /*BUFFERSIZE buffer size for multithreading */
 const BUFFERSIZE = 1000000
 
 /*ALL bool indicating if all cells should be merged for count option */
 var ALL bool
+
+type normType string
+
+const (
+	fpkm normType = "fpkm"
+	logfpkm normType = "logfpkm"
+	rpm normType = "rpm"
+	logrpm normType = "logrpm"
+	simple normType = "simple"
+	none normType = ""
+)
+
+func (t *normType) isValid() {
+	switch *t {
+	case none:
+		return
+	case rpm, simple, logrpm:
+		NORM = true
+		USECOUNT = true
+	case fpkm, logfpkm:
+		NORM = true
+		USECOUNT = true
+
+		if READINPEAK {
+			panic(" Cannot use pfkm|logfpkm with -count ")
+		}
+
+	default:
+		panic("Wrong -norm_type Normalisation type! possible value: rpm|fpkm|logrpm|logfpkm ")
+	}
+}
 
 type mattype string
 
@@ -169,7 +222,8 @@ if used, the program will output the list of ordered symbol corresponding to the
 	flag.BoolVar(&ALL, "all", false,
 		`Count the reads in peaks for the input bed file in its hole`)
 
-	flag.BoolVar(&NORM, "norm", false, "Normalize bin matrix / count per read depth for each cell")
+	flag.BoolVar(&NORM, "norm", false, "Normalize raw count by dividing using the total number of reads per cell (equivalent to -norm_type simple)")
+	flag.StringVar(&NORMTYPESTR, "norm_type", "", "Normalisation type to use: simple|rpm|log10(rpm)|fpkm. Simple divides the feature values by the total number of read count per cell (equivalent to norm)")
 
 	flag.BoolVar(&CREATEBINMATRIX, "bin", false,
 		`transform one (-bed) or multiple (use multiple -beds option) into a bin (using float) sparse matrix in COO format.`)
@@ -180,6 +234,13 @@ if used, the program will output the list of ordered symbol corresponding to the
 
 	var tag string
 
+	NORMTYPE = normType(NORMTYPESTR)
+
+	if NORM && NORMTYPE == "" {
+		NORMTYPE = "simple"
+	}
+
+	NORMTYPE.isValid()
 
 	if CREATEBINMATRIX {
 		tag = "bin."
@@ -248,7 +309,7 @@ func loadSymbolFileWriteOutputSymbol() int {
 	var symbol,line string
 	var split []string
 
-	symbolList := []string{}
+	SYMBOLLIST = []string{}
 
 	scanner, file := PEAKFILE.ReturnReader(0)
 
@@ -275,7 +336,7 @@ func loadSymbolFileWriteOutputSymbol() int {
 
 		if !symbolSet[symbol] {
 			symbolSet[symbol] = true
-			symbolList = append(symbolList, symbol)
+			SYMBOLLIST = append(SYMBOLLIST, symbol)
 		}
 
 		symbolMap[i] = symbol
@@ -283,22 +344,56 @@ func loadSymbolFileWriteOutputSymbol() int {
 		i++
 	}
 
-	sort.Strings(symbolList)
+	sort.Strings(SYMBOLLIST)
 
 	YGITOSYMBOL = make([]uint, YGIDIM)
 
-	for indexNew, symbol  := range symbolList {
+	for indexNew, symbol  := range SYMBOLLIST {
 		indexOld := symbolMapRev[symbol]
 		YGITOSYMBOL[indexOld] = uint(indexNew)
 	}
 
-	fmt.Printf("symbol file loaded. New dim: %d\n", len(symbolList))
-	writeSymbol(symbolList)
+	fmt.Printf("symbol file loaded. New dim: %d\n", len(SYMBOLLIST))
+	writeSymbol(SYMBOLLIST)
 
-	return 	len(symbolList)
+	return len(SYMBOLLIST)
 }
 
-func writeSymbol(symbolList []string) {
+
+func loadYgiSize() {
+
+	switch NORMTYPE {
+	case fpkm, logfpkm:
+	default:
+		return
+	}
+
+	var peak utils.Peak
+
+	useSymbol := len(YGITOSYMBOL) != 0
+
+	YGISIZE = make([]int, YGIDIM)
+
+	if CREATEBINMATRIX {
+		for pos := 0; pos < YGIDIM; pos ++ {
+			YGISIZE[pos] = BINSIZE
+		}
+
+		return
+	}
+
+	for peakstr, pos := range utils.PEAKIDDICT {
+		peak.StringToPeak(peakstr)
+
+		if useSymbol {
+			pos = YGITOSYMBOL[pos]
+		}
+
+		YGISIZE[pos] += peak.End - peak.Start
+	}
+}
+
+func writeSymbol(SYMBOLLIST []string) {
 	var buffer bytes.Buffer
 
 	ext := path.Ext(FILENAMEOUT)
@@ -307,7 +402,7 @@ func writeSymbol(symbolList []string) {
 	writer := utils.ReturnWriter(filename)
 	defer utils.CloseFile(writer)
 
-	for _, symbol := range symbolList {
+	for _, symbol := range SYMBOLLIST {
 		buffer.WriteString(symbol)
 		buffer.WriteRune('\n')
 	}
@@ -328,10 +423,10 @@ func computeReadsInPeaksForCell(){
 	YGIDIM = utils.LoadPeaks(PEAKFILE)
 	utils.CreatePeakIntervalTree()
 
-	CELLIDCOUNT = make(map[string]int)
+	CELLIDREADINPEAK = make(map[string]int)
 
 	if NORM {
-		CELLIDCOUNT2 = make(map[string]int)
+		CELLIDCOUNTALL = make(map[string]int)
 	}
 
 	fmt.Printf("init mutexes...\n")
@@ -348,6 +443,24 @@ func initIntSparseMatrix() {
 
 	for _, pos := range CELLIDDICT {
 		INTSPARSEMATRIX[pos] = make(map[uint]int)
+	}
+
+	if NORM {
+		TOTALREADSCELL = make([]int, XGIDIM)
+	}
+}
+
+
+func initFloatSparseMatrix() {
+	FLOATSPARSEMATRIX = make([]map[uint]float64, XGIDIM)
+	BININDEX = make(map[binPos]uint)
+
+	for _, pos := range CELLIDDICT {
+		FLOATSPARSEMATRIX[pos] = make(map[uint]float64)
+	}
+
+	if NORM {
+		TOTALREADSCELL = make([]int, XGIDIM)
 	}
 }
 
@@ -463,11 +576,13 @@ func initMutexDict() {
 
 func writeIntMatrixToCOOFile(outfile string) {
 	fmt.Printf("writing to output file...\n")
+	loadYgiSize()
 
 	var buffer bytes.Buffer
 	var cellPos int
 	var featPos uint
 	var err error
+	var normedValue float64
 
 	writer := utils.ReturnWriter(outfile)
 
@@ -477,11 +592,21 @@ func writeIntMatrixToCOOFile(outfile string) {
 
 	for cellPos = range INTSPARSEMATRIX {
 		for featPos = range INTSPARSEMATRIX[cellPos] {
+
 			buffer.WriteString(strconv.Itoa(cellPos))
 			buffer.WriteString(SEP)
 			buffer.WriteString(strconv.Itoa(int(featPos)))
 			buffer.WriteString(SEP)
-			buffer.WriteString(strconv.Itoa(INTSPARSEMATRIX[cellPos][featPos]))
+
+			if NORM {
+				normedValue = normValue(
+					INTSPARSEMATRIX[cellPos][featPos],
+					cellPos, int(featPos))
+				buffer.WriteString(strconv.FormatFloat(normedValue, 'f', 7, 64))
+			} else {
+				buffer.WriteString(strconv.Itoa(INTSPARSEMATRIX[cellPos][featPos]))
+			}
+
 			buffer.WriteRune('\n')
 
 			bufSize++
@@ -502,11 +627,95 @@ func writeIntMatrixToCOOFile(outfile string) {
 	fmt.Printf("file: %s created!\n", outfile)
 }
 
+func writeFloatMatrixToCOOFile(outfile string) {
+	fmt.Printf("writing to output file...\n")
+
+	var buffer bytes.Buffer
+	var cellPos int
+	var featPos uint
+	var err error
+	var normedValue float64
+
+	writer := utils.ReturnWriter(outfile)
+
+	defer utils.CloseFile(writer)
+
+	bufSize := 0
+
+	for cellPos = range FLOATSPARSEMATRIX {
+		for featPos = range FLOATSPARSEMATRIX[cellPos] {
+
+			buffer.WriteString(strconv.Itoa(cellPos))
+			buffer.WriteString(SEP)
+			buffer.WriteString(strconv.Itoa(int(featPos)))
+			buffer.WriteString(SEP)
+
+			normedValue = FLOATSPARSEMATRIX[cellPos][featPos]
+			buffer.WriteString(strconv.FormatFloat(normedValue, 'f', 7, 64))
+
+			buffer.WriteRune('\n')
+
+			bufSize++
+
+			if bufSize > 50000 {
+				_, err = writer.Write(buffer.Bytes())
+				utils.Check(err)
+				buffer.Reset()
+				bufSize = 0
+			}
+		}
+	}
+
+	_, err = writer.Write(buffer.Bytes())
+	utils.Check(err)
+	buffer.Reset()
+
+	fmt.Printf("file: %s created!\n", outfile)
+}
+
+func normValue(value int, cellID, featID int) (valueFloat float64) {
+	valueFloat  = float64(value)
+
+	switch NORMTYPE {
+	case simple:
+		valueFloat = valueFloat / float64(TOTALREADSCELL[cellID])
+	case rpm:
+		valueFloat = valueFloat * 1e6 / float64(TOTALREADSCELL[cellID])
+	case logrpm:
+		valueFloat = math.Log((1 + valueFloat) * 1e6 /
+			float64(TOTALREADSCELL[cellID]))
+	case fpkm:
+		valueFloat = valueFloat * 1e9 /
+			(float64(TOTALREADSCELL[cellID]) * float64(YGISIZE[featID]))
+	case logfpkm:
+		valueFloat = math.Log((1 + valueFloat) * 1e9 /
+			(float64(TOTALREADSCELL[cellID]) * float64(YGISIZE[featID])))
+	}
+
+	return valueFloat
+}
+
+
+func normValueForReadInPeaks(value float64, cellIDstr string) float64 {
+	switch NORMTYPE {
+	case simple:
+		value = float64(CELLIDREADINPEAK[cellIDstr]) / float64(CELLIDCOUNTALL[cellIDstr])
+	case rpm:
+		value = float64(CELLIDREADINPEAK[cellIDstr]) * 1e6 / float64(CELLIDCOUNTALL[cellIDstr])
+	case logrpm:
+		value = float64(CELLIDREADINPEAK[cellIDstr]) * 1e6 / float64(CELLIDCOUNTALL[cellIDstr])
+		value = math.Log10(value)
+	}
+
+	return value
+}
+
 func writeCellCounter(outfile string) {
 	var buffer bytes.Buffer
 	var cellID string
 	var err error
-	var value float64
+	var value int
+	var valueFloat float64
 
 	writer := utils.ReturnWriter(outfile)
 
@@ -515,7 +724,7 @@ func writeCellCounter(outfile string) {
 	bufSize := 0
 
 
-	for cellID = range CELLIDCOUNT {
+	for cellID, value = range CELLIDREADINPEAK {
 		if cellID == "" {
 			continue
 		}
@@ -523,10 +732,11 @@ func writeCellCounter(outfile string) {
 		buffer.WriteString(SEP)
 
 		if NORM {
-			value = float64(CELLIDCOUNT[cellID]) / float64(CELLIDCOUNT2[cellID])
-			buffer.WriteString(strconv.FormatFloat(value, 'f', 7, 64))
+			valueFloat = normValueForReadInPeaks(float64(value), cellID)
+
+			buffer.WriteString(strconv.FormatFloat(valueFloat, 'f', 7, 64))
 		} else {
-			buffer.WriteString(strconv.Itoa(int(CELLIDCOUNT[cellID])))
+			buffer.WriteString(strconv.Itoa(value))
 		}
 
 
@@ -556,7 +766,7 @@ func mergeMatFiles(filenames []string) {
 	XGIDIM = len(CELLIDDICT)
 
 	if CREATEBINMATRIX {
-		initBinSparseMatrix()
+		initFloatSparseMatrix()
 	} else {
 		initIntSparseMatrix()
 	}
@@ -574,13 +784,13 @@ func mergeMatFiles(filenames []string) {
 
 	if TAIJI {
 		if CREATEBINMATRIX {
-			writeBinMatrixToTaijiFile(FILENAMEOUT)
+			writeFloatMatrixToTaijiFile(FILENAMEOUT)
 		} else {
 			writeIntMatrixToTaijiFile(FILENAMEOUT, true)
 		}
 	} else {
 		if CREATEBINMATRIX {
-			writeBinMatrixToCOOFile(FILENAMEOUT)
+			writeFloatMatrixToCOOFile(FILENAMEOUT)
 		} else {
 			writeIntMatrixToCOOFile(FILENAMEOUT)
 		}
@@ -776,7 +986,7 @@ func mergeFloatMatFileFromTaiji(filename string) {
 				YGIDIM = ygi
 			}
 
-			BINSPARSEMATRIX[xgi][uint(ygi)] += value
+			FLOATSPARSEMATRIX[xgi][uint(ygi)] += value
 		}
 	}
 }
@@ -808,7 +1018,7 @@ func mergeFloatMatFileFromCOO(filename string) {
 			YGIDIM = ygi
 		}
 
-		BINSPARSEMATRIX[uint(xgi)][uint(ygi)] += value
+		FLOATSPARSEMATRIX[uint(xgi)][uint(ygi)] += value
 
 	}
 }
@@ -846,7 +1056,8 @@ func createIntSparseMatrixOneFileThreading(bedfilename utils.Filename) {
 			for i := 0; i < THREADNB;i++{
 
 				waiting.Add(1)
-				go updateIntSparseMatrixOneThread(bufferPointer , bufferStart, bufferStop, i, &waiting)
+				go updateIntSparseMatrixOneThread(
+					bufferPointer , bufferStart, bufferStop, i, &waiting)
 
 				bufferStart += chunk
 				bufferStop += chunk
@@ -949,7 +1160,7 @@ func updateReadInPeakThread(bufferLine * [BUFFERSIZE]string, bufferStart ,buffer
 	var start, end, count int
 	var err error
 	var cellcount []string
-	var cellid string
+	var cellIDstr string
 
 	isCellsID := true
 
@@ -967,9 +1178,9 @@ func updateReadInPeakThread(bufferLine * [BUFFERSIZE]string, bufferStart ,buffer
 
 		split = strings.Split(bufferLine[i], "\t")
 		if ALL {
-			cellid = "all"
+			cellIDstr = "all"
 		} else {
-			cellid = split[3]
+			cellIDstr = split[3]
 		}
 
 		if isCellsID {
@@ -979,7 +1190,7 @@ func updateReadInPeakThread(bufferLine * [BUFFERSIZE]string, bufferStart ,buffer
 		}
 
 		if NORM {
-			cellcount[count] = cellid
+			cellcount[count] = cellIDstr
 			count++
 		}
 
@@ -998,13 +1209,13 @@ func updateReadInPeakThread(bufferLine * [BUFFERSIZE]string, bufferStart ,buffer
 
 		MUTEX.Lock()
 
-		for range intervals {
-			CELLIDCOUNT[cellid]++
+		if len(intervals) > 0 {
+			CELLIDREADINPEAK[cellIDstr]++
 		}
 
 		if NORM {
-			for _,cellid = range cellcount[:count] {
-				CELLIDCOUNT2[cellid]++
+			for _,cellIDstr = range cellcount[:count] {
+				CELLIDCOUNTALL[cellIDstr]++
 			}
 
 			count = 0
@@ -1017,15 +1228,19 @@ func updateReadInPeakThread(bufferLine * [BUFFERSIZE]string, bufferStart ,buffer
 
 	//process last reads for norm
 	if NORM {
-		for _,cellid = range cellcount[:count] {
-			CELLIDCOUNT2[cellid]++
+		for _,cellIDstr = range cellcount[:count] {
+			CELLIDCOUNTALL[cellIDstr]++
 		}
 	}
 
 	MUTEX.Unlock()
 }
 
-func updateIntSparseMatrixOneThread(bufferLine * [BUFFERSIZE]string, bufferStart ,bufferStop, threadnb int,
+func updateIntSparseMatrixOneThread(
+	bufferLine * [BUFFERSIZE]string,
+	bufferStart,
+	bufferStop,
+	threadnb int,
 	waiting * sync.WaitGroup) {
 	defer waiting.Done()
 	var split []string
@@ -1034,8 +1249,13 @@ func updateIntSparseMatrixOneThread(bufferLine * [BUFFERSIZE]string, bufferStart
 	var err error
 
 	var intervals []interval.IntInterface
-	var int interval.IntInterface
-	var cellPos,featPos uint
+	var inter interval.IntInterface
+	var cellPos,featPos, cellPosRead uint
+	var totalreadscell []uint
+
+	if NORM {
+		totalreadscell = make([]uint, BUFFERSIZE)
+	}
 
 	useSymbol := len(YGITOSYMBOL) != 0
 
@@ -1045,6 +1265,10 @@ func updateIntSparseMatrixOneThread(bufferLine * [BUFFERSIZE]string, bufferStart
 
 		if cellPos, isInside = CELLIDDICT[split[3]];!isInside {
 			continue
+		}
+
+		if NORM {
+			totalreadscell[i] = cellPos + 1
 		}
 
 		start, err = strconv.Atoi(split[1])
@@ -1066,8 +1290,8 @@ func updateIntSparseMatrixOneThread(bufferLine * [BUFFERSIZE]string, bufferStart
 
 		CELLMUTEXDICT[cellPos].Lock()
 
-		for _, int = range intervals {
-			featPos = utils.PEAKIDDICT[utils.INTERVALMAPPING[int.ID()]]
+		for _, inter = range intervals {
+			featPos = utils.PEAKIDDICT[utils.INTERVALMAPPING[inter.ID()]]
 
 			if useSymbol {
 				featPos = YGITOSYMBOL[featPos]
@@ -1082,6 +1306,17 @@ func updateIntSparseMatrixOneThread(bufferLine * [BUFFERSIZE]string, bufferStart
 		}
 
 		CELLMUTEXDICT[cellPos].Unlock()
+	}
+
+	if NORM {
+		BININDEXMUTEX.Lock()
+		for _, cellPosRead = range totalreadscell[bufferStart:bufferStop] {
+
+			if cellPosRead > 0 {
+				TOTALREADSCELL[cellPosRead-1]++
+			}
+		}
+		BININDEXMUTEX.Unlock()
 	}
 }
 
@@ -1108,6 +1343,10 @@ func createIntSparseMatrixOneFile(bedfilename utils.Filename) {
 
 		if cellPos, isInside = CELLIDDICT[split[3]];!isInside {
 			continue
+		}
+
+		if NORM {
+			TOTALREADSCELL[cellPos]++
 		}
 
 		start, err = strconv.Atoi(split[1])
@@ -1137,7 +1376,7 @@ func createIntSparseMatrixOneFile(bedfilename utils.Filename) {
 }
 
 
-func writeBinMatrixToTaijiFile(outfile string) {
+func writeFloatMatrixToTaijiFile(outfile string) {
 	var buffer bytes.Buffer
 
 	tStart := time.Now()
@@ -1164,20 +1403,19 @@ func writeBinMatrixToTaijiFile(outfile string) {
 	var value float64
 	var err error
 
-	for xgi = range BINSPARSEMATRIX {
+	for xgi = range FLOATSPARSEMATRIX {
 		buffer.WriteString(sortedXgi[xgi])
 
-		for ygi, value = range BINSPARSEMATRIX[xgi] {
+		for ygi, value = range FLOATSPARSEMATRIX[xgi] {
 			buffer.WriteRune('\t')
 			buffer.WriteString(strconv.Itoa(int(ygi)))
 			buffer.WriteRune(',')
 
-			if USECOUNT {
-				buffer.WriteRune('1')
-
+			if NORM {
+				buffer.WriteString(strconv.FormatFloat(value, 'f', 7, 64))
 			} else
 			{
-				buffer.WriteString(strconv.FormatFloat(value, 'f', 8, 64))
+				buffer.WriteRune('1')
 			}
 
 			bufSize++
@@ -1205,6 +1443,7 @@ func writeBinMatrixToTaijiFile(outfile string) {
 
 func writeIntMatrixToTaijiFile(filenameout string, writeHeader bool) {
 	var buffer bytes.Buffer
+	var floatValue float64
 
 	tStart := time.Now()
 
@@ -1216,6 +1455,7 @@ func writeIntMatrixToTaijiFile(filenameout string, writeHeader bool) {
 
 	writer := utils.ReturnWriter(filenameout)
 	defer utils.CloseFile(writer)
+	loadYgiSize()
 
 	if writeHeader {
 		buffer.WriteString("Sparse matrix: ")
@@ -1239,8 +1479,11 @@ func writeIntMatrixToTaijiFile(filenameout string, writeHeader bool) {
 			buffer.WriteString(strconv.Itoa(int(ygi)))
 			buffer.WriteRune(',')
 
-			if USECOUNT {
-				buffer.WriteString(strconv.Itoa(value))
+			if NORM {
+				floatValue = normValue(
+					value, xgi, int(ygi))
+				buffer.WriteString(strconv.FormatFloat(
+					floatValue, 'f', 7, 64))
 			} else {
 				buffer.WriteRune('1')
 			}
@@ -1290,5 +1533,11 @@ func loadCellIDDict(fname utils.Filename) {
 
 		CELLIDDICT[cellID] = count
 		count++
+	}
+
+	CELLIDDICTCOMP = make([]string, len(CELLIDDICT))
+
+	for cellID, count = range CELLIDDICT {
+		CELLIDDICTCOMP[count] = cellID
 	}
 }
