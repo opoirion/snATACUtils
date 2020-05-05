@@ -8,6 +8,7 @@ import(
 	"log"
 	"flag"
 	"os"
+	"io"
 	utils "gitlab.com/Grouumf/ATACdemultiplex/ATACdemultiplexUtils"
 	"github.com/biogo/store/interval"
 	"fmt"
@@ -121,6 +122,12 @@ var NORMTYPESTR string
 /*NORMTYPE normType */
 var NORMTYPE normType
 
+/*MATRIXFORMATSTR string */
+var MATRIXFORMATSTR string
+
+/*MATRIXFORMAT normType */
+var MATRIXFORMAT matrixFormat
+
 /*BUFFERSIZE buffer size for multithreading */
 const BUFFERSIZE = 1000000
 
@@ -129,6 +136,8 @@ var ALL bool
 
 type normType string
 
+type matrixFormat string
+
 const (
 	fpkm normType = "fpkm"
 	logfpkm normType = "logfpkm"
@@ -136,7 +145,29 @@ const (
 	logrpm normType = "logrpm"
 	simple normType = "simple"
 	none normType = ""
+	coo matrixFormat = "coo"
+	taiji matrixFormat = "taiji"
+	dense matrixFormat = "dense"
 )
+
+func (t matrixFormat) isValid() matrixFormat {
+
+	if TAIJI {
+		return taiji
+	}
+
+	if COO {
+		return coo
+	}
+
+	switch t {
+	case dense, taiji, coo:
+	default:
+		panic("Valid matrix format (-format) are taiji|coo|dense ")
+	}
+
+	return t
+}
 
 func (t *normType) isValid() {
 	switch *t {
@@ -179,19 +210,19 @@ func main() {
 #################### MODULE TO CREATE (cell x genomic region) SPARSE MATRIX ########################
 """Boolean / interger Peak matrix """
 transform one (-bed) or multiple bed files into a sparse matrix
-USAGE: ATACMatTools -coo -bed  <bedFile> -ygi <bedFile> -xgi <file> (-threads <int> -out <fname> -use_count -taiji -bed <bedFile2> -use_symbol)
+USAGE: ATACMatTools -bed  <bedFile> -ygi <bedFile> -xgi <file> (-threads <int> -out <fname> -use_count -taiji -bed <bedFile2> -use_symbol -format <string>)
 
 """Create a cell x bin matrix: -bin """
 transform one (-bed) or multiple (use multiple -bed options) bed file into a bin (using float) sparse matrix. If ygi provided, reads intersecting these bin are ignored
 
-USAGE: ATACMatTools -bin -bed  <bedFile> (optional -ygi <bedFile> -xgi <fname> -bin_size <int> -ygi_out <string> -norm -taiji -coo)
+USAGE: ATACMatTools -bin -bed  <bedFile> (optional -ygi <bedFile> -xgi <fname> -bin_size <int> -ygi_out <string> -norm -taiji -format <string>)
 
 """Count the number of reads in peaks for each cell: -count """
 USAGE: ATACMatTools -count  -xgi <fname> -ygi <bedfile> -bed <bedFile> (optionnal: -out <fname> -norm -all)
 
 """Merge multiple matrices results into one output file: -merge """
 It can be used to convert taiji to coo or coo to taiji formats.
-USAGE: ATACMatTools -coo/taiji -merge -xgi <fname> -in <matrixFile1> -in <matrixFile2> ... (optional -bin -use_count -out <fname>)
+USAGE: ATACMatTools -merge -xgi <fname> -in <matrixFile1> -in <matrixFile2> ... (optional -bin -use_count -out <fname> -format <string>)
 
 USAGE for the -use_symbol option:
 Optional use of the 4th column of -ygi as symbol.
@@ -214,11 +245,13 @@ if used, the program will output the list of ordered symbol corresponding to the
 	flag.StringVar(&SEP, "delimiter", "\t", "delimiter used to write the output file (default \t)")
 	flag.StringVar(&YGIOUT, "ygi_out", "", "Write the output bin bed file in this specific file")
 	flag.BoolVar(&TAIJI, "taiji", false,
-		`Convert COO matrix file to sparse matrix format required for taiji-utils. See https://github.com/Taiji-pipeline/Taiji-utils/`)
+		`Convert COO matrix file to sparse matrix format required for taiji-utils. See https://github.com/Taiji-pipeline/Taiji-utils/ (DEPRECIATED: use -format taiji instead)`)
 	flag.BoolVar(&USECOUNT, "use_count", false,
 		`Use read count instead of boolean value`)
 	flag.BoolVar(&COO, "coo", false,
-		`Use COO format as output`)
+		`Use COO format as output (DEPRECIATED: use -format coo instead)`)
+	flag.StringVar(&MATRIXFORMATSTR, "format", "coo",
+		`Output matrix format `)
 	flag.BoolVar(&ALL, "all", false,
 		`Count the reads in peaks for the input bed file in its hole`)
 
@@ -242,15 +275,19 @@ if used, the program will output the list of ordered symbol corresponding to the
 
 	NORMTYPE.isValid()
 
+	MATRIXFORMAT = matrixFormat(MATRIXFORMATSTR).isValid()
+
 	if CREATEBINMATRIX {
 		tag = "bin."
 	}
 
-	switch {
-	case COO:
+	switch MATRIXFORMAT {
+	case coo:
 		tag = fmt.Sprintf("%scoo", tag)
-	case TAIJI:
+	case taiji:
 		tag = fmt.Sprintf("%staiji-mat", tag)
+	case dense:
+		tag = fmt.Sprintf("%sdense", tag)
 	}
 
 	switch {
@@ -265,31 +302,29 @@ if used, the program will output the list of ordered symbol corresponding to the
 	tStart := time.Now()
 
 	switch {
-	case COO || READINPEAK || CREATEBINMATRIX || TAIJI:
-		switch {
-		case CELLSIDFNAME == "" && !READINPEAK:
-			log.Fatal("Error -xgi file must be provided!")
-		case MERGEOUTPUTS:
-			if len(INFILES) == 0 {
-				log.Fatal("Error at least one input (-in) file must be provided!")
-			}
-
-			mergeMatFiles(INFILES)
-		case BEDFILENAME == "":
-			log.Fatal("Error at least one bed file must be provided!")
-		case CREATEBINMATRIX:
-			createBinSparseMatrix()
-		case PEAKFILE == "" && !(COO || READINPEAK):
-			log.Fatal("Error peak file -ygi (bed format) must be provided!")
-		case READINPEAK:
-			computeReadsInPeaksForCell()
-		default:
-			if SPLIT > 0 {
-				createIntSparseMatrixSplit()
-			} else {
-				createIntSparseMatrix()
-			}
+	case CELLSIDFNAME == "" && !READINPEAK:
+		log.Fatal("Error -xgi file must be provided!")
+	case MERGEOUTPUTS:
+		if len(INFILES) == 0 {
+			log.Fatal("Error at least one input (-in) file must be provided!")
 		}
+
+		mergeMatFiles(INFILES)
+	case BEDFILENAME == "":
+		log.Fatal("Error at least one bed file must be provided!")
+	case CREATEBINMATRIX:
+		createBinSparseMatrix()
+	case PEAKFILE == "" && !(COO || READINPEAK):
+		log.Fatal("Error peak file -ygi (bed format) must be provided!")
+	case READINPEAK:
+		computeReadsInPeaksForCell()
+	default:
+		if SPLIT > 0 {
+			createIntSparseMatrixSplit()
+		} else {
+			createIntSparseMatrix()
+		}
+
 	}
 
 	tDiff := time.Since(tStart)
@@ -354,7 +389,7 @@ func loadSymbolFileWriteOutputSymbol() int {
 	}
 
 	fmt.Printf("symbol file loaded. New dim: %d\n", len(SYMBOLLIST))
-	writeSymbol(SYMBOLLIST)
+	writeSymbol()
 
 	return len(SYMBOLLIST)
 }
@@ -393,7 +428,7 @@ func loadYgiSize() {
 	}
 }
 
-func writeSymbol(SYMBOLLIST []string) {
+func writeSymbol() {
 	var buffer bytes.Buffer
 
 	ext := path.Ext(FILENAMEOUT)
@@ -411,6 +446,23 @@ func writeSymbol(SYMBOLLIST []string) {
 	buffer.Reset()
 
 	fmt.Printf("symbol file index written: %s\n", filename)
+}
+
+func getFeatureIndexToNameDict() (featureDict map[uint]string) {
+	useSymbol := len(SYMBOLLIST) > 0
+
+	featureDict = make(map[uint]string)
+
+	for featName, pos := range utils.PEAKIDDICT {
+		if useSymbol {
+			pos = YGITOSYMBOL[pos]
+			featName = SYMBOLLIST[pos]
+		}
+		featName = strings.ReplaceAll(featName, SEP, "_")
+		featureDict[pos] = featName
+	}
+
+	return featureDict
 }
 
 func computeReadsInPeaksForCell(){
@@ -478,7 +530,7 @@ func createIntSparseMatrix(){
 	launchIntSparseMatrix(FILENAMEOUT, true)
 }
 
-func launchIntSparseMatrix(filenameout string, writeTaijiHeader bool) {
+func launchIntSparseMatrix(filenameout string, writeHeader bool) {
 	switch{
 	case THREADNB > 1:
 		fmt.Printf("init mutexes...\n")
@@ -491,12 +543,14 @@ func launchIntSparseMatrix(filenameout string, writeTaijiHeader bool) {
 		createIntSparseMatrixOneFile(BEDFILENAME)
 	}
 
-	if TAIJI {
-		writeIntMatrixToTaijiFile(filenameout, writeTaijiHeader)
-	} else {
+	switch MATRIXFORMAT {
+	case taiji:
+		writeIntMatrixToTaijiFile(filenameout, writeHeader)
+	case coo:
 		writeIntMatrixToCOOFile(filenameout)
+	case dense:
+		writeIntMatrixToDenseFile(filenameout, true)
 	}
-
 }
 
 func createIntSparseMatrixSplit(){
@@ -625,6 +679,112 @@ func writeIntMatrixToCOOFile(outfile string) {
 	buffer.Reset()
 
 	fmt.Printf("file: %s created!\n", outfile)
+}
+
+func writeIntMatrixToDenseFile(outfile string, writeHeader bool) {
+	fmt.Printf("writing to output file...\n")
+	loadYgiSize()
+	MUTEX = &sync.Mutex{}
+
+	var buffer bytes.Buffer
+	var err error
+	var waiting sync.WaitGroup
+	var featPos uint
+	var threadID int
+
+	writer := utils.ReturnWriter(outfile)
+
+	defer utils.CloseFile(writer)
+
+	if writeHeader {
+		featureDict := getFeatureIndexToNameDict()
+
+		buffer.WriteString(fmt.Sprintf("barcode%s", SEP))
+
+		for featPos = 0;featPos < uint(YGIDIM);featPos ++ {
+			buffer.WriteString(featureDict[featPos])
+			buffer.WriteString(SEP)
+		}
+
+		buffer.WriteRune('\n')
+		writer.Write(buffer.Bytes())
+		buffer.Reset()
+	}
+
+	bufDict := make([]bytes.Buffer, THREADNB)
+	guard := make(chan int, THREADNB)
+
+	for i:=0;i<THREADNB;i++ {
+		guard <- i
+	}
+
+	for cellPos := range INTSPARSEMATRIX {
+		threadID = <- guard
+		waiting.Add(1)
+
+		go writeToDenseOnThread(
+			&bufDict[threadID],
+			cellPos,
+			CELLIDDICTCOMP[cellPos],
+			&writer,
+			guard,
+			threadID,
+			&waiting)
+	}
+
+	waiting.Wait()
+
+	_, err = writer.Write(buffer.Bytes())
+	utils.Check(err)
+	buffer.Reset()
+
+	fmt.Printf("file: %s created!\n", outfile)
+}
+
+func writeToDenseOnThread(
+	buffer * bytes.Buffer,
+	cellPos int,
+	cellName string,
+	writer * io.WriteCloser,
+	guard chan int,
+	threadID int,
+	waiting * sync.WaitGroup) {
+
+	var featPos uint
+	var value int
+	var normedValue float64
+	var err error
+
+	defer waiting.Done()
+
+	buffer.WriteString(cellName)
+	buffer.WriteString(SEP)
+
+	for featPos=0; featPos<uint(YGIDIM); featPos++  {
+		value = INTSPARSEMATRIX[cellPos][featPos]
+
+		if value !=0 && NORM {
+			normedValue = normValue(
+				value,
+				cellPos, int(featPos))
+			buffer.WriteString(strconv.FormatFloat(normedValue, 'f', 7, 64))
+		} else {
+			buffer.WriteString(strconv.Itoa(value))
+		}
+
+		buffer.WriteString(SEP)
+	}
+
+	buffer.WriteRune('\n')
+
+	MUTEX.Lock()
+	_, err = (*writer).Write(buffer.Bytes())
+	MUTEX.Unlock()
+
+	utils.Check(err)
+	buffer.Reset()
+
+	guard <- threadID
 }
 
 func writeFloatMatrixToCOOFile(outfile string) {
@@ -765,7 +925,7 @@ func mergeMatFiles(filenames []string) {
 	loadCellIDDict(CELLSIDFNAME)
 	XGIDIM = len(CELLIDDICT)
 
-	if CREATEBINMATRIX {
+	if CREATEBINMATRIX && MATRIXFORMAT != dense {
 		initFloatSparseMatrix()
 	} else {
 		initIntSparseMatrix()
@@ -782,18 +942,21 @@ func mergeMatFiles(filenames []string) {
 		}
 	}
 
-	if TAIJI {
+	switch MATRIXFORMAT {
+	case taiji:
 		if CREATEBINMATRIX {
 			writeFloatMatrixToTaijiFile(FILENAMEOUT)
 		} else {
 			writeIntMatrixToTaijiFile(FILENAMEOUT, true)
 		}
-	} else {
+	case coo:
 		if CREATEBINMATRIX {
 			writeFloatMatrixToCOOFile(FILENAMEOUT)
 		} else {
 			writeIntMatrixToCOOFile(FILENAMEOUT)
 		}
+	case dense:
+		writeIntMatrixToDenseFile(FILENAMEOUT, true)
 	}
 }
 
