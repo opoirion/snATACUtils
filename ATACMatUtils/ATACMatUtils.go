@@ -148,6 +148,7 @@ const (
 	coo matrixFormat = "coo"
 	taiji matrixFormat = "taiji"
 	dense matrixFormat = "dense"
+	denseTranspose matrixFormat = "denseTranspose"
 )
 
 func (t matrixFormat) isValid() matrixFormat {
@@ -162,8 +163,12 @@ func (t matrixFormat) isValid() matrixFormat {
 
 	switch t {
 	case dense, taiji, coo:
+	case denseTranspose:
+		if SPLIT > 0 {
+			panic(fmt.Sprintf("-format denseTranspose cannot be used with -split option"))
+		}
 	default:
-		panic("Valid matrix format (-format) are taiji|coo|dense ")
+		panic("Valid matrix format (-format) are taiji|coo|dense|denseTranspose")
 	}
 
 	return t
@@ -286,7 +291,7 @@ if used, the program will output the list of ordered symbol corresponding to the
 		tag = fmt.Sprintf("%scoo", tag)
 	case taiji:
 		tag = fmt.Sprintf("%staiji-mat", tag)
-	case dense:
+	case dense, denseTranspose:
 		tag = fmt.Sprintf("%sdense", tag)
 	}
 
@@ -550,6 +555,8 @@ func launchIntSparseMatrix(filenameout string, writeHeader bool) {
 		writeIntMatrixToCOOFile(filenameout)
 	case dense:
 		writeIntMatrixToDenseFile(filenameout, true)
+	case denseTranspose:
+		writeIntMatrixToDenseTransposeFile(filenameout)
 	}
 }
 
@@ -787,6 +794,113 @@ func writeToDenseOnThread(
 	guard <- threadID
 }
 
+
+func writeIntMatrixToDenseTransposeFile(outfile string) {
+	fmt.Printf("writing to output file...\n")
+	loadYgiSize()
+	MUTEX = &sync.Mutex{}
+
+	var buffer bytes.Buffer
+	var err error
+	var waiting sync.WaitGroup
+	var cellPos, featPos uint
+	var threadID int
+
+	writer := utils.ReturnWriter(outfile)
+
+	defer utils.CloseFile(writer)
+
+	featureDict := getFeatureIndexToNameDict()
+
+	buffer.WriteString(fmt.Sprintf("gene%s", SEP))
+
+	for cellPos = 0;cellPos < uint(XGIDIM);cellPos ++ {
+		buffer.WriteString(CELLIDDICTCOMP[cellPos])
+		buffer.WriteString(SEP)
+	}
+
+	buffer.WriteRune('\n')
+	writer.Write(buffer.Bytes())
+	buffer.Reset()
+
+	bufDict := make([]bytes.Buffer, THREADNB)
+	guard := make(chan int, THREADNB)
+
+	for i:=0;i<THREADNB;i++ {
+		guard <- i
+	}
+
+	for featPos = 0; featPos < uint(YGIDIM); featPos++ {
+		threadID = <- guard
+		waiting.Add(1)
+
+		go writeToDenseTransposeeOnThread(
+			&bufDict[threadID],
+			featPos,
+			featureDict[featPos],
+			&writer,
+			guard,
+			threadID,
+			&waiting)
+	}
+
+	waiting.Wait()
+
+	_, err = writer.Write(buffer.Bytes())
+	utils.Check(err)
+	buffer.Reset()
+
+	fmt.Printf("file: %s created!\n", outfile)
+}
+
+func writeToDenseTransposeeOnThread(
+	buffer * bytes.Buffer,
+	featPos uint,
+	featName string,
+	writer * io.WriteCloser,
+	guard chan int,
+	threadID int,
+	waiting * sync.WaitGroup) {
+
+	var cellPos uint
+	var value int
+	var normedValue float64
+	var err error
+
+	defer waiting.Done()
+
+	buffer.WriteString(featName)
+	buffer.WriteString(SEP)
+
+	for cellPos=0; cellPos<uint(XGIDIM); cellPos++  {
+		value = INTSPARSEMATRIX[cellPos][featPos]
+
+		if value !=0 && NORM {
+			normedValue = normValue(
+				value,
+				int(cellPos),
+				int(featPos))
+
+			buffer.WriteString(strconv.FormatFloat(normedValue, 'f', 7, 64))
+		} else {
+			buffer.WriteString(strconv.Itoa(value))
+		}
+
+		buffer.WriteString(SEP)
+	}
+
+	buffer.WriteRune('\n')
+
+	MUTEX.Lock()
+	_, err = (*writer).Write(buffer.Bytes())
+	MUTEX.Unlock()
+
+	utils.Check(err)
+	buffer.Reset()
+
+	guard <- threadID
+}
+
 func writeFloatMatrixToCOOFile(outfile string) {
 	fmt.Printf("writing to output file...\n")
 
@@ -957,6 +1071,8 @@ func mergeMatFiles(filenames []string) {
 		}
 	case dense:
 		writeIntMatrixToDenseFile(FILENAMEOUT, true)
+	case denseTranspose:
+		writeIntMatrixToDenseTransposeFile(FILENAMEOUT)
 	}
 }
 
