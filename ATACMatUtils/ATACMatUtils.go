@@ -1573,13 +1573,7 @@ func writeFloatMatrixToTaijiFile(outfile string) {
 			buffer.WriteRune('\t')
 			buffer.WriteString(strconv.Itoa(int(ygi)))
 			buffer.WriteRune(',')
-
-			if NORM {
-				buffer.WriteString(strconv.FormatFloat(value, 'f', 7, 64))
-			} else
-			{
-				buffer.WriteRune('1')
-			}
+			buffer.WriteString(strconv.FormatFloat(value, 'f', 7, 64))
 
 			bufSize++
 
