@@ -184,7 +184,7 @@ USAGE: BAMutils -bamtobed -bam <filename> -out <bedfile> (-optionnal -cellsID <f
 	flag.Parse()
 
 	if OUTPUTDIR != "" {
-		if FILENAMEOUT == "" {
+		if FILENAMEOUT == "" && NUCLEIINDEX == "" {
 			panic("Error -out must be provided when -output_dir is used")
 		}
 
@@ -203,9 +203,6 @@ USAGE: BAMutils -bamtobed -bam <filename> -out <bedfile> (-optionnal -cellsID <f
 		InsertRGTagToBamFile()
 	case (DIVIDE || DIVIDEPARALLEL) && NUCLEIINDEX!="":
 		switch {
-		case BEDFILENAME != "" && DIVIDEPARALLEL:
-			fmt.Printf("launching DivideMultipleBedFileParallel...\n")
-			DivideMultipleBedFileParallel()
 		case BEDFILENAME != "":
 			fmt.Printf("launching DivideMultipleBedFile...\n")
 			DivideMultipleBedFile()
@@ -721,7 +718,6 @@ func DivideMultipleBedFile() {
 	var filename string
 	var bufferDict map[string]*bytes.Buffer
 	var flist []string
-	var err error
 
 	var buffer *bytes.Buffer
 
@@ -746,6 +742,13 @@ func DivideMultipleBedFile() {
 
 	count := 0
 	buffSize := 50000
+	waiting := sync.WaitGroup{}
+
+	guard := make(chan struct{}, THREADNB)
+
+	for i := 0; i < THREADNB; i++ {
+		guard <- struct{}{}
+	}
 
 	for bedReader.Scan() {
 		line = bedReader.Text()
@@ -765,21 +768,45 @@ func DivideMultipleBedFile() {
 
 		if count >= buffSize {
 			for filename, buffer = range bufferDict {
-				_, err = BEDWRITERDICT[filename].Write(buffer.Bytes())
-				utils.Check(err)
-				buffer.Reset()
+				waiting.Add(1)
+				<-guard
+				go writeBufferToFile(
+					BEDWRITERDICT[filename],
+					buffer,
+					&waiting,
+					guard)
 			}
+			waiting.Wait()
 			count = 0
 		}
 	}
 
 	for filename, buffer = range bufferDict {
-		_, err = BEDWRITERDICT[filename].Write(buffer.Bytes())
-		utils.Check(err)
-		buffer.Reset()
+		waiting.Add(1)
+		<-guard
+		go writeBufferToFile(
+			BEDWRITERDICT[filename],
+			buffer,
+			&waiting,
+			guard)
 	}
+
+	waiting.Wait()
 }
 
+func writeBufferToFile(
+	file io.WriteCloser,
+	buffer *bytes.Buffer,
+	waiting * sync.WaitGroup,
+	guard chan struct{}) {
+	defer waiting.Done()
+	var err error
+	_, err = file.Write(buffer.Bytes())
+	utils.Check(err)
+	buffer.Reset()
+
+	guard <- struct{}{}
+}
 
 /*DivideMultipleBamFileParallel divide a bam file into multiple bam files in parallel */
 func DivideMultipleBamFileParallel() {
@@ -888,87 +915,6 @@ func divideMultipleBamFileOneThread(threadID int, waiting *sync.WaitGroup){
 }
 
 
-/*DivideMultipleBedFileParallel divide the bam file */
-func DivideMultipleBedFileParallel() {
-	var line string
-	var readID string
-	var isInside bool
-	var filename string
-	var flist []string
-	var lineBuffer map[string][]string
-	var lineBufferSize map[string]int
-	var waiting sync.WaitGroup
-
-	chunk := 100000
-
-	fnameset := make(map[string]bool)
-
-	bedReader, file := utils.ReturnReader(BEDFILENAME, 0)
-	defer utils.CloseFile(file)
-
-	loadCellIDIndexAndBEDWriter(NUCLEIINDEX)
-
-	for _, file := range(WRITERDICT) {
-		defer utils.CloseFile(file)
-	}
-
-	for _, file := range(BEDWRITERDICT) {
-		defer utils.CloseFile(file)
-	}
-
-	for readID =range CELLIDDICTMULTIPLE {
-		for _, filename = range CELLIDDICTMULTIPLE[readID] {
-			fnameset[filename] = true
-		}
-	}
-
-	count := 0
-	lineBuffer, lineBufferSize = returnlineBuffer(chunk, fnameset)
-	guard := make(chan struct{}, THREADNB)
-
-	for bedReader.Scan() {
-		line = bedReader.Text()
-
-		readID = strings.Split(line, "\t")[3]
-
-		if  flist, isInside = CELLIDDICTMULTIPLE[readID];!isInside {
-			continue
-		}
-
-		count++
-
-		for _, filename = range flist {
-			lineBuffer[filename][lineBufferSize[filename]] = line
-			lineBufferSize[filename]++
-		}
-
-		if count >= chunk {
-			for filename = range lineBuffer {
-				waiting.Add(1)
-				guard <- struct{}{}
-				go writeBuffer(filename,
-					lineBuffer[filename],
-					lineBufferSize[filename],
-					&waiting, guard)
-			}
-			waiting.Wait()
-			count = 0
-			lineBuffer, lineBufferSize = returnlineBuffer(chunk, fnameset)
-		}
-	}
-
-	//Last iteration
-	for filename = range lineBuffer {
-		waiting.Add(1)
-		guard <- struct{}{}
-		go writeBuffer(filename,
-			lineBuffer[filename],
-			lineBufferSize[filename],
-			&waiting, guard)
-	}
-	waiting.Wait()
-}
-
 func returnlineBuffer (chunk int, fnameset map[string]bool) (
 	lineBuffer map[string][]string, lineBufferSize map[string]int) {
 
@@ -991,6 +937,10 @@ func writeBuffer (filename string, lineBuffer []string, lineBufferSize int, wait
 	var count int
 
 	for _, line = range lineBuffer {
+		if line == "" {
+			continue
+		}
+
 		buffer.WriteString(line)
 		buffer.WriteRune('\n')
 		count++
@@ -1427,9 +1377,8 @@ func bedToBedGraphDictOneThread(bed string, waiting *sync.WaitGroup, checkCellIn
 	var split []string
 	var chroStr string
 	var chroIndex int
-	var pos int
-	var lineNb int
-	var err error
+	var pos, pos2, it, nbit int
+	var err, err2 error
 	var nbReads int
 	var line string
 	var isInside bool
@@ -1441,11 +1390,11 @@ func bedToBedGraphDictOneThread(bed string, waiting *sync.WaitGroup, checkCellIn
 		bedtobedgraphdict[i] = make(map[int]int)
 	}
 
+	//Initially free space for 50 uncommon chromosomes
 	uncommon := 200
 
 	for bedReader.Scan() {
 		line = bedReader.Text()
-
 		split = strings.Split(line, "\t")
 
 		if checkCellIndex {
@@ -1464,6 +1413,7 @@ func bedToBedGraphDictOneThread(bed string, waiting *sync.WaitGroup, checkCellIn
 			if _, isInside = chrDict[chroStr];!isInside {
 
 				if len(chroStr) == 1 {
+					//Assume than no more than 100 numerical chromosomes
 					chrDict[chroStr] = int(chroStr[0]) + 100
 				} else {
 					chrDict[chroStr] = uncommon
@@ -1479,35 +1429,46 @@ func bedToBedGraphDictOneThread(bed string, waiting *sync.WaitGroup, checkCellIn
 			chroIndex = chrDict[chroStr]
 		}
 
-		pos, err = strconv.Atoi(split[1])
-
-		if err != nil {
-			log.Fatal(fmt.Sprintf("Error with line %s at position: %d\n",
-				line, lineNb))
+		if len(split) < 3 {
+			panic(fmt.Sprintf("Cannot split the line %s (line number: %d) in {chr pos pos}\n",
+				line, nbReads))
 		}
 
-		bedtobedgraphdict[chroIndex][pos / BINSIZE]++
+		pos, err = strconv.Atoi(split[1])
+		pos2, err2 = strconv.Atoi(split[2])
+
+		if err != nil || err2 != nil {
+			panic(fmt.Sprintf("Error with line %s at position: %d\n",
+				line, nbReads))
+		}
+
+		nbit = (pos2-pos) / BINSIZE
+
+		for it =0 ; it <= nbit ; it++  {
+			bedtobedgraphdict[chroIndex][(pos + it * BINSIZE) / BINSIZE]++
+		}
+
 	}
 
 	INTCHAN <- nbReads
-	STRTOINTCHAN <- chrDict
 
 	for key := range bedtobedgraphdict {
-
-
 
 		if len(bedtobedgraphdict[key]) > 0 {
 			if _, isInside = BEDTOBEDGRAPHCHAN[key];!isInside {
 				BEDTOBEDGRAPHCHAN[key] = make(chan map[int]int, THREADNB)
 			}
 
-			if key < 50 {
+
+			if key < 100 {
 				chrDict[strconv.Itoa(key)] = key
 			}
 
 			BEDTOBEDGRAPHCHAN[key] <- bedtobedgraphdict[key]
 		}
 	}
+
+	STRTOINTCHAN <- chrDict
 }
 
 
