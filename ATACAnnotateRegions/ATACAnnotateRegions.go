@@ -240,7 +240,6 @@ func scanBedFileAndAddAnnotation(refPos [3]int) {
 	var centerDistance, minCenterDistance float64
 	var oneIntervalID uintptr
 	var peakIntervalTreeObject utils.PeakIntervalTreeObject
-	var uniqueSymbolDict map[string]bool
 	var writer io.WriteCloser
 	var peak utils.Peak
 
@@ -298,10 +297,6 @@ func scanBedFileAndAddAnnotation(refPos [3]int) {
 			continue
 		}
 
-		if UNIQSYMBOL {
-			uniqueSymbolDict = make(map[string]bool)
-		}
-
 		intervalCenter, minCenterDistance = 0, -1
 		isUnique = false
 		isUniqueRef = true
@@ -354,7 +349,6 @@ func scanBedFileAndAddAnnotation(refPos [3]int) {
 					count += writeToBuffer(
 						symbols,
 						peakstr,
-						&uniqueSymbolDict,
 						&buffer)
 				}
 			}
@@ -364,7 +358,6 @@ func scanBedFileAndAddAnnotation(refPos [3]int) {
 			count += writeToBuffer(
 				symbols,
 				peakstr,
-				&uniqueSymbolDict,
 				&buffer)
 		}
 
@@ -390,16 +383,20 @@ func scanBedFileAndAddAnnotation(refPos [3]int) {
 func writeToBuffer(
 	symbols []string,
 	peakstr string,
-	uniqueSymbolDict * map[string]bool,
 	buffer * bytes.Buffer) (count int){
 	var symbol string
+	var uniqueSymbolDict map[string]bool
+
+	if UNIQSYMBOL {
+		uniqueSymbolDict = make(map[string]bool)
+	}
 
 	for _, symbol = range symbols {
 		if UNIQSYMBOL {
-			if (*uniqueSymbolDict)[symbol] {
+			if uniqueSymbolDict[symbol] {
 				continue
 			}
-			(*uniqueSymbolDict)[symbol] = true
+			uniqueSymbolDict[symbol] = true
 		}
 
 		buffer.WriteString(peakstr)
@@ -407,6 +404,11 @@ func writeToBuffer(
 		buffer.WriteString(symbol)
 		buffer.WriteRune('\n')
 		count++
+
+		if UNIQ {
+			//only write first symbol per reference peaks
+			break
+		}
 	}
 
 	return count
