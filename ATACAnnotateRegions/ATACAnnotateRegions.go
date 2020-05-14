@@ -88,6 +88,7 @@ Here the three first columns of referenceAnnotation.tsv will be used to identify
 `)
 		flag.PrintDefaults()
 	}
+	uniqsymbolstr := ""
 
 	flag.Var(&BEDFILENAME, "bed", "name of the bed file no annotate")
 	flag.Var(&REFBEDFILENAME, "ref", "name of the reference bed file containing the annotations")
@@ -98,7 +99,7 @@ Here the three first columns of referenceAnnotation.tsv will be used to identify
 	flag.BoolVar(&UNIQ, "unique", false, `write only unique output peaks`)
 	flag.BoolVar(&ANNOTATELINE, "annotate_line", false, `annotate the full line rather than the defined peak region`)
 	flag.BoolVar(&UNIQREF, "unique_ref", false, `write only unique reference using the closest peak`)
-	flag.BoolVar(&UNIQSYMBOL, "unique_symbols", true, `write only unique symbols per peak`)
+	flag.StringVar(&uniqsymbolstr, "unique_symbols", "true", `write only unique symbols per peak`)
 	flag.BoolVar(&WRITEDIFF, "diff", false, `write bed region if no intersection is found`)
 	flag.BoolVar(&WRITEREF, "write_ref", false, `write bed region from reference file`)
 	flag.BoolVar(&STDOUT, "stdout", false, `write to stdout`)
@@ -108,6 +109,8 @@ Here the three first columns of referenceAnnotation.tsv will be used to identify
 	flag.StringVar(&SYMBOLPOS, "symbol_pos", "3", "separator to the bed region in ref for the ref file")
 
 	flag.Parse()
+
+	UNIQSYMBOL = uniqsymbolstr == "true"
 
 	tail := flag.Args()
 
@@ -225,7 +228,7 @@ func scanBedFileAndAddAnnotation(refPos [3]int) {
 	var intervals []interval.IntInterface
 	var oneInterval interval.IntInterface
 	var symbols []string
-	var line, peakstr, symbol string
+	var line, peakstr string
 	var isInside, isUnique, isUniqueRef bool
 	var count int
 	var err error
@@ -331,14 +334,6 @@ func scanBedFileAndAddAnnotation(refPos [3]int) {
 					refPos)
 			}
 
-			if UNIQSYMBOL {
-				if uniqueSymbolDict[symbol] {
-					continue
-				}
-
-				uniqueSymbolDict[symbol] = true
-			}
-
 			if UNIQREF {
 				isUniqueRef = checkifUniqueRef(peakstr,
 					oneIntervalID, refPos,
@@ -356,25 +351,21 @@ func scanBedFileAndAddAnnotation(refPos [3]int) {
 			} else  {
 
 				if isUniqueRef {
-					for _, symbol = range symbols {
-						buffer.WriteString(peakstr)
-						buffer.WriteRune('\t')
-						buffer.WriteString(symbol)
-						buffer.WriteRune('\n')
-						count++
-					}
+					count += writeToBuffer(
+						symbols,
+						peakstr,
+						&uniqueSymbolDict,
+						&buffer)
 				}
 			}
 		}
 
 		if UNIQ && isUnique && isUniqueRef {
-			for _, symbol = range symbols {
-				buffer.WriteString(peakstr)
-				buffer.WriteRune('\t')
-				buffer.WriteString(symbol)
-				buffer.WriteRune('\n')
-				count++
-			}
+			count += writeToBuffer(
+				symbols,
+				peakstr,
+				&uniqueSymbolDict,
+				&buffer)
 		}
 
 		if count >= 5000 {
@@ -396,6 +387,30 @@ func scanBedFileAndAddAnnotation(refPos [3]int) {
 	}
 }
 
+func writeToBuffer(
+	symbols []string,
+	peakstr string,
+	uniqueSymbolDict * map[string]bool,
+	buffer * bytes.Buffer) (count int){
+	var symbol string
+
+	for _, symbol = range symbols {
+		if UNIQSYMBOL {
+			if (*uniqueSymbolDict)[symbol] {
+				continue
+			}
+			(*uniqueSymbolDict)[symbol] = true
+		}
+
+		buffer.WriteString(peakstr)
+		buffer.WriteRune('\t')
+		buffer.WriteString(symbol)
+		buffer.WriteRune('\n')
+		count++
+	}
+
+	return count
+}
 
 func returnPeakStrAndSymbol(line string, id uintptr, start, end int, refPos [3]int) (
 	peakstr string, symbols []string) {
