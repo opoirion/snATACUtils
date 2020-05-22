@@ -58,7 +58,7 @@ Tools to insert snATAC-Seq barcodes from multiple files inside read IDs to creat
 
 ```bash
 USAGE: ATACCellTSS -bed <filename> -ygi/tss <filename> -xgi <filename>
-                    (optionnal -out <string> -flank <int> -smoothing <int> -boundary <int> -cluster <filename> -flank_size).
+                    (optional -out <string> -flank <int> -smoothing <int> -boundary <int> -cluster <filename> -flank_size).
 
 if -cluster is provided, TSS is computed per cluster and -xgi argument is ignored. THe cluster file should contain cluster and cell ID with the following structure for each line: clusterID<TAB>cellID
 ```
@@ -79,7 +79,7 @@ transform one (-bed) or multiple (use multiple -bed options) bed file into a bin
 USAGE: ATACMatTools -bin -bed  <bedFile> (optional -ygi <bedFile> -xgi <fname> -bin_size <int> -ygi_out <string> -norm -taiji -coo)
 
 """Count the number of reads in peaks for each cell: -count """
-USAGE: ATACMatTools -count  -xgi <fname> -ygi <bedfile> -bed <bedFile> (optionnal: -out <fname> -norm)
+USAGE: ATACMatTools -count  -xgi <fname> -ygi <bedfile> -bed <bedFile> (optional: -out <fname> -norm)
 
 """Merge multiple matrices results into one output file: -merge """
 It can be used to convert taiji to coo or coo to taiji formats.
@@ -129,6 +129,24 @@ ATACMatUtils -count -bed example.bed.gz -xgi example_cellID.xgi -ygi example.coo
 
 ## BAMutils: Suite of functions dedicated to process BAM or BED files
 
+This flexible tool can execute different actions on BED and BAM files. The main purpose on `BAMutils` is to devide efficiently a BAM or a BED file according to cellID index(es), transform BED files into bedgraph (i.e. uncompressed bigwig) format, convert a BAM file with a field designating the single-cell barcode ID into single-cell four-columns BED file (<chr><start><stop><cellID>), downsampling BED file. Note that performing operation on BAM files is rather inefficient in term of computation time. Also BAM files are much larger files in comparison with single-cell BED file (only four columns). It is thus highly recommended to transform any BAM files into single-cell BED files prior to analyiss.
+
+### Example
+To transform a single cell BAM file into single-cell BED file, the -bamtobed option cam be used.
+
+```bash
+
+BAMutils -bamtobed -bam <inputBAM file>  -out <Output bed file> -cellsID <file having one cellID per line used to filter out some reads> -threads <Number of threads> -tag <Which BAM tag to use as cell ID. default: "CB">
+```
+
+A large BED file can then be devided using `-divide`option together with `-cellsID`taking as input a file having for each line a cell ID to keep. Alternatively a large BED file can be devided in parallel to multiple bed file using `-divide` with `-cell_index` option which refer to a two-columns tab separated input file with <cellID> (first column) and <outputFile> (second column).
+
+```bash
+# parallel divide example from the example/data_bed folder
+BAMutils -divide -bed example.bed.gz -cellsID example_cellID.xgi -out divided_bed.bed.gz -threads 8
+BAMutils -divide -bed example.bed.gz -cell_index example.cell_index -threads 8
+```
+
 ```bash
 #################### Suite of functions dedicated to process BAM or BED files ########################
 
@@ -142,7 +160,7 @@ USAGE: BAMutils -create_cell_index -bed/bam <name> -out <output name> (-sort)
 USAGE: BAMutils -divide -bed/bam <fname> (-cell_index <fname> -threads <int> -cellsID <fname> -out <fname>)
 
 -divide_parallel: Divide the bam file according to barcode file list using a parallel version
-USAGE: BAMutils -divide_parallel -cell_index <fname> -bed/bam <fname> (-threads <int>)
+USAGE: BAMutils -divide_parallel -cell_index <fname> -bam <fname> (-threads <int>)
 
 -split: Split file per chromosomes
 USAGE: BAMutils -split -bed <bedfile> (-out <string> -cellsID <string>)
@@ -161,13 +179,13 @@ USAGE: BAMutils -bamtobed -bam <filename> -out <bedfile> (-optionnal -cellsID <f
 #################### MODULE TO INFER SIGNIFICANT CLUSTER PEAKS ########################
 
 """full individual chi2 computation for each peak with FDR correction using Benjamini-Hochberg correction. Not recommended because using golang suboptimal chi2 implementation"""
-USAGE: ATACTopFeatures -chi2 -bed <fname> -peak <fname> -cluster <fname> (optionnal -out <string> -threads <int> -alpha <float> -write_all -split <int>)
+USAGE: ATACTopFeatures -chi2 -bed <fname> -peak <fname> -cluster <fname> (optional -out <string> -threads <int> -alpha <float> -write_all -split <int>)
 
 """Create contingency table for each feature and each cluster"""
-USAGE: ATACTopFeatures -create_contingency -bed <fname> -peak <fname> -cluster <fname> (optionnal -out <string> -threads <int>)
+USAGE: ATACTopFeatures -create_contingency -bed <fname> -peak <fname> -cluster <fname> (optional -out <string> -threads <int>)
 
 """correct feature pvalue for multiple tests performed or each cluster"""
-USAGE: ATACTopFeatures -pvalue_correction -ptable <fname> (optionnal -out <string> -threads <int> -alpha <float> -write_all)
+USAGE: ATACTopFeatures -pvalue_correction -ptable <fname> (optional -out <string> -threads <int> -alpha <float> -write_all)
 ```
 
 * Once the contingency table is created, it is preferable to use Python (or R) to infer the p-values. We wrote a python script to handle the contingency table using multithreading and the scipy package here: [https://gitlab.com/Grouumf/ATACdemultiplex/blob/master/scripts/snATAC_feature_selection](https://gitlab.com/Grouumf/ATACdemultiplex/blob/master/scripts/snATAC_feature_selection)
@@ -220,7 +238,7 @@ USAGE: ATACtools -clean -filename <fname> -output filename -clean_pattern "\n"
 This software presents some similarities with bedtools usage however it provides better customisations for bed file annotation when comparing two bed files with interesecting regions
 
 """Annotate bed file using a reference bed file containing the annotations"""
-USAGE: ATACAnnotateRegions -bed <file> -ref <file> (optionnal -out <string> -unique -unique_ref -intersect -write_ref -edit -ref_sep "[3]int" -ref_symbol "[]int|str" -diff -stdout -annotate_line)
+USAGE: ATACAnnotateRegions -bed <file> -ref <file> (optional -out <string> -unique -unique_ref -intersect -write_ref -edit -ref_sep "[3]int" -ref_symbol "[]int|str" -diff -stdout -annotate_line)
 
 for -ref_sep and -ref_symbol options, the input should be a string of numbers separated by whitespace and delimited with ". -ref_sep needs exactly three positions: 1) for the chromosomes column, 2) for the begining and 3) for the end of the region
 
