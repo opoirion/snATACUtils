@@ -65,6 +65,8 @@ if -cluster is provided, TSS is computed per cluster and -xgi argument is ignore
 
 ## ATACMatUtils: Suite of functions dedicated to analyze intersection with genomic regions from a peak file (in bed format) to create a sparse matrix (cell x genomic regions)
 
+This tool provide easy and fast interface to create sparse matrices using a single-cell 3-columns bed file (<chr><start><stop><cellID>). It needs a list of cell IDs (`-xgi`) as input can optionaly accept a list of peaks as feature list (`-xygi`). Otherwise, it can create a sparse matrix using genomic bins. The program can use different output formats:  COOrdinate format (COO), taiji format, a specific sparse format, or dense format.
+
 ```bash
 #################### MODULE TO CREATE (cell x genomic region) SPARSE MATRIX ########################
 """Boolean / interger Peak matrix """
@@ -82,6 +84,47 @@ USAGE: ATACMatTools -count  -xgi <fname> -ygi <bedfile> -bed <bedFile> (optionna
 """Merge multiple matrices results into one output file: -merge """
 It can be used to convert taiji to coo or coo to taiji formats.
 USAGE: ATACMatTools -coo/taiji -merge -xgi <fname> -in <matrixFile1> -in <matrixFile2> ... (optional -bin -use_count -out <fname>)
+```
+
+### Matrix construction Example
+* See example files in `./example/data_bed`.
+
+Let's first create a COO matrix using `example_cellID.xgi` as reference barcodes and `example.bed.gz` as single-cell BED file:
+
+```bash
+# Let's move our working directory inside the example folder:
+
+cd ./example/data_bed
+
+ATACMatUtils -bed example.bed.gz -bin -xgi example_cellID.xgi -out example.coo.bin.gz -ygi_out example.coo.bin.ygi -threads 2
+```
+
+This command output a three columns COO matrix (cell index, feature index, value).
+
+```bash
+zcat example.coo.bin.gz|head                                                            [±master ●●]
+#cell   #feature #value
+0       5162    1
+0       5346    1
+0       3489    1
+0       5086    1
+0       5177    1
+```
+
+Since no loci region was provided in output (`-ygi`) and the bin option was used (`-bin`) the program output the index of genomic bin with at least one overlapping read/fragment in `example.coo.bin.ygi`. Thus, the first line corresponds to a value of 1 for the bin number 5162 from `example.coo.bin.ygi` and the first cell of `example_cellID.xgi`.
+
+Alternatively, a loci file can be passed as feature index:
+
+```bash
+ATACMatUtils -bed example.bed.gz -xgi example_cellID.xgi -out example.coo.bin.gz -ygi_out example.coo.ygi -ygi example_peaks.ygi -threads 2
+```
+
+Different normalisation can be used using the `-norm` option. otherwise, by default, a bool matrix (only 1) will be outputed. The matrix creation is multithreaded using the `-threads` option For the creation of very large matrices (e.g. for than 400K loci and cells) which doesn't fit the RAM, the `-split` option allow to incremently construct the matrix using only a fraction of the cells at each iteration.
+
+Finally, `ATACMatUtils` can be used to count the number of reads in peak per cell for a given input bed file:
+
+```bash
+ATACMatUtils -count -bed example.bed.gz -xgi example_cellID.xgi -ygi example.coo.bin.ygi -out example.bed.reads_in_peaks
 ```
 
 ## BAMutils: Suite of functions dedicated to process BAM or BED files
