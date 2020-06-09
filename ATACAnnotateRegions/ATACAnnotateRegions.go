@@ -353,6 +353,10 @@ func scanBedFileAndAddAnnotation(refPos [3]int) {
 				}
 			}
 		}
+		if !IGNOREUNANNOATED && (isUniqueRef == false) {
+			isUniqueRef = true
+			symbols = []string{""}
+		}
 
 		if UNIQ && isUnique && isUniqueRef {
 			count += writeToBuffer(
