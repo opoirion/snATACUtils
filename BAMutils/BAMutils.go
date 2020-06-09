@@ -122,6 +122,9 @@ var BAMTOBED bool
 /*TAG string*/
 var TAG string
 
+/*BAMTAG string*/
+var BAMTAG string
+
 
 func main() {
 
@@ -147,8 +150,8 @@ USAGE: BAMutils -split -bed <bedfile> (-out <string> -cellsID <string>)
 -downsample: Downsample the number of reads from a a bed file (downsample = 1.0 is 100 perc. and downsample = 0.0 is 0 perc. of the reads)
 USAGE: BAMutils -downsample <float> -bed <bedfile> (-out <string> -cellsID <string>)
 
--bamtobed: Transform a 10x BAM file to a bed file with each read in a new line and using the "CB:Z" field as barcode
-USAGE: BAMutils -bamtobed -bam <filename> -out <bedfile> (-optionnal -cellsID <filename> -threads <int> -tag <string>)
+-bamtobed: Transform a 10x BAM file to a bed file with each read in a new line and using a BAM field to identify cell IDs
+USAGE: BAMutils -bamtobed -bam <filename> -out <bedfile> (-optionnal -cellsID <filename> -threads <int> -tag <string> -bam_tag <string>)
 
 `)
 		 flag.PrintDefaults()
@@ -163,6 +166,7 @@ USAGE: BAMutils -bamtobed -bam <filename> -out <bedfile> (-optionnal -cellsID <f
 		`file with reference chromosomes to use for the bedgraph creation.
  This file can also contain the maximum chromosome size, for example (chr16<tab>90668800)`)
 	flag.StringVar(&FILENAMEOUT, "out", "", "name of the output file")
+	flag.StringVar(&BAMTAG, "bam_tag", "CB", "BAM tag storing single-cell ID")
 	flag.StringVar(&NUCLEIFILE, "cellsID", "", "file with cell IDs")
 	flag.StringVar(&OUTPUTDIR, "output_dir", "", "output directory")
 	flag.BoolVar(&NORMBEDGPRAH, "norm", true, `norm bedgpraph values`)
@@ -280,7 +284,7 @@ func bamTobed() {
 
 	tStart := time.Now()
 
-	tag := sam.NewTag("CB")
+	tag := sam.NewTag(BAMTAG)
 
 	if FILENAMEOUT == "" {
 		ext := path.Ext(BAMFILENAME)
@@ -1613,6 +1617,8 @@ func loadCellIDIndexAndBEDWriter(fname string) {
 	defer utils.CloseFile(f)
 	scanner := bufio.NewScanner(f)
 
+	var outputdir string
+
 	fnameset := make(map[string]map[string]bool)
 	CELLIDDICTMULTIPLE = make(map[string][]string)
 	BEDWRITERDICT = make(map[string]io.WriteCloser)
@@ -1626,10 +1632,16 @@ func loadCellIDIndexAndBEDWriter(fname string) {
 
 		ext := path.Ext(filename)
 
-		if ext != ".gz" && ext != ".bed"  {
-			filePath = fmt.Sprintf("%s/%s.bed.gz", OUTPUTDIR, filename)
+		if filename[0] != '/' && OUTPUTDIR == "" {
+			outputdir = "."
 		} else {
-			filePath = fmt.Sprintf("%s/%s", OUTPUTDIR, filename)
+			outputdir = OUTPUTDIR
+		}
+
+		if ext != ".gz" && ext != ".bed"  {
+			filePath = fmt.Sprintf("%s/%s.bed.gz", outputdir, filename)
+		} else {
+			filePath = fmt.Sprintf("%s/%s", outputdir, filename)
 		}
 
 		if _, isInside := BEDWRITERDICT[filename]; !isInside {

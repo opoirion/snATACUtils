@@ -88,7 +88,7 @@ wget http://enhancer.sdsc.edu/spreissl/Test/SP176_177_P56_R1.fastq.bz2
 
 ## Performance
 
-Depending of the options chosen, the speed is between 1.5 Meg/s (for bzip fastq files) to 2.0 Meg/s. We also prodive a multi-threading option. However, the multi-threading does lot reduce the speed linearly (each thread needs to reach their respective starting lines, which takes some time!), but rather sublinerarly.
+Depending of the options chosen, the speed is between 1.5 Meg/s (for bzip fastq files) to 2.0 Meg/s. We prodive a multi-threading option (`-nbThreads`) which greatly improve the speed of the computation. However, the multi-threading does not reduce the speed linearly (each thread needs to reach their respective starting lines, which takes some time!), but rather sublinerarly.
 
 
 ## Contact

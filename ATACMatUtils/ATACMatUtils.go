@@ -258,7 +258,7 @@ if used, the program will output the list of ordered symbol corresponding to the
 	flag.StringVar(&MATRIXFORMATSTR, "format", "coo",
 		`Output matrix format `)
 	flag.BoolVar(&ALL, "all", false,
-		`Count the reads in peaks for the input bed file in its hole`)
+		`Count the reads in peaks for the entire input bed file`)
 
 	flag.BoolVar(&NORM, "norm", false, "Normalize raw count by dividing using the total number of reads per cell (equivalent to -norm_type simple)")
 	flag.StringVar(&NORMTYPESTR, "norm_type", "", "Normalisation type to use: simple|rpm|log10(rpm)|fpkm. Simple divides the feature values by the total number of read count per cell (equivalent to norm)")
