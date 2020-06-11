@@ -70,8 +70,6 @@ ARGPARSER.add_argument('-header',
                        metavar='<int>')
 
 
-
-
 ARGS = ARGPARSER.parse_args()
 
 assert(isfile(ARGS.contingency_table))
@@ -114,7 +112,7 @@ def main():
     if ARGS.header:
         header = f_in.readline().strip().split(ARGS.sep)
         f_res.write(ARGS.sep.join(header[:-4]))
-        f_res.write('\tpvalue\n')
+        f_res.write('\tOR\tpvalue\n')
 
     for line in f_in:
         inputs.append(line)
@@ -166,8 +164,13 @@ def _fisher_parallel(inputs):
 
         n11, n12, n21, n22 = int(line[-4]), int(line[-3]), int(line[-2]), int(line[-1])
         _, pvalue = fisher_exact([[n11, n12], [n21, n22]], alternative='greater')
+        odd_ratio = (float(n11) / n12) / (float(n21) / n22)
 
-        results.append(ARGS.sep.join(line[:-4]) + ARGS.sep + str(pvalue) + '\n')
+        result = "{0}{1}{2}{1}{3}\n".format(ARGS.sep.join(line[:-4]),
+                                            ARGS.sep,
+                                            odd_ratio,
+                                            str(pvalue))
+        results.append(result)
         count += 1
 
         if ARGS.verbose and threadID == 0:
@@ -203,7 +206,13 @@ def _chi2_parallel(inputs):
         if float(n11) / n12 < float(n21) / n22:
             pvalue = 1.0 - pvalue
 
-        results.append(ARGS.sep.join(line[:-4]) + ARGS.sep + str(pvalue) + '\n')
+        odd_ratio = (float(n11) / n12) / (float(n21) / n22)
+
+        result = "{0}{1}{2}{1}{3}\n".format(ARGS.sep.join(line[:-4]),
+                                            ARGS.sep,
+                                            odd_ratio,
+                                            str(pvalue))
+        results.append(result)
         count += 1
 
         if ARGS.verbose and threadID == 0:

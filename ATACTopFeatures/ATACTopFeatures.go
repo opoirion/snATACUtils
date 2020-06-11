@@ -21,6 +21,7 @@ import (
 type peakFeature struct {
 	id uintptr
 	cluster int
+	oddRatio float64
 	pvalue float64
 	qvalue float64
 	n11, n21 int
@@ -339,7 +340,7 @@ func loadPvalueTable() {
 	var err error
 	var isInside bool
 	var count uintptr
-	var pvalue float64
+	var pvalue, oddRatio float64
 	var clusterID, clusterIndex int
 
 	tStart := time.Now()
@@ -384,10 +385,19 @@ func loadPvalueTable() {
 		peaki.cluster = clusterID
 		pvalue, err = strconv.ParseFloat(split[len(split) - 1], 64)
 		utils.Check(err)
+
+		oddRatio, err = strconv.ParseFloat(split[len(split) - 2], 64)
+
+		if err != nil {
+			oddRatio = 0
+		}
+
 		peaki.pvalue = pvalue
+		peaki.oddRatio = oddRatio
+
 		CHI2SCORE[peaki.cluster] = append(CHI2SCORE[peaki.cluster], peaki)
 
-		if !isSymbolFile && len(split) == 6 {
+		if !isSymbolFile && len(split) == 7 {
 			symbol = split[4]
 			utils.PEAKSYMBOLDICT[peakl] = append(
 				utils.PEAKSYMBOLDICT[peakl], symbol)
@@ -799,7 +809,7 @@ func writePvalueCorrectedTable() {
 	defer utils.CloseFile(writer)
 	tStart := time.Now()
 
-	buffer.WriteString("#chr\tstart\tstop\tcluster\tpvalue\tqvalue\tsignificant")
+	buffer.WriteString("#chr\tstart\tstop\tcluster\toddRatio\tpvalue\tqvalue\tsignificant")
 
 	if writeSymbol {
 		buffer.WriteString("\tsymbol")
@@ -833,6 +843,8 @@ func writePvalueCorrectedTable() {
 					strings.Join(utils.PEAKSYMBOLDICT[peakl], "-"))
 			}
 
+			buffer.WriteRune('\t')
+			buffer.WriteString(fmt.Sprintf("%e", peaki.oddRatio))
 			buffer.WriteRune('\t')
 			buffer.WriteString(fmt.Sprintf("%e", peaki.pvalue))
 			buffer.WriteRune('\t')

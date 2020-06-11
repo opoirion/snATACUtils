@@ -260,12 +260,12 @@ func scanBedFileAndAddAnnotation(refPos [3]int) {
 		uniqueBed = make(map[string]bool)
 	}
 
+	bedPos := returnPosIntSlice(BEDPOS)
+
 	if UNIQREF {
 		peakIntervalTreeObject = utils.CreatePeakIntervalTreeObjectFromFile(
-			BEDFILENAME)
+			BEDFILENAME, "\t", bedPos)
 	}
-
-	bedPos := returnPosIntSlice(BEDPOS)
 
 	for scanner.Scan() {
 		line = scanner.Text()
@@ -330,7 +330,8 @@ func scanBedFileAndAddAnnotation(refPos [3]int) {
 			}
 
 			if UNIQREF {
-				isUniqueRef = checkifUniqueRef(peakstr,
+				isUniqueRef = checkifUniqueRef(
+					peak.PeakToString(),
 					oneIntervalID, refPos,
 					&peakIntervalTreeObject)
 			}
