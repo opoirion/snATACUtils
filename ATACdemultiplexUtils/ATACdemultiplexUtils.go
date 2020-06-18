@@ -23,16 +23,44 @@ import (
 /*Filename type used to check if files exists */
 type Filename string
 
-/*Set ... */
+/*Set Filename from string */
 func (i *Filename) Set(filename string) error {
-	if _, err := os.Stat(filename); err != nil {
-		panic(fmt.Sprintf("!!!!Error %s with file: %s\n", err, filename))
-	}
-
+	AssertIfFileExists(filename)
 	*i =  Filename(filename)
 	return nil
 }
 
+
+/*AssertIfFileExists panic if err is nil from os.Stats */
+func AssertIfFileExists(filename string) {
+	if _, err := os.Stat(filename); err != nil {
+		panic(fmt.Sprintf("!!!!Error %s with file: %s. Doesn't seems to exists\n",
+			err, filename))
+	}
+}
+
+/*CheckIfFileExists return true or flase */
+func CheckIfFileExists(filename string) bool{
+	stat, err := os.Stat(filename)
+
+	if stat.IsDir() {
+		panic(fmt.Sprintf("file: %s is a folder", filename))
+	}
+
+	return err == nil
+}
+
+
+/*CheckIfFolderExists return true or flase */
+func CheckIfFolderExists(foldername string) bool{
+	stat, err := os.Stat(foldername)
+
+	if err==nil && !stat.IsDir() {
+		panic(fmt.Sprintf("folder: %s is a file", foldername))
+	}
+
+	return err == nil
+}
 
 func (i *Filename) String() string {
 	return string(*i)
@@ -120,6 +148,18 @@ func ExceCmd(cmd string) {
 	}
 
 	Check(err)
+}
+
+/*ExceCmdReturnOutput return output of comand */
+func ExceCmdReturnOutput(cmd string) string {
+	out, err := exec.Command("sh", "-c", cmd).Output()
+	if err != nil {
+		fmt.Printf("Error with cmd: %s\n", cmd)
+	}
+
+	Check(err)
+
+	return string(out)
 }
 
 /*ReturnWriter ... */

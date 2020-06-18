@@ -16,6 +16,8 @@ import (
 	"bytes"
 	"path"
 	"os"
+	"path/filepath"
+	"runtime"
 )
 
 type peakFeature struct {
@@ -63,6 +65,12 @@ var CHI2ANALYSIS bool
 
 /*CREATECONTINGENCY do chi2 analysis*/
 var CREATECONTINGENCY bool
+
+/*WORKFLOW full workflow chi2 analysis*/
+var WORKFLOW bool
+
+/*REFFILE ref BED file with genome annotation*/
+var REFFILE utils.Filename
 
 /*MULTIPLETESTS perform multiple tests correction using contingency tables file as input*/
 var MULTIPLETESTS bool
@@ -126,9 +134,11 @@ func main() {
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, `
 #################### MODULE TO INFER SIGNIFICANT CLUSTER PEAKS ########################
+"""Full annotation workflow. The input files are: A) single-cell bed file, B) peak regions in bed format, C) two-columns barcode/clusterID file in tsv format, and optionally D) a reference 4-columns bed file (<chr><start><end><annotation>) to annotate the peaks
+USAGE: ATACTopFeatures -workflow -bed <fname> -peak <fname> -cluster <fname> -out <folder> (optional -threads <int> -ref <file> -split <int>)_
 
 """full individual chi2 computation for each peak with FDR correction using Benjamini-Hochberg correction. Not recommended because using golang suboptimal chi2 implementation"""
-USAGE: ATACTopFeatures -chi2 -bed <fname> -peak <fname> -cluster <fname> (optionnal -out <string> -threads <int> -alpha <float> -write_all -split <int>)
+USAGE: ATACTopFeatures -chi2 -bed <fname> -peak <fname> -cluster <fname> (optional -out <string> -threads <int> -alpha <float> -write_all -split <int>)
 
 """Create contingency table for each feature and each cluster"""
 USAGE: ATACTopFeatures -create_contingency -bed <fname> -peak <fname> -cluster <fname> (optionnal -out <string> -threads <int>)
@@ -143,6 +153,8 @@ USAGE: ATACTopFeatures -pvalue_correction -ptable <fname> (optionnal -out <strin
 
 
 	flag.Var(&BEDFILENAME, "bed", "name of the bed file")
+	flag.Var(&REFFILE, "ref", "name of the reference bed file containing genome annotation (four-columns)")
+	flag.BoolVar(&WORKFLOW, "workflow", false, "Execute full top feature workflow")
 	flag.Var(&PEAKFILE, "peak", "File containing peaks")
 	flag.Var(&PEAKSYMBOLFILE, "symbol", `File containing symbols (such as gene name) for peak file.
      Each row should either contain one symbol per line and matches the peaks from -peak OR option2:<symbol>\t<chromosome>\t<start>\t<stop>\n`)
@@ -182,6 +194,8 @@ USAGE: ATACTopFeatures -pvalue_correction -ptable <fname> (optionnal -out <strin
 	}
 
 	switch {
+	case WORKFLOW:
+		launchTopFeaturesWorkflow()
 
 	case CREATECONTINGENCY:
 		if SPLIT > 1 {
@@ -191,6 +205,52 @@ USAGE: ATACTopFeatures -pvalue_correction -ptable <fname> (optionnal -out <strin
 		}
 	case CHI2ANALYSIS:
 		launchChi2Analysis()
+	}
+}
+
+
+func launchTopFeaturesWorkflow() {
+	_, filename, _, _ := runtime.Caller(1)
+
+	currentDir, err := filepath.Abs(filename)
+	currentDir = filepath.Dir(currentDir)
+	utils.Check(err)
+
+	pythonFeaturesScript := fmt.Sprintf("%s/../scripts/snATAC_feature_selection", currentDir)
+	utils.AssertIfFileExists(pythonFeaturesScript)
+
+	cmd := fmt.Sprintf("%s -h", pythonFeaturesScript)
+	utils.ExceCmd(cmd)
+
+	folderName := FILENAMEOUT
+
+	if !utils.CheckIfFolderExists(folderName) {
+		err := os.MkdirAll(folderName, 0755)
+		utils.Check(err)
+	}
+
+	FILENAMEOUT = fmt.Sprintf("%s/table.contingency", folderName)
+
+	if SPLIT > 1 {
+			createContingencyTableUsingSubsets()
+		} else {
+			createContingencyTable()
+		}
+
+	cmd = fmt.Sprintf(
+		"%s -contingency_table %s -threads %d -verbose 0 -test fisher -out %s/table.fisher",
+		pythonFeaturesScript, FILENAMEOUT, THREADNB, folderName)
+	fmt.Printf("%s\n", utils.ExceCmdReturnOutput(cmd))
+
+	FEATUREPVALUEFILE = utils.Filename(fmt.Sprintf("%s/table.fisher", folderName))
+	FILENAMEOUT = fmt.Sprintf("%s/table.fisher.corrected", folderName)
+
+	launchMultipleTestAnalysis()
+
+	if REFFILE != "" {
+		fmt.Printf("#### ANNOTATING specific features with ref bed file...\n")
+		cmd = fmt.Sprintf("ATACAnnotateRegions -bed %s/table.fisher.corrected -ref %s -bed_pos 0,1,2 -annotate_line -ignore -unique -out %s/table.fisher.corrected.annotated", folderName, REFFILE, folderName)
+		fmt.Printf("%s\n", utils.ExceCmdReturnOutput(cmd))
 	}
 }
 
@@ -739,23 +799,12 @@ func performMultipleTestCorrection() {
 func sortPvalueScore() {
 	var clusterID int
 	tStart := time.Now()
-	THREADSCHANNEL = make(chan int, THREADNB)
-
-	for i:=0;i<THREADNB;i++ {
-		THREADSCHANNEL <- i
-	}
-
-	threadnb := <- THREADSCHANNEL
 
 	for clusterID = range CHI2SCORE {
-		go func(clusterID int, threadnb int) {
+		func(clusterID int) {
 			sort.Slice(CHI2SCORE[clusterID], func(i int, j int) bool {
-				return CHI2SCORE[clusterID][i].pvalue <  CHI2SCORE[clusterID][j].pvalue})
-			THREADSCHANNEL <- threadnb
-		}(clusterID, threadnb)
-
-	threadnb = <- THREADSCHANNEL
-
+				return CHI2SCORE[clusterID][i].pvalue < CHI2SCORE[clusterID][j].pvalue})
+		}(clusterID)
 	}
 
 	tDiff := time.Since(tStart)
