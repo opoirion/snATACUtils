@@ -150,6 +150,16 @@ func ExceCmd(cmd string) {
 	Check(err)
 }
 
+/*TryExceCmd try exec command else return err */
+func TryExceCmd(cmd string) error {
+	_, err := exec.Command("sh", "-c", cmd).Output()
+	if err != nil {
+		fmt.Printf("Error with cmd: %s\n", cmd)
+	}
+
+	return err
+}
+
 /*ExceCmdReturnOutput return output of comand */
 func ExceCmdReturnOutput(cmd string) string {
 	out, err := exec.Command("sh", "-c", cmd).Output()

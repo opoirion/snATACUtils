@@ -220,7 +220,12 @@ func launchTopFeaturesWorkflow() {
 	utils.AssertIfFileExists(pythonFeaturesScript)
 
 	cmd := fmt.Sprintf("%s -h", pythonFeaturesScript)
-	utils.ExceCmd(cmd)
+	err = utils.TryExceCmd(cmd)
+
+	if err != nil {
+		panic(fmt.Sprintf("#### Error when trying to launch %s. Maybe try to install scipy dependency (pip install scipy)?",
+			pythonFeaturesScript))
+	}
 
 	folderName := FILENAMEOUT
 
