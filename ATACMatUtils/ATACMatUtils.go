@@ -108,7 +108,7 @@ var XGIDIM int
 var YGISYMBOL bool
 
 /*YGITOSYMBOL link ygi featurePos to symbol feature pos */
-var YGITOSYMBOL []uint
+var YGITOSYMBOL [][]uint
 
 /*YGISIZE size of YGI */
 var YGISIZE []int
@@ -355,8 +355,7 @@ func loadSymbolFileWriteOutputSymbol() int {
 
 	defer utils.CloseFile(file)
 
-	symbolMap := make(map[int]string)
-	symbolMapRev := make(map[string]int)
+	symbolMapRev := make(map[string][]uint)
 	symbolSet := make(map[string]bool)
 
 	i := 0
@@ -377,20 +376,27 @@ func loadSymbolFileWriteOutputSymbol() int {
 		if !symbolSet[symbol] {
 			symbolSet[symbol] = true
 			SYMBOLLIST = append(SYMBOLLIST, symbol)
+			symbolMapRev[symbol] = make([]uint, 0)
 		}
 
-		symbolMap[i] = symbol
-		symbolMapRev[symbol] = i
+		symbolMapRev[symbol] = append(symbolMapRev[symbol], uint(i))
 		i++
 	}
 
 	sort.Strings(SYMBOLLIST)
 
-	YGITOSYMBOL = make([]uint, YGIDIM)
+	YGITOSYMBOL = make([][]uint, YGIDIM)
 
 	for indexNew, symbol  := range SYMBOLLIST {
-		indexOld := symbolMapRev[symbol]
-		YGITOSYMBOL[indexOld] = uint(indexNew)
+		indexesOld := symbolMapRev[symbol]
+
+		for _, indexOld := range indexesOld {
+			if len(YGITOSYMBOL[indexOld]) == 0 {
+				YGITOSYMBOL[indexOld] = make([]uint, 0)
+			}
+
+			YGITOSYMBOL[indexOld] = append(YGITOSYMBOL[indexOld], uint(indexNew))
+		}
 	}
 
 	fmt.Printf("symbol file loaded. New dim: %d\n", len(SYMBOLLIST))
@@ -410,6 +416,7 @@ func loadYgiSize() {
 
 	var peak utils.Peak
 
+	posList := make([]uint, 1)
 	useSymbol := len(YGITOSYMBOL) != 0
 
 	YGISIZE = make([]int, YGIDIM)
@@ -426,18 +433,28 @@ func loadYgiSize() {
 		peak.StringToPeak(peakstr)
 
 		if useSymbol {
-			pos = YGITOSYMBOL[pos]
+			posList = YGITOSYMBOL[pos]
+		} else {
+			posList[0] = pos
 		}
 
-		YGISIZE[pos] += peak.End - peak.Start
+		for _, pos = range posList {
+			YGISIZE[pos] += peak.End - peak.Start
+		}
 	}
 }
 
 func writeSymbol() {
 	var buffer bytes.Buffer
+	var filename string
 
-	ext := path.Ext(FILENAMEOUT)
-	filename := fmt.Sprintf("%s.symbol.ygi", FILENAMEOUT[:len(FILENAMEOUT) - len(ext)])
+	if YGIOUT != "" {
+		filename = YGIOUT
+	} else {
+		ext := path.Ext(FILENAMEOUT)
+		filename = fmt.Sprintf(
+			"%s.symbol.ygi", FILENAMEOUT[:len(FILENAMEOUT) - len(ext)])
+	}
 
 	writer := utils.ReturnWriter(filename)
 	defer utils.CloseFile(writer)
@@ -455,16 +472,24 @@ func writeSymbol() {
 
 func getFeatureIndexToNameDict() (featureDict map[uint]string) {
 	useSymbol := len(SYMBOLLIST) > 0
+	var featName string
+	var upos uint
+	var pos int
+
 
 	featureDict = make(map[uint]string)
 
-	for featName, pos := range utils.PEAKIDDICT {
-		if useSymbol {
-			pos = YGITOSYMBOL[pos]
-			featName = SYMBOLLIST[pos]
+	if useSymbol {
+		for pos, featName = range SYMBOLLIST {
+			featName = strings.ReplaceAll(featName, SEP, "_")
+			featureDict[uint(pos)] = featName
 		}
-		featName = strings.ReplaceAll(featName, SEP, "_")
-		featureDict[pos] = featName
+
+	} else {
+		for featName, upos = range utils.PEAKIDDICT {
+			featName = strings.ReplaceAll(featName, SEP, "_")
+			featureDict[upos] = featName
+		}
 	}
 
 	return featureDict
@@ -1532,6 +1557,8 @@ func updateIntSparseMatrixOneThread(
 	var cellPos,featPos, cellPosRead uint
 	var totalreadscell []uint
 
+	posList := make([]uint, 1)
+
 	if NORM {
 		totalreadscell = make([]uint, BUFFERSIZE)
 	}
@@ -1573,14 +1600,18 @@ func updateIntSparseMatrixOneThread(
 			featPos = utils.PEAKIDDICT[utils.INTERVALMAPPING[inter.ID()]]
 
 			if useSymbol {
-				featPos = YGITOSYMBOL[featPos]
+				posList = YGITOSYMBOL[featPos]
+			} else {
+				posList[0] = featPos
 			}
 
-			switch USECOUNT {
-			case true:
-				INTSPARSEMATRIX[cellPos][featPos]++
-			default:
-				INTSPARSEMATRIX[cellPos][featPos] = 1
+			for _, featPos = range posList {
+				switch USECOUNT {
+				case true:
+					INTSPARSEMATRIX[cellPos][featPos]++
+				default:
+					INTSPARSEMATRIX[cellPos][featPos] = 1
+				}
 			}
 		}
 
