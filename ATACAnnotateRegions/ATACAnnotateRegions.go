@@ -104,8 +104,8 @@ Here the three first columns of referenceAnnotation.tsv will be used to identify
 	flag.BoolVar(&WRITEREF, "write_ref", false, `write bed region from reference file`)
 	flag.BoolVar(&STDOUT, "stdout", false, `write to stdout`)
 	flag.StringVar(&REFSEP, "ref_sep", "\t", "separator to define the bed region for the ref file")
-	flag.StringVar(&REFPOS, "ref_pos", "0 1 2", "separator to the bed region in ref for the ref file")
-	flag.StringVar(&BEDPOS, "bed_pos", "0 1 2", "separator to the bed region in genomic coordinates for the bed file")
+	flag.StringVar(&REFPOS, "ref_pos", "", "separator to the bed region in ref for the ref file. Default: (0,1,2 for bed and 0,1,2,3,4,5 for bedpe files")
+	flag.StringVar(&BEDPOS, "bed_pos", "", "separator to the bed region(s) in genomic coordinates for the bed file. Default: (0,1,2 for bed and 0,1,2,3,4,5 for bedpe files")
 	flag.StringVar(&SYMBOLPOS, "symbol_pos", "3", "separator to the bed region in ref for the ref file")
 
 	flag.Parse()
@@ -120,11 +120,33 @@ Here the three first columns of referenceAnnotation.tsv will be used to identify
 Example: ATACAnnotateRegions -bed regionToAnnotate.bed -ref referenceAnnotation.tsv -ref_sep "0 1 2" -ref_symbol "4 5"\n`, tail))
 	}
 
-	refPos := returnPosIntSlice(REFPOS)
 	symbol := returnSymbolType()
 
+	ext := path.Ext(BEDFILENAME.String())
+
+	if BEDPOS == "" {
+		switch ext {
+		case ".bedpe":
+			BEDPOS = "0,1,2,3,4,5"
+		default:
+			BEDPOS = "0,1,2"
+		}
+	}
+
+	extRef := path.Ext(REFBEDFILENAME.String())
+
+	if REFPOS == "" {
+		switch extRef {
+		case ".bedpe":
+			REFPOS = "0,1,2,3,4,5"
+		default:
+			REFPOS = "0,1,2"
+		}
+	}
+
+	refPos := returnPosIntSlice(REFPOS)
+
 	if FILENAMEOUT == "" {
-		ext := path.Ext(BEDFILENAME.String())
 		FILENAMEOUT = fmt.Sprintf("%s.annotated%s",
 			BEDFILENAME[:len(BEDFILENAME)-len(ext)], ext)
 	}
@@ -151,7 +173,7 @@ Example: ATACAnnotateRegions -bed regionToAnnotate.bed -ref referenceAnnotation.
 	}
 }
 
-func returnPosIntSlice(refpos string) (refPos [3]int) {
+func returnPosIntSlice(refpos string) (refPos []int) {
 	splitChar := " "
 
 	if strings.Count(refpos, ",") > 0 {
@@ -160,18 +182,25 @@ func returnPosIntSlice(refpos string) (refPos [3]int) {
 
 	refPosSplit := strings.Split(refpos, splitChar)
 
-	if len(refPosSplit) != 3 {
-		panic(fmt.Sprintf("Error with bed positional argument: %s should be an array of 3 ints (such as: 0 1 2) \n", refpos))
+	if len(refPosSplit) % 3 != 0 {
+		panic(fmt.Sprintf(
+			"Error with bed positional argument: refPos/bedPos: %s. Shouldb be an array with a length multiple of 3 ints separated by blank or , \n", refpos))
 	}
 
-	var err1, err2, err3 error
+	refPos = make([]int, len(refPosSplit))
 
-	refPos[0], err1 = strconv.Atoi(refPosSplit[0])
-	refPos[1], err2 = strconv.Atoi(refPosSplit[1])
-	refPos[2], err3 = strconv.Atoi(refPosSplit[2])
+	for i := 0; i < len(refPosSplit) / 3; i++ {
+		j := i * 3
+		var err1, err2, err3 error
 
-	if err1 != nil || err2 != nil || err3 != nil {
-		panic(fmt.Sprintf("Error with bed positional argument: %s should be an array of 3 ints (such as: 0 1 2) \n", refpos))
+		refPos[0 + j], err1 = strconv.Atoi(refPosSplit[0 + j])
+		refPos[1 + j], err2 = strconv.Atoi(refPosSplit[1 + j])
+		refPos[2 + j], err3 = strconv.Atoi(refPosSplit[2 + j])
+
+		if err1 != nil || err2 != nil || err3 != nil {
+			panic(fmt.Sprintf(
+				"Error with bed positional argument: %s should be an array of ints (such as: 0 1 2) \n", refpos))
+		}
 	}
 
 	return refPos
@@ -224,10 +253,11 @@ func returnSymbolType() (symbol utils.SymbolType) {
 	return symbol
 }
 
-func scanBedFileAndAddAnnotation(refPos [3]int) {
+func scanBedFileAndAddAnnotation(refPosList []int) {
 	var intervals []interval.IntInterface
 	var oneInterval interval.IntInterface
 	var symbols []string
+	var refPos [3]int
 	var line, peakstr string
 	var isInside, isUnique, isUniqueRef bool
 	var count int
@@ -236,7 +266,7 @@ func scanBedFileAndAddAnnotation(refPos [3]int) {
 	var buffer bytes.Buffer
 	var intrange interval.IntRange
 	var uniqueBed map[string]bool
-	var intervalCenter int
+	var intervalCenter, nbPeak, nbPeakRef int
 	var centerDistance, minCenterDistance float64
 	var oneIntervalID uintptr
 	var peakIntervalTreeObject utils.PeakIntervalTreeObject
@@ -261,6 +291,8 @@ func scanBedFileAndAddAnnotation(refPos [3]int) {
 	}
 
 	bedPos := returnPosIntSlice(BEDPOS)
+	nbPeaksPerLine := utils.CheckIfPeakPosIsMutltipleOf3(bedPos)
+	nbPeaksPerRef := utils.CheckIfPeakPosIsMutltipleOf3(refPosList)
 
 	if UNIQREF {
 		peakIntervalTreeObject = utils.CreatePeakIntervalTreeObjectFromFile(
@@ -274,102 +306,120 @@ func scanBedFileAndAddAnnotation(refPos [3]int) {
 			continue
 		}
 
-		peak.StringToPeakWithPos(line, bedPos)
+		for nbPeak = 0; nbPeak < nbPeaksPerLine; nbPeak++ {
 
-		if inttree, isInside = utils.CHRINTERVALDICT[peak.Chr()];!isInside {
-			if !IGNOREUNANNOATED || WRITEDIFF {
-				count = writeDefault(line, peak, &buffer)
-			}
+			for nbPeakRef = 0; nbPeakRef < nbPeaksPerRef; nbPeakRef++ {
+				refPos[0] = refPosList[0 + 3 * nbPeakRef]
+				refPos[1] = refPosList[1 + 3 * nbPeakRef]
+				refPos[2] = refPosList[2 + 3 * nbPeakRef]
+				peak.StringToPeakWithPosAndStart(line, bedPos, nbPeak * 3)
 
-			continue
-		}
+				if inttree, isInside = utils.CHRINTERVALDICT[peak.Chr()];!isInside {
+					if !IGNOREUNANNOATED || WRITEDIFF {
+						count = writeDefault(line, peak, &buffer)
+					}
 
-		intervals = inttree.Get(
-			utils.IntInterval{Start: peak.Start, End: peak.End})
-
-		switch {
-		case len(intervals) == 0 :
-			if !IGNOREUNANNOATED || WRITEDIFF {
-				count = writeDefault(line, peak, &buffer)
-			}
-
-		case  WRITEDIFF:
-			continue
-		}
-
-		intervalCenter, minCenterDistance = 0, -1
-		isUnique = false
-		isUniqueRef = true
-
-		for _, oneInterval = range intervals {
-			intrange = oneInterval.Range()
-			oneIntervalID = oneInterval.ID()
-			intervalCenter = intrange.Start - (intrange.End - intrange.Start) / 2
-			centerDistance = math.Abs(float64((peak.Start - (peak.End - peak.Start) / 2) - intervalCenter))
-
-			if UNIQ {
-				if minCenterDistance < 0 || centerDistance < minCenterDistance {
-					minCenterDistance = centerDistance
-
-					peakstr, symbols = returnPeakStrAndSymbol(
-						line,
-						oneIntervalID,
-						intrange.Start,
-						intrange.End,
-						refPos)
-				} else {
-					continue
-				}
-			} else {
-				peakstr, symbols = returnPeakStrAndSymbol(
-					line,
-					oneIntervalID,
-					intrange.Start,
-					intrange.End,
-					refPos)
-			}
-
-			if UNIQREF {
-				isUniqueRef = checkifUniqueRef(
-					peak.PeakToString(),
-					oneIntervalID, refPos,
-					&peakIntervalTreeObject)
-			}
-
-			if UNIQ {
-				if uniqueBed[peakstr] {
 					continue
 				}
 
-				uniqueBed[peakstr] = true
-				isUnique = true
+				intervals = inttree.Get(
+					utils.IntInterval{Start: peak.Start, End: peak.End})
 
-			} else  {
+				switch {
+				case len(intervals) == 0 :
+					if !IGNOREUNANNOATED || WRITEDIFF {
+						count = writeDefault(line, peak, &buffer)
+					}
 
-				if isUniqueRef {
+				case  WRITEDIFF:
+					continue
+				}
+
+				intervalCenter, minCenterDistance = 0, -1
+				isUnique = false
+				isUniqueRef = true
+
+				for _, oneInterval = range intervals {
+					intrange = oneInterval.Range()
+					oneIntervalID = oneInterval.ID()
+					intervalCenter = intrange.Start - (intrange.End - intrange.Start) / 2
+					centerDistance = math.Abs(float64((peak.Start - (peak.End - peak.Start) / 2) - intervalCenter))
+
+					if UNIQ {
+						if minCenterDistance < 0 || centerDistance < minCenterDistance {
+							minCenterDistance = centerDistance
+
+							peakstr, symbols = returnPeakStrAndSymbol(
+								line,
+								oneIntervalID,
+								intrange.Start,
+								intrange.End,
+								refPos)
+						} else {
+							continue
+						}
+					} else {
+						peakstr, symbols = returnPeakStrAndSymbol(
+							line,
+							oneIntervalID,
+							intrange.Start,
+							intrange.End,
+							refPos)
+					}
+
+					if UNIQREF {
+						isUniqueRef = checkifUniqueRef(
+							peak.PeakToString(),
+							oneIntervalID, refPos,
+							&peakIntervalTreeObject)
+					}
+
+					if UNIQ {
+						if uniqueBed[peakstr] {
+							continue
+						}
+
+						uniqueBed[peakstr] = true
+						isUnique = true
+
+					} else  {
+
+						if isUniqueRef {
+							if ANNOTATELINE {
+								peakstr = line
+							}
+
+							count += writeToBuffer(
+								symbols,
+								peakstr,
+								&buffer)
+						}
+					}
+				}
+
+				if !IGNOREUNANNOATED && !isUniqueRef {
+					isUniqueRef = true
+					symbols = []string{""}
+				}
+
+				if UNIQ && isUnique && isUniqueRef {
+					if ANNOTATELINE {
+						peakstr = line
+					}
+
 					count += writeToBuffer(
 						symbols,
 						peakstr,
 						&buffer)
 				}
+
+				if count >= 5000 {
+					_, err = writer.Write(buffer.Bytes())
+					utils.Check(err)
+					buffer.Reset()
+				}
+
 			}
-		}
-		if !IGNOREUNANNOATED && (isUniqueRef == false) {
-			isUniqueRef = true
-			symbols = []string{""}
-		}
-
-		if UNIQ && isUnique && isUniqueRef {
-			count += writeToBuffer(
-				symbols,
-				peakstr,
-				&buffer)
-		}
-
-		if count >= 5000 {
-			_, err = writer.Write(buffer.Bytes())
-			utils.Check(err)
-			buffer.Reset()
 		}
 
 	}
@@ -436,8 +486,6 @@ func returnPeakStrAndSymbol(line string, id uintptr, start, end int, refPos [3]i
 			end)
 	case WRITEREF:
 		peakstr = peak.PeakToString()
-	case ANNOTATELINE:
-		peakstr = line
 	default:
 		peak.StringToPeak(line)
 		peakstr = peak.PeakToString()

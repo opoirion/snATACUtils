@@ -99,6 +99,22 @@ func (peak * Peak) StringToPeakWithPos(str string, refPos [3]int) {
 	(*peak).Slice[2] = split[refPos[2]]
 }
 
+//StringToPeakWithPosAndStart Convert Peak string to peak
+func (peak * Peak) StringToPeakWithPosAndStart(str string, refPosList []int, start int) {
+	var refPos [3]int
+
+	if len(refPosList) < start + 3 {
+		panic(fmt.Sprintf("Size error with refPosList: %d and start %d",
+			refPosList, start))
+	}
+
+	refPos[0] = refPosList[0 + start]
+	refPos[1] = refPosList[1 + start]
+	refPos[2] = refPosList[2 + start]
+
+	(*peak).StringToPeakWithPos(str, refPos)
+}
+
 //SplitToPeak Convert string split to peak
 func (peak * Peak) SplitToPeak(split []string) {
 	var err1, err2 error
@@ -212,26 +228,47 @@ func LoadSymbolFile(peaksymbolfile, peakfile  Filename) {
 func LoadRefBedFileWithSymbol(peaksymbolfile Filename) {
 	symbol := SymbolType{}
 	symbol.SymbolPos = []int{3}
-	loadRefBedFileWithSymbol(peaksymbolfile, "\t", symbol, [3]int{0, 1, 2})
+	loadRefBedFileWithSymbol(peaksymbolfile, "\t", symbol, []int{0, 1, 2})
 }
 
 /*LoadRefCustomFileWithSymbol  peaksymbolfile, peakfile  Filename*/
-func LoadRefCustomFileWithSymbol(peaksymbolfile Filename, sep string, symbol SymbolType, refPos [3]int) {
+func LoadRefCustomFileWithSymbol(
+	peaksymbolfile Filename,
+	sep string,
+	symbol SymbolType,
+	refPos []int) {
 	loadRefBedFileWithSymbol(peaksymbolfile, sep, symbol, refPos)
 }
 
+/*CheckIfPeakPosIsMutltipleOf3 check if list is multiple of 3 */
+func CheckIfPeakPosIsMutltipleOf3(peakPos []int) (numberOfPeaks int) {
+	if len(peakPos) % 3 != 0 {
+		panic(fmt.Sprintf(
+			"peakPos %d from should b a multiple of 3",
+			peakPos))
+	}
+
+	numberOfPeaks = len(peakPos) / 3
+
+	return numberOfPeaks
+}
+
 /*loadRefBedFileWithSymbol  peaksymbolfile, peakfile  Filename*/
-func loadRefBedFileWithSymbol(peaksymbolfile Filename, sep string, symbol SymbolType, peakPos [3]int) {
+func loadRefBedFileWithSymbol(
+	peaksymbolfile Filename, sep string, symbol SymbolType, peakPos []int) {
 	var peakl Peak
 	var symbolSlice, split, peaksplit []string
 	var pos, i int
 	var symbolStr string
+	var peakPosTriplet [3]int
 
 	symbolSlice = make([]string, len(symbol.SymbolPos))
 	peaksplit = make([]string, 3)
 	PEAKSYMBOLDICT = make(map[Peak][]string)
 
 	maxPeakPos := MaxIntList(append(peakPos[:], symbol.SymbolPos...))
+
+	numberOfPeaks := CheckIfPeakPosIsMutltipleOf3(peakPos)
 
 	scanner, file := peaksymbolfile.ReturnReader(0)
 	defer CloseFile(file)
@@ -249,39 +286,45 @@ func loadRefBedFileWithSymbol(peaksymbolfile Filename, sep string, symbol Symbol
 				split, peakPos))
 		}
 
-		for i, pos = range symbol.SymbolPos {
-			symbolSlice[i] = split[pos]
+		for peakNb := 0; peakNb < numberOfPeaks; peakNb++ {
+			peakPosTriplet[0] = peakPos[0 + 3 * peakNb]
+			peakPosTriplet[1] = peakPos[1 + 3 * peakNb]
+			peakPosTriplet[2] = peakPos[2 + 3 * peakNb]
+
+			for i, pos = range symbol.SymbolPos {
+				symbolSlice[i] = split[pos]
+			}
+
+			for i, pos = range peakPosTriplet {
+				peaksplit[i] = split[pos]
+			}
+
+			peakl.SplitToPeak(peaksplit)
+
+			if symbol.SymbolStr != "" {
+				symbolStr = symbol.SymbolStr
+			} else {
+				symbolStr = strings.Join(symbolSlice, sep)
+			}
+
+			PEAKSYMBOLDICT[peakl] = append(PEAKSYMBOLDICT[peakl], symbolStr)
 		}
-
-		for i, pos = range peakPos {
-			peaksplit[i] = split[pos]
-		}
-
-		peakl.SplitToPeak(peaksplit)
-
-		if symbol.SymbolStr != "" {
-			symbolStr = symbol.SymbolStr
-		} else {
-			symbolStr = strings.Join(symbolSlice, sep)
-		}
-
-		PEAKSYMBOLDICT[peakl] = append(PEAKSYMBOLDICT[peakl], symbolStr)
 	}
 }
 
 /*CreatePeakIntervalTreeCustom ...*/
-func CreatePeakIntervalTreeCustom(peakPos [3]int, sep string) {
+func CreatePeakIntervalTreeCustom(peakPos []int, sep string) {
 	createPeakIntervalTree(peakPos, sep, false)
 }
 
 
 /*CreatePeakIntervalTree ...*/
 func CreatePeakIntervalTree() {
-	createPeakIntervalTree([3]int{0, 1, 2}, "\t", false)
+	createPeakIntervalTree([]int{0, 1, 2}, "\t", false)
 }
 
 /*createPeakIntervalTree ...*/
-func createPeakIntervalTree(peakPos [3]int, sep string, verbose bool) {
+func createPeakIntervalTree(peakPos []int, sep string, verbose bool) {
 	var split []string
 	var chroStr string
 
@@ -294,28 +337,41 @@ func createPeakIntervalTree(peakPos [3]int, sep string, verbose bool) {
 	CHRINTERVALDICT = make(map[string]*interval.IntTree)
 	INTERVALMAPPING = make(map[uintptr]string)
 
+	numberOfPeaks := CheckIfPeakPosIsMutltipleOf3(peakPos)
+	maxPeakPos := MaxIntList(peakPos)
+
 	for key, pos := range PEAKIDDICT {
 		split = strings.Split(key, sep)
-		chroStr = split[peakPos[0]]
 
-		start, err = strconv.Atoi(split[peakPos[1]])
-		Check(err)
-
-		end, err = strconv.Atoi(strings.Trim(split[peakPos[2]], "\n"))
-		Check(err)
-
-		inter := IntInterval{
-			Start: start, End: end}
-		inter.UID = uintptr(uintptr(pos))
-
-		if _, isInside = CHRINTERVALDICT[chroStr];!isInside {
-			CHRINTERVALDICT[chroStr] = &interval.IntTree{}
+		if len(split) < maxPeakPos {
+			panic(fmt.Sprintf(
+				"Error from createPeakIntervalTree. Line %s from symbol file should have at least enough fields as decribe in pos index: %d\n",
+				split, peakPos))
 		}
 
-		err = CHRINTERVALDICT[chroStr].Insert(inter, false)
-		Check(err)
+		for peakNb := 0; peakNb < numberOfPeaks; peakNb++ {
 
-		INTERVALMAPPING[inter.ID()] = key
+			chroStr = split[peakPos[0 + 3 * peakNb]]
+
+			start, err = strconv.Atoi(split[peakPos[1 + 3 * peakNb]])
+			Check(err)
+
+			end, err = strconv.Atoi(strings.Trim(split[peakPos[2 + 3 * peakNb]], "\n"))
+			Check(err)
+
+			inter := IntInterval{
+				Start: start, End: end}
+			inter.UID = uintptr(uintptr(pos))
+
+			if _, isInside = CHRINTERVALDICT[chroStr];!isInside {
+				CHRINTERVALDICT[chroStr] = &interval.IntTree{}
+			}
+
+			err = CHRINTERVALDICT[chroStr].Insert(inter, false)
+			Check(err)
+
+			INTERVALMAPPING[inter.ID()] = key
+		}
 	}
 
 	tDiff := time.Since(tStart)
@@ -327,13 +383,16 @@ func createPeakIntervalTree(peakPos [3]int, sep string, verbose bool) {
 
 
 /*createPeakIntervalTreeObject create a peak intervall dict object*/
-func createPeakIntervalTreeObject(peakiddict map[string]uint, peakPos [3]int, verbose bool) (
+func createPeakIntervalTreeObject(peakiddict map[string]uint, peakPos []int, verbose bool) (
 	intervalObject PeakIntervalTreeObject) {
 
 	var chroStr string
 	var err error
 	var isInside bool
 	var peak Peak
+	var peakPosTriplet [3]int
+
+	numberOfPeaks := CheckIfPeakPosIsMutltipleOf3(peakPos)
 
 	tStart := time.Now()
 
@@ -342,21 +401,27 @@ func createPeakIntervalTreeObject(peakiddict map[string]uint, peakPos [3]int, ve
 	intervalObject.Peakiddict = &peakiddict
 
 	for key, pos := range peakiddict {
-		peak.StringToPeakWithPos(key, peakPos)
-		chroStr = peak.Chr()
+		for peakNb := 0; peakNb < numberOfPeaks; peakNb++ {
+			peakPosTriplet[0] = peakPos[0 + 3 * peakNb]
+			peakPosTriplet[1] = peakPos[1 + 3 * peakNb]
+			peakPosTriplet[2] = peakPos[2 + 3 * peakNb]
 
-		int := IntInterval{
-			Start: peak.Start, End: peak.End}
-		int.UID = uintptr(uintptr(pos))
+			peak.StringToPeakWithPos(key, peakPosTriplet)
+			chroStr = peak.Chr()
 
-		if _, isInside = intervalObject.Chrintervaldict[chroStr];!isInside {
-			intervalObject.Chrintervaldict[chroStr] = &interval.IntTree{}
+			int := IntInterval{
+				Start: peak.Start, End: peak.End}
+			int.UID = uintptr(uintptr(pos))
+
+			if _, isInside = intervalObject.Chrintervaldict[chroStr];!isInside {
+				intervalObject.Chrintervaldict[chroStr] = &interval.IntTree{}
+			}
+
+			err = intervalObject.Chrintervaldict[chroStr].Insert(int, false)
+			Check(err)
+
+			intervalObject.Intervalmapping[int.ID()] = peak.PeakToString()
 		}
-
-		err = intervalObject.Chrintervaldict[chroStr].Insert(int, false)
-		Check(err)
-
-		intervalObject.Intervalmapping[int.ID()] = peak.PeakToString()
 	}
 
 	tDiff := time.Since(tStart)
@@ -370,7 +435,7 @@ func createPeakIntervalTreeObject(peakiddict map[string]uint, peakPos [3]int, ve
 
 
 /*CreatePeakIntervalTreeObjectFromFile create a peak intervall dict object*/
-func CreatePeakIntervalTreeObjectFromFile(bedfile Filename, sep string, peakPos [3]int) (
+func CreatePeakIntervalTreeObjectFromFile(bedfile Filename, sep string, peakPos []int) (
 	intervalObject PeakIntervalTreeObject) {
 
 	peakiddict := LoadPeaksDictCustom(bedfile, sep, peakPos)
@@ -384,14 +449,14 @@ func CreatePeakIntervalTreeObjectFromFile(bedfile Filename, sep string, peakPos 
 func LoadPeaksDict(fname Filename) (peakiddict map[string]uint)  {
 	peakiddict = make(map[string]uint)
 
-	loadPeaks(fname, peakiddict, "\t", [3]int{0, 1, 2})
+	loadPeaks(fname, peakiddict, "\t", []int{0, 1, 2})
 
 	return peakiddict
 }
 
 
 /*LoadPeaksDictCustom load peak file return map[string]int*/
-func LoadPeaksDictCustom(fname Filename, sep string, peakPos [3]int) (
+func LoadPeaksDictCustom(fname Filename, sep string, peakPos []int) (
 	peakiddict map[string]uint)  {
 	peakiddict = make(map[string]uint)
 
@@ -404,22 +469,20 @@ func LoadPeaksDictCustom(fname Filename, sep string, peakPos [3]int) (
 func LoadPeaks(fname Filename) int {
 	PEAKIDDICT = make(map[string]uint)
 
-	return loadPeaks(fname, PEAKIDDICT, "\t", [3]int{0, 1, 2})
+	return loadPeaks(fname, PEAKIDDICT, "\t", []int{0, 1, 2})
 }
 
 /*LoadPeaksCustom load peak file globally*/
-func LoadPeaksCustom(fname Filename, sep string, peakPos [3]int) int {
+func LoadPeaksCustom(fname Filename, sep string, peakPos []int) int {
 	PEAKIDDICT = make(map[string]uint)
 
 	return loadPeaks(fname, PEAKIDDICT, sep, peakPos)
 }
 
 /*loadPeaks load peak file globally*/
-func loadPeaks(fname Filename, peakiddict map[string]uint, sep string, pos [3]int) int {
+func loadPeaks(fname Filename, peakiddict map[string]uint, sep string, peakPos []int) int {
 	var scanner *bufio.Scanner
 	var file *os.File
-	var split []string
-	var err1, err2 error
 	var line string
 
 	scanner, file = fname.ReturnReader(0)
@@ -427,37 +490,18 @@ func loadPeaks(fname Filename, peakiddict map[string]uint, sep string, pos [3]in
 	defer CloseFile(file)
 
 	count := uint(0)
-	max := 3
-
-	for p := range pos {
-		if p >= max {
-			max = p + 1
-		}
-	}
+	max := MaxIntList(peakPos)
+	nbPeaks := CheckIfPeakPosIsMutltipleOf3(peakPos)
 
 	for scanner.Scan() {
 		line = scanner.Text()
+
 
 		if line[0] == '#' {
 			continue
 		}
 
-		split = strings.Split(line, sep)
-
-		if len(split) < max {
-			panic(fmt.Sprintf(
-				"Peak: %s at line %d from file %s cannot be cut in chr int int ####\n",
-				line, count, fname))
-		}
-
-		_, err1 = strconv.Atoi(split[pos[1]])
-		_, err2 = strconv.Atoi(split[pos[2]])
-
-		if err1 != nil || err2 != nil {
-			panic(fmt.Sprintf(
-				"Peak positions : %s at line %d from file %s cannot be used as int ####\n",
-				line, count, fname))
-		}
+		checkIfLineCanBeSplitIntoPeaks(line, sep, peakPos, max, nbPeaks)
 
 		peakiddict[line] = count
 		count++
@@ -466,6 +510,30 @@ func loadPeaks(fname Filename, peakiddict map[string]uint, sep string, pos [3]in
 	return int(count)
 }
 
+
+func checkIfLineCanBeSplitIntoPeaks(line, sep string, peakPos []int, peakMax, nbPeaks int) {
+	var err1, err2 error
+
+	split := strings.Split(line, sep)
+
+	if len(split) < peakMax {
+		panic(fmt.Sprintf(
+			"line: %s cannot be splitted in more than %d with separator: %s to match peak position: %d",
+			line, peakMax, sep, peakPos))
+	}
+
+	for peakNb := 0; peakNb < nbPeaks; peakNb++ {
+		_, err1 = strconv.Atoi(split[1 + 3 * peakNb])
+		_, err2 = strconv.Atoi(split[2 + 3 * peakNb])
+
+		if err1 != nil || err2 != nil {
+			panic(fmt.Sprintf(
+				"line: %s cannot be converted into peak Position: %d",
+				line, peakPos))
+		}
+	}
+
+}
 
 /*LoadPeaksAndTrim load peak file and return peak peak id trimmed for "chr" -> dict*/
 func LoadPeaksAndTrim(fname Filename) int {
