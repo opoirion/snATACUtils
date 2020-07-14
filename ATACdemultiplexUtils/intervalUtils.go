@@ -99,6 +99,7 @@ func (peak * Peak) StringToPeakWithPos(str string, refPos [3]int) {
 	(*peak).Slice[2] = split[refPos[2]]
 }
 
+
 //StringToPeakWithPosAndStart Convert Peak string to peak
 func (peak * Peak) StringToPeakWithPosAndStart(str string, refPosList []int, start int) {
 	var refPos [3]int
@@ -170,6 +171,9 @@ var INTERVALMAPPING map[uintptr]string
 /*PEAKSYMBOLDICT map[peak]symbol */
 var PEAKSYMBOLDICT map[Peak][]string
 
+/*PEAKSCOREDICT dict containing score for ref peaks*/
+var PEAKSCOREDICT map[Peak]float64
+
 
 /*LoadSymbolFile  peaksymbolfile, peakfile  Filename*/
 func LoadSymbolFile(peaksymbolfile, peakfile  Filename) {
@@ -228,7 +232,11 @@ func LoadSymbolFile(peaksymbolfile, peakfile  Filename) {
 func LoadRefBedFileWithSymbol(peaksymbolfile Filename) {
 	symbol := SymbolType{}
 	symbol.SymbolPos = []int{3}
-	loadRefBedFileWithSymbol(peaksymbolfile, "\t", symbol, []int{0, 1, 2})
+	loadRefBedFileWithSymbol(peaksymbolfile,
+		"\t",
+		symbol,
+		[]int{0, 1, 2},
+		-1)
 }
 
 /*LoadRefCustomFileWithSymbol  peaksymbolfile, peakfile  Filename*/
@@ -236,8 +244,14 @@ func LoadRefCustomFileWithSymbol(
 	peaksymbolfile Filename,
 	sep string,
 	symbol SymbolType,
-	refPos []int) {
-	loadRefBedFileWithSymbol(peaksymbolfile, sep, symbol, refPos)
+	refPos []int,
+	scorefiltercolumns int) {
+
+	loadRefBedFileWithSymbol(peaksymbolfile,
+		sep,
+		symbol,
+		refPos,
+		scorefiltercolumns)
 }
 
 /*CheckIfPeakPosIsMutltipleOf3 check if list is multiple of 3 */
@@ -253,14 +267,27 @@ func CheckIfPeakPosIsMutltipleOf3(peakPos []int) (numberOfPeaks int) {
 	return numberOfPeaks
 }
 
-/*loadRefBedFileWithSymbol  peaksymbolfile, peakfile  Filename*/
+/*loadRefBedFileWithSymbol  peaksymbolfile, peakfile  Filename
+scorefiltercolumns is used only if positive or null and is used to keep only the top scored symbol
+*/
 func loadRefBedFileWithSymbol(
-	peaksymbolfile Filename, sep string, symbol SymbolType, peakPos []int) {
+	peaksymbolfile Filename,
+	sep string,
+	symbol SymbolType,
+	peakPos []int,
+	scorefiltercolumns int) {
 	var peakl Peak
 	var symbolSlice, split, peaksplit []string
 	var pos, i int
 	var symbolStr string
 	var peakPosTriplet [3]int
+	var score, score2 float64
+	var err error
+	var isInside bool
+
+	if scorefiltercolumns > -1 {
+		PEAKSCOREDICT = make(map[Peak]float64)
+	}
 
 	symbolSlice = make([]string, len(symbol.SymbolPos))
 	peaksplit = make([]string, 3)
@@ -307,7 +334,23 @@ func loadRefBedFileWithSymbol(
 				symbolStr = strings.Join(symbolSlice, sep)
 			}
 
-			PEAKSYMBOLDICT[peakl] = append(PEAKSYMBOLDICT[peakl], symbolStr)
+			//scorefiltercolumns is used only if positive or null and is used to keep only the top scored symbol
+			if scorefiltercolumns > -1 {
+				if len(split) < scorefiltercolumns {
+					panic(fmt.Sprintf("Line: %s cannot be splitted in more than %d part to collect score",
+						split, scorefiltercolumns))
+				}
+				score, err = strconv.ParseFloat(split[scorefiltercolumns], 64)
+				Check(err)
+
+				if score2, isInside = PEAKSCOREDICT[peakl];!isInside && score > score2 {
+					PEAKSCOREDICT[peakl] = score
+					PEAKSYMBOLDICT[peakl] = []string{symbolStr}
+				}
+			} else {
+				PEAKSYMBOLDICT[peakl] = append(PEAKSYMBOLDICT[peakl], symbolStr)
+			}
+
 		}
 	}
 }

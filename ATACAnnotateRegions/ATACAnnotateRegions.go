@@ -68,6 +68,14 @@ var STDOUT bool
 /*ANNOTATELINE annotate the full line rather than peak region*/
 var ANNOTATELINE bool
 
+/*SCOREFILTERCOLUMNS column to use to filter peaks*/
+var SCOREFILTERCOLUMNS int
+
+/*SCORELINEDICT map[string]int mapping used to keep only the best peak  */
+var SCORELINEDICT map[string]float64
+
+/*UNIQUEPEAKTOSYMBOL map used to link peak to unique top symbol */
+var UNIQUEPEAKTOSYMBOL map[string]string
 
 func main() {
 	flag.Usage = func() {
@@ -76,13 +84,15 @@ func main() {
 This software presents some similarities with bedtools usage however it provides better customisations for bed file annotation when comparing two bed files with interesecting regions
 
 """Annotate bed file using a reference bed file containing the annotations"""
-USAGE: ATACAnnotateRegions -bed <file> -ref <file> (optionnal -out <string> -unique -unique_ref -intersect -write_ref -edit -ref_sep "[3]int" -ref_symbol "[]int|str" -diff -stdout -annotate_line)
+USAGE: ATACAnnotateRegions -bed <file> -ref <file> (optional -out <string> -unique -unique_ref -intersect -write_ref -edit -ref_sep "[3]int" -ref_symbol "[]int|str" -diff -stdout -annotate_line -score_pos)
 
 for -ref_sep and -ref_symbol options, the input should be a string of numbers separated by whitespace and delimited with ". -ref_sep needs exactly three positions: 1) for the chromosomes column, 2) for the begining and 3) for the end of the region
 
-Example: ATACAnnotateRegions -bed regionToAnnotate.bed -ref referenceAnnotation.tsv -ref_sep "0 1 2" -ref_symbol "4 5"
+Example: ATACAnnotateRegions -bed regionToAnnotate.bed -ref referenceAnnotation.tsv -ref_sep 0,1,2 -ref_symbol "4 5"
 
 -ref_sep and -symbol_pos can be blank with " or comma separated: i.e."0 1 2" or 0,1,2. Also symbol_pos an be a generic string to annotate all ref regions
+
+-score_pos is an alternative mechanism to retain unique peaks (no dupplicate) from the bed file by using an additional column of the bed file as score (needs to be float). if multiple entries exist for a given peak in the bed file, only the one with the highest score will be kept.
 
 Here the three first columns of referenceAnnotation.tsv will be used to identify chromosome (column 0), start (column 1), and end (column 2) of each region, and regionToAnnotate.bed will be annotatd using columns 4 and 5 from referenceAnnotation.tsv
 `)
@@ -99,6 +109,7 @@ Here the three first columns of referenceAnnotation.tsv will be used to identify
 	flag.BoolVar(&UNIQ, "unique", false, `write only unique output peaks`)
 	flag.BoolVar(&ANNOTATELINE, "annotate_line", false, `annotate the full line rather than the defined peak region`)
 	flag.BoolVar(&UNIQREF, "unique_ref", false, `write only unique reference using the closest peak`)
+	flag.IntVar(&SCOREFILTERCOLUMNS, "score_pos", -1, "(Require int) If used, refers to the column position containing score (float) to keep only the top unique link ")
 	flag.StringVar(&uniqsymbolstr, "unique_symbols", "true", `write only unique symbols per peak`)
 	flag.BoolVar(&WRITEDIFF, "diff", false, `write bed region if no intersection is found`)
 	flag.BoolVar(&WRITEREF, "write_ref", false, `write bed region from reference file`)
@@ -109,6 +120,14 @@ Here the three first columns of referenceAnnotation.tsv will be used to identify
 	flag.StringVar(&SYMBOLPOS, "symbol_pos", "3", "separator to the bed region in ref for the ref file")
 
 	flag.Parse()
+
+	if UNIQ && SCOREFILTERCOLUMNS > -1 {
+		SCORELINEDICT = make(map[string]float64)
+		UNIQUEPEAKTOSYMBOL = make(map[string]string)
+
+	} else {
+		SCOREFILTERCOLUMNS = -1
+	}
 
 	UNIQSYMBOL = uniqsymbolstr == "true"
 
@@ -156,7 +175,8 @@ Example: ATACAnnotateRegions -bed regionToAnnotate.bed -ref referenceAnnotation.
 	}
 
 	if !WRITEDIFF {
-		utils.LoadRefCustomFileWithSymbol(REFBEDFILENAME, REFSEP, symbol, refPos)
+		utils.LoadRefCustomFileWithSymbol(
+			REFBEDFILENAME, REFSEP, symbol, refPos, SCOREFILTERCOLUMNS)
 	}
 
 	utils.LoadPeaksCustom(REFBEDFILENAME, REFSEP, refPos)
@@ -424,6 +444,8 @@ func scanBedFileAndAddAnnotation(refPosList []int) {
 
 	}
 
+	uniquePeakToSymbolToBuffer(&buffer, &writer)
+
 	_, err = writer.Write(buffer.Bytes())
 	utils.Check(err)
 	buffer.Reset()
@@ -467,6 +489,26 @@ func writeToBuffer(
 	}
 
 	return count
+}
+
+func uniquePeakToSymbolToBuffer(buffer * bytes.Buffer, writer * io.WriteCloser) {
+	count := 0
+	var err error
+
+	for peakstr, symbol := range UNIQUEPEAKTOSYMBOL {
+		buffer.WriteString(peakstr)
+		buffer.WriteRune('\t')
+		buffer.WriteString(symbol)
+		buffer.WriteRune('\n')
+		count++
+
+		if count > 5000 {
+			_, err = (*writer).Write(buffer.Bytes())
+			utils.Check(err)
+			buffer.Reset()
+			count = 0
+		}
+	}
 }
 
 func returnPeakStrAndSymbol(line string, id uintptr, start, end int, refPos [3]int) (
