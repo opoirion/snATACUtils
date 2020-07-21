@@ -155,6 +155,28 @@ func initChan(logChan * map[string]chan StatsDict, logType []string) {
 
 /* */
 func main() {
+
+	flag.Usage = func() {
+		fmt.Fprintf(os.Stderr, `
+################ USAGE #################################
+# Demultiplexing using 2 index files I1 an I2
+ATACdemultiplex -fastq_R1 <fastq paired read 1 file> \
+                -fastq_R2 <fastq paired read 2 file> \
+                -fastq_I1 <fastq index 1 file> \
+                -fastq_I2 <fastq index 1 file> \
+# Optional Basic
+                -index_no_replicate <reference index file>  \
+                -output_tag <string> \
+                -nbThreads <int> \
+                -write_logs \
+                -use_no_index \
+...
+
+########################################################
+`)
+		flag.PrintDefaults()
+	}
+
 	flag.StringVar(&FASTQ_I1, "fastq_I1", "", "fastq index file index paired read 1")
 	flag.StringVar(&FASTQ_I2, "fastq_I2", "", "fastq index file index paired read 2 (not needed for 10x dataset)")
 	flag.StringVar(&FASTQ_R1, "fastq_R1", "", "fastq read file index paired read 1")
@@ -169,11 +191,11 @@ func main() {
 	flag.BoolVar(&SORT_LOGS, "sort_logs", false, "sort logs (might consume a lot of RAM and provoke failure)")
 	flag.IntVar(&SHIFT_P5, "shift_p5", 0, "shift p5 barcodes toward n nucleotides from the left (default 0)")
 
-	flag.StringVar(&I5PLATES, "i5_plates", "", "(OPTIONNAL) plates used to define the used i5 indexes")
-	flag.StringVar(&P7PLATES, "p7_plates", "", "(OPTIONNAL) plates used to define the used p7 indexes")
+	flag.StringVar(&I5PLATES, "i5_plates", "", "(OPTIONAL) plates used to define the used i5 indexes")
+	flag.StringVar(&P7PLATES, "p7_plates", "", "(OPTIONAL) plates used to define the used p7 indexes")
 
-	flag.StringVar(&I5RANGE, "i5_ranges", "", "(OPTIONNAL) plates used to define the used i5 indexes")
-	flag.StringVar(&P7RANGE, "p7_ranges", "", "(OPTIONNAL) plates used to define the used p7 indexes")
+	flag.StringVar(&I5RANGE, "i5_ranges", "", "(OPTIONAL) plates used to define the used i5 indexes")
+	flag.StringVar(&P7RANGE, "p7_ranges", "", "(OPTIONAL) plates used to define the used p7 indexes")
 
 	flag.IntVar(&PLATESIZE, "plate_size", 96, "sized of the plated used for the *_plates option (default 96)")
 
@@ -208,12 +230,13 @@ func main() {
 		return
 	}
 
-	if FASTQ_I2 == "" && FASTQ_I1 != "" {
-		FormatingR1R2FastqUsingI1Only(FASTQ_R1, FASTQ_R2, FASTQ_I1)
-		return
-	}
-
 	MAX_NB_MISTAKE_DICT = make(map[string]int)
+
+	use10x := (FASTQ_I2 == "" && FASTQ_I1 != "")
+
+	if INDEX_REPLICATE_R1 == "" &&  INDEX_REPLICATE_R2 == "" && len(INDEXFILES) == 0 {
+		USENOINDEX = true
+	}
 
 	for index := range(LENGTHDIC) {
 		MAX_NB_MISTAKE_DICT[index] = MAX_NB_MISTAKE
@@ -302,6 +325,9 @@ func main() {
 	tStart := time.Now()
 
 	switch {
+	case use10x:
+		FormatingR1R2FastqUsingI1Only(FASTQ_R1, FASTQ_R2, FASTQ_I1)
+
 	case NB_THREADS == 1:
 		var waiting sync.WaitGroup
 		waiting.Add(1)
@@ -314,7 +340,9 @@ func main() {
 		launchAnalysisMultipleFile()
 	}
 
-	writeReport()
+	if !use10x {
+		writeReport()
+	}
 
 	tDiff := time.Since(tStart)
 	fmt.Printf("demultiplexing finished in %f s\n", tDiff.Seconds())

@@ -71,9 +71,6 @@ var ANNOTATELINE bool
 /*SCOREFILTERCOLUMNS column to use to filter peaks*/
 var SCOREFILTERCOLUMNS int
 
-/*SCORELINEDICT map[string]int mapping used to keep only the best peak  */
-var SCORELINEDICT map[string]float64
-
 /*UNIQUEPEAKTOSYMBOL map used to link peak to unique top symbol */
 var UNIQUEPEAKTOSYMBOL map[string]string
 
@@ -122,7 +119,6 @@ Here the three first columns of referenceAnnotation.tsv will be used to identify
 	flag.Parse()
 
 	if UNIQ && SCOREFILTERCOLUMNS > -1 {
-		SCORELINEDICT = make(map[string]float64)
 		UNIQUEPEAKTOSYMBOL = make(map[string]string)
 
 	} else {
