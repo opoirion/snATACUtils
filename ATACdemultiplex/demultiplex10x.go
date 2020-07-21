@@ -202,7 +202,6 @@ func writeOutputFastq(begining, end int, writerR1, writerR2 *io.WriteCloser, wai
 	count := 4
 	success := false
 
-loop:
 	for i := begining; i < end;i++ {
 		switch{
 		case count == 4:
@@ -217,10 +216,10 @@ loop:
 				if !successP7 {
 					if WRITE_LOGS {
 						logsIndexCellFail[fmt.Sprintf("fail_p7")].dict[BUFFERI1[i+1]]++
-						logs["stats"].dict["Number of reads"]++
-						count++
+						logs["stats"].dict["Number of reads (FAIL)"]++
+						count = 1
 						success = false
-						continue loop
+						continue
 					}
 				}
 			}
@@ -262,6 +261,7 @@ loop:
 	(*writerR1).Write(bufferR1.Bytes())
 	(*writerR2).Write(bufferR2.Bytes())
 	MUTEX.Unlock()
+
 
 	go processLogChan(LOG_CHAN, logs, "stats")
 	go processLogChan(LOG_INDEX_CELL_CHAN, logsIndexCell, "barcodes")
@@ -311,6 +311,7 @@ func storeDictFromChan(channels  map[string]chan StatsDict, logFileKey string) {
 			select{
 			case statsDict := <-channel:
 				dictit := statsDict.dict
+
 				for key, value := range dictit {
 					LOGSDICTMAP[logFileKey][typ][key] += value
 				}
