@@ -145,7 +145,7 @@ mainloop:
 		go writeOutputFastq(begining, COUNTS[0], &writerR1, &writerR2, &waiting)
 		waiting.Wait()
 
-		if MAX_NB_READS > 0 && count > MAX_NB_READS {
+		if MAX_NB_READS > 0 && count / 4 > MAX_NB_READS {
 			break mainloop
 		}
 	}
