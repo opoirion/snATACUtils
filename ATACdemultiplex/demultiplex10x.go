@@ -84,7 +84,7 @@ func FormatingR1R2FastqUsingI1Only(filenameR1 string, filenameR2 string, filenam
 		strings.TrimSuffix(outFilenameR1, fmt.Sprintf(".fastq%s", ext)),
 		OUTPUT_TAG_NAME, ext)
 
-	outFilenameR2 = fmt.Sprintf("%s%s%s.demultiplexed.R1.repl1.fastq%s",
+	outFilenameR2 = fmt.Sprintf("%s%s%s.demultiplexed.R2.repl1.fastq%s",
 		OUTPUT_PATH,
 		strings.TrimSuffix(outFilenameR2, fmt.Sprintf(".fastq%s", ext)),
 		OUTPUT_TAG_NAME, ext)
