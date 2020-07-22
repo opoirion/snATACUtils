@@ -79,12 +79,12 @@ func FormatingR1R2FastqUsingI1Only(filenameR1 string, filenameR2 string, filenam
 	_, outFilenameR2 := pathutils.Split(filenameR2)
 
 	ext := path.Ext(filenameR1)
-	outFilenameR1 = fmt.Sprintf("%s%s%s.demultiplexed.R1.fastq%s",
+	outFilenameR1 = fmt.Sprintf("%s%s%s.demultiplexed.R1.repl1.fastq%s",
 		OUTPUT_PATH,
 		strings.TrimSuffix(outFilenameR1, fmt.Sprintf(".fastq%s", ext)),
 		OUTPUT_TAG_NAME, ext)
 
-	outFilenameR2 = fmt.Sprintf("%s%s%s.demultiplexed.R1.fastq%s",
+	outFilenameR2 = fmt.Sprintf("%s%s%s.demultiplexed.R1.repl1.fastq%s",
 		OUTPUT_PATH,
 		strings.TrimSuffix(outFilenameR2, fmt.Sprintf(".fastq%s", ext)),
 		OUTPUT_TAG_NAME, ext)
