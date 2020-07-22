@@ -190,7 +190,10 @@ USAGE: ATACtools -clean -filename <fname> -output filename -clean_pattern "\n"
 
 	tDiff := time.Since(tStart)
 
-	fmt.Printf("number of lines: %d\n", nbLines)
+	if nbLines > 0 || SCAN {
+		fmt.Printf("number of lines: %d\n", nbLines)
+	}
+
 	fmt.Printf("time: %f s\n", tDiff.Seconds())
 
 }
