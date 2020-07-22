@@ -14,6 +14,7 @@ import (
 	"io"
 	"time"
 	"strconv"
+	pathutils "path"
 )
 
 /*BUFFERSIZE buufer size used to parse strings from ungzipped file */
@@ -73,15 +74,18 @@ func FormatingR1R2FastqUsingI1Only(filenameR1 string, filenameR2 string, filenam
 
 	fmt.Printf("#### Launching ATACdemultiplex using only I1 #### \n")
 
+	_, outFilenameR1 := pathutils.Split(filenameR1)
+	_, outFilenameR2 := pathutils.Split(filenameR2)
+
 	ext := path.Ext(filenameR1)
-	outFilenameR1 := fmt.Sprintf("%s%s%s.demultiplexed.R1.fastq%s",
+	outFilenameR1 = fmt.Sprintf("%s%s%s.demultiplexed.R1.fastq%s",
 		OUTPUT_PATH,
-		strings.TrimSuffix(filenameR1, fmt.Sprintf(".fastq%s", ext)),
+		strings.TrimSuffix(outFilenameR1, fmt.Sprintf(".fastq%s", ext)),
 		OUTPUT_TAG_NAME, ext)
 
-	outFilenameR2 := fmt.Sprintf("%s%s%s.demultiplexed.R1.fastq%s",
+	outFilenameR2 = fmt.Sprintf("%s%s%s.demultiplexed.R1.fastq%s",
 		OUTPUT_PATH,
-		strings.TrimSuffix(filenameR2, fmt.Sprintf(".fastq%s", ext)),
+		strings.TrimSuffix(outFilenameR2, fmt.Sprintf(".fastq%s", ext)),
 		OUTPUT_TAG_NAME, ext)
 
 	writerR1 := utils.ReturnWriter(outFilenameR1)
@@ -360,6 +364,7 @@ func writeReportFrom10x(logFileKey string) {
 			}
 
 		default:
+			CHANMUTEX.Lock()
 			for k, v := range logs {
 				buffer.WriteString(k)
 				buffer.WriteRune('\t')
@@ -369,6 +374,7 @@ func writeReportFrom10x(logFileKey string) {
 				file.Write(buffer.Bytes())
 				buffer.Reset()
 			}
+			CHANMUTEX.Unlock()
 		}
 	}
 
