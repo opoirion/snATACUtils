@@ -29,7 +29,7 @@ var BUFFERR2 [BUFFERSIZE]string
 /*BUFFERI1 buffer index I1 */
 var BUFFERI1 [BUFFERSIZE]string
 
-/*COUNTS reqad count array for the 3 files */
+/*COUNTS read count array for the 3 files */
 var COUNTS [3]int
 
 /*MUTEX main mutex */
@@ -71,6 +71,7 @@ func FormatingR1R2FastqUsingI1Only(filenameR1 string, filenameR2 string, filenam
 
 	chunk := BUFFERSIZE / 4 / NB_THREADS
 	chunk = chunk - chunk % 4
+	count := 0
 
 	fmt.Printf("#### Launching ATACdemultiplex using only I1 #### \n")
 
@@ -123,6 +124,8 @@ mainloop:
 			break mainloop
 		}
 
+		count += COUNTS[0]
+
 		end = chunk
 		begining = 0
 
@@ -141,6 +144,10 @@ mainloop:
 		waiting.Add(1)
 		go writeOutputFastq(begining, COUNTS[0], &writerR1, &writerR2, &waiting)
 		waiting.Wait()
+
+		if MAX_NB_READS > 0 && count > MAX_NB_READS {
+			break mainloop
+		}
 	}
 
 	tDiff := time.Since(tStart)
