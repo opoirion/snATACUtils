@@ -4,11 +4,85 @@ import (
 	"log";
 	"strings";
 	"fmt";
-	"strconv"
+	"strconv";
+	"io"
 	utils "gitlab.com/Grouumf/ATACdemultiplex/ATACdemultiplexUtils"
+	"path"
 
 )
 
+/*INDEXTOOUTPUTNAME just the names of files */
+var INDEXTOOUTPUTNAME map[string]map[string]string
+
+func loadOutputFileIndex() {
+	var line, index, indexstr, outtag string
+	var split []string
+	var isInside bool
+	var outFilenameR1, outFilenameR2 string
+	var r1r2Writers R1R2Writers
+
+	if OUTPUTINDEXFILE == "" {
+		return
+	}
+
+	INDEXTOOUTPUT = make(map[string]map[string]R1R2Writers)
+	INDEXTOOUTPUTNAME = make(map[string]map[string]string)
+
+	reader, file := utils.ReturnReader(OUTPUTINDEXFILE, 0)
+	defer utils.CloseFile(file)
+
+	ext := path.Ext(FASTQ_R1)
+
+
+	for reader.Scan() {
+		line = strings.Trim(reader.Text(), "\n\t\r")
+		split = strings.Split(line, "\t")
+
+		if len(split) != 3 {
+			panic(fmt.Sprintf("Line: %s from file: %s should be splitted in 3",
+				line, OUTPUTINDEXFILE))
+		}
+
+		index, indexstr, outtag = split[0], split[1], split[2]
+
+		if _, isInside = INDEXTOOUTPUT[index];!isInside {
+			INDEXTOOUTPUT[index] = make(map[string]R1R2Writers)
+			INDEXTOOUTPUTNAME[index] = make(map[string]string)
+		}
+
+		outFilenameR1 = fmt.Sprintf("%s/%s_R1.fasta%s", OUTPUT_PATH, outtag, ext)
+		outFilenameR2 = fmt.Sprintf("%s/%s_R2.fasta%s", OUTPUT_PATH, outtag, ext)
+
+		INDEXTOOUTPUTNAME[index][indexstr] = fmt.Sprintf(
+				"%s/%s_R1.fasta%s created\n%s/%s_R2.fasta%s created",
+				OUTPUT_PATH, outtag, ext, OUTPUT_PATH, outtag, ext)
+
+		r1r2Writers = [2]io.WriteCloser{}
+
+		r1r2Writers[0] = utils.ReturnWriter(outFilenameR1)
+		r1r2Writers[0] = utils.ReturnWriter(outFilenameR2)
+
+		INDEXTOOUTPUT[index][indexstr] = r1r2Writers
+	}
+}
+
+
+func closeFileIndex() {
+	for key := range INDEXTOOUTPUT {
+		for barcode := range INDEXTOOUTPUT[key] {
+			utils.CloseFile(INDEXTOOUTPUT[key][barcode][0])
+			utils.CloseFile(INDEXTOOUTPUT[key][barcode][1])
+		}
+	}
+}
+
+func printSuccessFileIndex() {
+	for key := range INDEXTOOUTPUT {
+		for barcode := range INDEXTOOUTPUT[key] {
+			fmt.Printf("%s\n", INDEXTOOUTPUTNAME[key][barcode])
+		}
+	}
+}
 
 func loadIndexes(fnameList []string, dict * map[string]map[string]bool, reportName string) {
 	countdict := make(map[string]int)

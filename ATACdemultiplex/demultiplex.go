@@ -127,8 +127,12 @@ var INDEXFILES utils.ArrayFlags
 /*ALLBARCODES ... */
 var ALLBARCODES utils.ArrayFlags
 
+/*OUTPUTINDEXFILE index file indicating output file for each index*/
+var OUTPUTINDEXFILE string
+
 /*USEALLBARCODES ... */
 var USEALLBARCODES = make(map[string]bool)
+
 
 /*StatsDict doc */
 type StatsDict struct {
@@ -170,8 +174,30 @@ ATACdemultiplex -fastq_R1 <fastq paired read 1 file> \
                 -nbThreads <int> \
                 -write_logs \
                 -use_no_index \
-...
 
+# Demultiplexing using 1 index files I1
+ATACdemultiplex -fastq_R1 <fastq paired read 1 file> \
+                -fastq_R2 <fastq paired read 2 file> \
+                -fastq_I1 <fastq index 1 file> \
+# Optional Basic
+                -index_no_replicate <reference index file>  \
+                -output_tag <string> \
+                -nbThreads <int> \
+                -write_logs \
+                -use_no_index \
+                -output_files_index <file> \
+...
+Documentation:
+
+:-output_files_index:
+if -output_files_index is used, the index file should be
+formatted using the following convention:
+<index type>\t<index string>\t<output tag>
+
+i.e.:
+p7    ATACAC    ATACAC_Output
+
+This option is valid only when not using I2 index file
 ########################################################
 `)
 		flag.PrintDefaults()
@@ -181,6 +207,8 @@ ATACdemultiplex -fastq_R1 <fastq paired read 1 file> \
 	flag.StringVar(&FASTQ_I2, "fastq_I2", "", "fastq index file index paired read 2 (not needed for 10x dataset)")
 	flag.StringVar(&FASTQ_R1, "fastq_R1", "", "fastq read file index paired read 1")
 	flag.StringVar(&FASTQ_R2, "fastq_R2", "", "fastq read file index paired read 2")
+	flag.StringVar(&OUTPUTINDEXFILE, "output_files_index", "",
+		"index indicating the output file to use. ")
 	flag.BoolVar(&DEBUG, "debug", false, "debug wrongly formated reads")
 	flag.BoolVar(&USENOINDEX, "use_no_index", false, "use no input index file")
 	flag.BoolVar(&PRINTVERSION, "version", false, "print the current version and return")

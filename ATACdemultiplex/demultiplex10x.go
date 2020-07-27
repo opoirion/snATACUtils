@@ -44,6 +44,15 @@ var CHANWAITING sync.WaitGroup
 /*LOGSDICTMAP global log dict file -> field type -> entity -> count  */
 var LOGSDICTMAP map[string]map[string]map[string]int
 
+/*R1R2Writers R1 and R2 writers */
+type R1R2Writers [2]io.WriteCloser
+
+/*R1R2Buffers R1 and R2 buffers */
+type R1R2Buffers [2]bytes.Buffer
+
+/*INDEXTOOUTPUT mapping index type -> name -> specific outputfile name */
+var INDEXTOOUTPUT map[string]map[string]R1R2Writers
+
 
 /*FormatingR1R2FastqUsingI1Only format R1 and R2 fastq files using a 10x I1 fastq index file */
 func FormatingR1R2FastqUsingI1Only(filenameR1 string, filenameR2 string, filenameI1 string) {
@@ -103,6 +112,10 @@ func FormatingR1R2FastqUsingI1Only(filenameR1 string, filenameR2 string, filenam
 	defer fileR2.Close()
 	defer fileI1.Close()
 
+	loadOutputFileIndex()
+	defer closeFileIndex()
+	defer printSuccessFileIndex()
+
 mainloop:
 	for {
 		waiting.Add(3)
@@ -154,6 +167,8 @@ mainloop:
 	fmt.Printf("Formatting R1 R2 fastq files done in time: %f s \n", tDiff.Seconds())
 	fmt.Printf("file: %s created!\n file: %s created!\n", outFilenameR1, outFilenameR2)
 
+	printSuccessFileIndex()
+
 	CHANWAITING.Wait()
 
 	go storeDictFromChan(LOG_CHAN, "stats")
@@ -188,14 +203,103 @@ func fillBuffer(scanner * bufio.Scanner, buffer * [BUFFERSIZE]string, waiting * 
 	COUNTS[countPos] = count
 }
 
+
+func getBuffersForMultipleOutfiles() (buffers map[string]map[string]R1R2Buffers)  {
+	buffers = make(map[string]map[string]R1R2Buffers)
+	var isInside bool
+	var r1r2buffers R1R2Buffers
+
+	for key := range INDEXTOOUTPUT {
+		if _, isInside = buffers[key];!isInside {
+			buffers[key] = make(map[string]R1R2Buffers)
+		}
+
+		for key2:= range INDEXTOOUTPUT[key] {
+			r1r2buffers[0] = bytes.Buffer{}
+			r1r2buffers[1] = bytes.Buffer{}
+
+			buffers[key][key2] = r1r2buffers
+		}
+	}
+
+	return buffers
+}
+
+func resetBuffers(buffers map[string]map[string]R1R2Buffers) {
+	var r1r2buffers R1R2Buffers
+
+	for key := range buffers {
+		for key2 := range buffers[key] {
+			r1r2buffers = buffers[key][key2]
+
+			r1r2buffers[0].Reset()
+			r1r2buffers[1].Reset()
+		}
+	}
+}
+
+func provideBuffers( defaultR1, defaultR2 * bytes.Buffer,
+	index, ref string,  buffers * map[string]map[string]R1R2Buffers) (
+		bufferR1, bufferR2 * bytes.Buffer) {
+	var isInside bool
+	var r1r2buffers R1R2Buffers
+
+	if _, isInside = (*buffers)[index];!isInside {
+		return defaultR1, defaultR2
+	}
+
+	if _, isInside = (*buffers)[index][ref];!isInside {
+		return defaultR1, defaultR2
+	}
+
+	r1r2buffers = (*buffers)[index][ref]
+
+	bufferR1 = &r1r2buffers[0]
+	bufferR2 = &r1r2buffers[1]
+
+	return bufferR1, bufferR2
+}
+
+func writeBuffersToFiles(buffers * map[string]map[string]R1R2Buffers) {
+	var r1r2buffers R1R2Buffers
+	var r1r2writers R1R2Writers
+
+	for key := range (*buffers) {
+		for key2 := range (*buffers)[key] {
+
+			r1r2buffers = (*buffers)[key][key2]
+			r1r2writers = INDEXTOOUTPUT[key][key2]
+
+			r1r2writers[0].Write(r1r2buffers[0].Bytes())
+			r1r2writers[1].Write(r1r2buffers[1].Bytes())
+		}
+	}
+}
+
 func writeOutputFastq(begining, end int, writerR1, writerR2 *io.WriteCloser, waiting * sync.WaitGroup) {
 	defer waiting.Done()
 
-	var bufferR1 bytes.Buffer
-	var bufferR2 bytes.Buffer
+	bufferR1default := &bytes.Buffer{}
+	bufferR2default := &bytes.Buffer{}
 
-	defer bufferR1.Reset()
-	defer bufferR2.Reset()
+	var bufferR1 * bytes.Buffer
+	var bufferR2 * bytes.Buffer
+
+	bufferR1 = bufferR1default
+	bufferR2 = bufferR2default
+
+	var buffers map[string]map[string]R1R2Buffers
+	defer resetBuffers(buffers)
+
+	var useIndexes bool
+
+	defer bufferR1default.Reset()
+	defer bufferR2default.Reset()
+
+	if OUTPUTINDEXFILE != "" {
+		buffers = getBuffersForMultipleOutfiles()
+		useIndexes = true
+	}
 
 	var successP7 bool
 	// var replicateP7 int
@@ -232,6 +336,15 @@ func writeOutputFastq(begining, end int, writerR1, writerR2 *io.WriteCloser, wai
 						success = false
 						continue
 					}
+				}
+
+				if useIndexes {
+					bufferR1, bufferR2 = provideBuffers(
+						bufferR1default,
+						bufferR2default,
+						"p7",
+						BUFFERI1[i+1],
+						&buffers )
 				}
 			}
 
@@ -271,6 +384,7 @@ func writeOutputFastq(begining, end int, writerR1, writerR2 *io.WriteCloser, wai
 	MUTEX.Lock()
 	(*writerR1).Write(bufferR1.Bytes())
 	(*writerR2).Write(bufferR2.Bytes())
+	writeBuffersToFiles(&buffers)
 	MUTEX.Unlock()
 
 
