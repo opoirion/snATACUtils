@@ -48,10 +48,13 @@ var LOGSDICTMAP map[string]map[string]map[string]int
 type R1R2Writers [2]io.WriteCloser
 
 /*R1R2Buffers R1 and R2 buffers */
-type R1R2Buffers [2]bytes.Buffer
+type R1R2Buffers [2]*bytes.Buffer
 
 /*INDEXTOOUTPUT mapping index type -> name -> specific outputfile name */
 var INDEXTOOUTPUT map[string]map[string]R1R2Writers
+
+/*LOGCHANFILES log for output files*/
+var LOGCHANFILES map[string]chan StatsDict
 
 
 /*FormatingR1R2FastqUsingI1Only format R1 and R2 fastq files using a 10x I1 fastq index file */
@@ -113,6 +116,13 @@ func FormatingR1R2FastqUsingI1Only(filenameR1 string, filenameR2 string, filenam
 	defer fileI1.Close()
 
 	loadOutputFileIndex()
+	useOutputIndexes := OUTPUTINDEXFILE != ""
+
+	if useOutputIndexes {
+		LOGCHANFILES = make(map[string] chan StatsDict)
+		initChan(&LOGCHANFILES, []string{"output_files"})
+	}
+
 	defer closeFileIndex()
 	defer printSuccessFileIndex()
 
@@ -174,6 +184,8 @@ mainloop:
 	go storeDictFromChan(LOG_CHAN, "stats")
 	go storeDictFromChan(LOG_INDEX_CELL_CHAN, "barcodes")
 	go storeDictFromChan(LOG_INDEX_READ_CHAN, "failed_barcodes")
+	go storeDictFromChan(LOGCHANFILES, "output_files")
+
 	CHANWAITING.Wait()
 
 	go writeReportFrom10x("stats")
@@ -181,6 +193,10 @@ mainloop:
 
 	if !USENOINDEX {
 		go writeReportFrom10x("failed_barcodes")
+	}
+
+	if useOutputIndexes {
+		go writeReportFrom10x("output_files")
 	}
 
 	CHANWAITING.Wait()
@@ -207,16 +223,18 @@ func fillBuffer(scanner * bufio.Scanner, buffer * [BUFFERSIZE]string, waiting * 
 func getBuffersForMultipleOutfiles() (buffers map[string]map[string]R1R2Buffers)  {
 	buffers = make(map[string]map[string]R1R2Buffers)
 	var isInside bool
-	var r1r2buffers R1R2Buffers
+	var r1r2buffers  R1R2Buffers
 
 	for key := range INDEXTOOUTPUT {
 		if _, isInside = buffers[key];!isInside {
-			buffers[key] = make(map[string]R1R2Buffers)
+			buffers[key] = make(map[string] R1R2Buffers)
 		}
 
 		for key2:= range INDEXTOOUTPUT[key] {
-			r1r2buffers[0] = bytes.Buffer{}
-			r1r2buffers[1] = bytes.Buffer{}
+
+			r1r2buffers = R1R2Buffers{}
+			r1r2buffers[0] = &bytes.Buffer{}
+			r1r2buffers[1] = &bytes.Buffer{}
 
 			buffers[key][key2] = r1r2buffers
 		}
@@ -225,12 +243,12 @@ func getBuffersForMultipleOutfiles() (buffers map[string]map[string]R1R2Buffers)
 	return buffers
 }
 
-func resetBuffers(buffers map[string]map[string]R1R2Buffers) {
+func resetBuffers(buffers * map[string]map[string]R1R2Buffers) {
 	var r1r2buffers R1R2Buffers
 
-	for key := range buffers {
-		for key2 := range buffers[key] {
-			r1r2buffers = buffers[key][key2]
+	for key := range (*buffers) {
+		for key2 := range (*buffers)[key] {
+			r1r2buffers = (*buffers)[key][key2]
 
 			r1r2buffers[0].Reset()
 			r1r2buffers[1].Reset()
@@ -240,38 +258,40 @@ func resetBuffers(buffers map[string]map[string]R1R2Buffers) {
 
 func provideBuffers( defaultR1, defaultR2 * bytes.Buffer,
 	index, ref string,  buffers * map[string]map[string]R1R2Buffers) (
-		bufferR1, bufferR2 * bytes.Buffer) {
+		bufferR1, bufferR2 * bytes.Buffer, isDefault bool) {
 	var isInside bool
 	var r1r2buffers R1R2Buffers
 
 	if _, isInside = (*buffers)[index];!isInside {
-		return defaultR1, defaultR2
+		return defaultR1, defaultR2, true
 	}
 
 	if _, isInside = (*buffers)[index][ref];!isInside {
-		return defaultR1, defaultR2
+		return defaultR1, defaultR2, true
 	}
 
 	r1r2buffers = (*buffers)[index][ref]
 
-	bufferR1 = &r1r2buffers[0]
-	bufferR2 = &r1r2buffers[1]
+	bufferR1 = r1r2buffers[0]
+	bufferR2 = r1r2buffers[1]
 
-	return bufferR1, bufferR2
+	return bufferR1, bufferR2, false
 }
 
 func writeBuffersToFiles(buffers * map[string]map[string]R1R2Buffers) {
 	var r1r2buffers R1R2Buffers
 	var r1r2writers R1R2Writers
+	var err1, err2 error
 
 	for key := range (*buffers) {
 		for key2 := range (*buffers)[key] {
-
 			r1r2buffers = (*buffers)[key][key2]
 			r1r2writers = INDEXTOOUTPUT[key][key2]
 
-			r1r2writers[0].Write(r1r2buffers[0].Bytes())
-			r1r2writers[1].Write(r1r2buffers[1].Bytes())
+			_, err1 = r1r2writers[0].Write(r1r2buffers[0].Bytes())
+			utils.Check(err1)
+			_, err2 = r1r2writers[1].Write(r1r2buffers[1].Bytes())
+			utils.Check(err2)
 		}
 	}
 }
@@ -288,24 +308,33 @@ func writeOutputFastq(begining, end int, writerR1, writerR2 *io.WriteCloser, wai
 	bufferR1 = bufferR1default
 	bufferR2 = bufferR2default
 
-	var buffers map[string]map[string]R1R2Buffers
-	defer resetBuffers(buffers)
+	var fileTag string
+
+	var buffers map[string]map[string] R1R2Buffers
+	defer resetBuffers(&buffers)
 
 	var useIndexes bool
 
 	defer bufferR1default.Reset()
 	defer bufferR2default.Reset()
+	var indexstr string
 
 	if OUTPUTINDEXFILE != "" {
 		buffers = getBuffersForMultipleOutfiles()
 		useIndexes = true
 	}
 
-	var successP7 bool
+	var success, isDefault bool
 	// var replicateP7 int
 
 	logsIndexCell := initLog(LOG_INDEX_TYPE)
 	logsIndexCellFail := initLog(LOG_INDEX_TYPE)
+
+	var logIndexFiles map[string]*StatsDict
+
+	if useIndexes {
+		logIndexFiles = initLog([]string{"output_files"})
+	}
 
 	logs := initLog(LOG_TYPE)
 
@@ -315,7 +344,14 @@ func writeOutputFastq(begining, end int, writerR1, writerR2 *io.WriteCloser, wai
 	}
 
 	count := 4
-	success := false
+	found := false
+
+	lengthP7 := LENGTHDIC["p7"]
+	lengthI7 := LENGTHDIC["i7"]
+
+	isP7 := lengthP7 > 0
+	isI7 := lengthI7 > 0
+	var usedIndex string
 
 	for i := begining; i < end;i++ {
 		switch{
@@ -326,11 +362,31 @@ func writeOutputFastq(begining, end int, writerR1, writerR2 *io.WriteCloser, wai
 			}
 
 			if !USENOINDEX {
-				successP7, BUFFERI1[i+1], _ = checkOneIndex(BUFFERI1[i+1], "p7")
 
-				if !successP7 {
+				if isP7 {
+					found, indexstr, _ = checkOneIndex(
+						BUFFERI1[i+1][:lengthP7], "p7")
+					usedIndex = "p7"
+				}
+
+				if !found && isI7 {
+					found, indexstr, _ = checkOneIndex(
+						BUFFERI1[i+1][len(BUFFERI1[i+1])- lengthI7:], "i7")
+					usedIndex = "i7"
+				}
+
+				if !found {
 					if WRITE_LOGS {
-						logsIndexCellFail[fmt.Sprintf("fail_p7")].dict[BUFFERI1[i+1]]++
+						if isP7 {
+							logsIndexCellFail["fail_p7"].dict[
+									BUFFERI1[i+1][:lengthP7]]++
+						}
+
+						if isI7 {
+							logsIndexCellFail["fail_i7"].dict[
+									BUFFERI1[i+1][
+										len(BUFFERI1[i+1])- lengthI7:]]++
+						}
 						logs["stats"].dict["Number of reads (FAIL)"]++
 						count = 1
 						success = false
@@ -338,12 +394,14 @@ func writeOutputFastq(begining, end int, writerR1, writerR2 *io.WriteCloser, wai
 					}
 				}
 
+				BUFFERI1[i+1] = indexstr
+
 				if useIndexes {
-					bufferR1, bufferR2 = provideBuffers(
+					bufferR1, bufferR2, isDefault = provideBuffers(
 						bufferR1default,
 						bufferR2default,
-						"p7",
-						BUFFERI1[i+1],
+						usedIndex,
+						indexstr,
 						&buffers )
 				}
 			}
@@ -365,8 +423,20 @@ func writeOutputFastq(begining, end int, writerR1, writerR2 *io.WriteCloser, wai
 			count = 1
 
 			if WRITE_LOGS {
-				logsIndexCell[fmt.Sprintf("success_p7_repl1")].dict[BUFFERI1[i+1]]++
+				logsIndexCell[
+					fmt.Sprintf("success_%s_repl1", usedIndex)].dict[
+					BUFFERI1[i+1]]++
 				logs["stats"].dict["Number of reads"]++
+
+				if useIndexes {
+					if isDefault {
+						fileTag = "Default"
+					} else {
+						fileTag = INDEXTOOUTPUTNAME[usedIndex][indexstr]
+					}
+
+					logIndexFiles["output_files"].dict[fileTag]++
+				}
 			}
 
 		default:
@@ -382,8 +452,8 @@ func writeOutputFastq(begining, end int, writerR1, writerR2 *io.WriteCloser, wai
 	}
 
 	MUTEX.Lock()
-	(*writerR1).Write(bufferR1.Bytes())
-	(*writerR2).Write(bufferR2.Bytes())
+	(*writerR1).Write(bufferR1default.Bytes())
+	(*writerR2).Write(bufferR2default.Bytes())
 	writeBuffersToFiles(&buffers)
 	MUTEX.Unlock()
 
@@ -393,6 +463,9 @@ func writeOutputFastq(begining, end int, writerR1, writerR2 *io.WriteCloser, wai
 
 	if !USENOINDEX {
 		go processLogChan(LOG_INDEX_READ_CHAN, logsIndexCellFail, "failed_barcodes")
+	}
+	if useIndexes {
+		go processLogChan(LOGCHANFILES, logIndexFiles, "output_files")
 	}
 }
 

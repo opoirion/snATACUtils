@@ -54,13 +54,12 @@ func loadOutputFileIndex() {
 		outFilenameR2 = fmt.Sprintf("%s/%s_R2.fasta%s", OUTPUT_PATH, outtag, ext)
 
 		INDEXTOOUTPUTNAME[index][indexstr] = fmt.Sprintf(
-				"%s/%s_R1.fasta%s created\n%s/%s_R2.fasta%s created",
-				OUTPUT_PATH, outtag, ext, OUTPUT_PATH, outtag, ext)
+				"%s/%s_R1/2.fasta%s", OUTPUT_PATH, outtag, ext)
 
 		r1r2Writers = [2]io.WriteCloser{}
 
 		r1r2Writers[0] = utils.ReturnWriter(outFilenameR1)
-		r1r2Writers[0] = utils.ReturnWriter(outFilenameR2)
+		r1r2Writers[1] = utils.ReturnWriter(outFilenameR2)
 
 		INDEXTOOUTPUT[index][indexstr] = r1r2Writers
 	}
@@ -79,7 +78,7 @@ func closeFileIndex() {
 func printSuccessFileIndex() {
 	for key := range INDEXTOOUTPUT {
 		for barcode := range INDEXTOOUTPUT[key] {
-			fmt.Printf("%s\n", INDEXTOOUTPUTNAME[key][barcode])
+			fmt.Printf("Files %s created\n", INDEXTOOUTPUTNAME[key][barcode])
 		}
 	}
 }
@@ -114,7 +113,7 @@ func loadIndexes(fnameList []string, dict * map[string]map[string]bool, reportNa
 			line = strings.Trim(line, "\n")
 			split := strings.Split(line, "\t")
 
-			if len(split) != 2 {
+			if len(split) < 2 {
 				panic(fmt.Sprintf("line %s in index: %s not conform!", line, fname))
 			}
 

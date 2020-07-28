@@ -263,7 +263,11 @@ This option is valid only when not using I2 index file
 	use10x := (FASTQ_I2 == "" && FASTQ_I1 != "")
 
 	if INDEX_REPLICATE_R1 == "" &&  INDEX_REPLICATE_R2 == "" && len(INDEXFILES) == 0 {
-		USENOINDEX = true
+		if OUTPUTINDEXFILE != "" {
+			INDEXFILES.Set(OUTPUTINDEXFILE)
+		} else {
+			USENOINDEX = true
+		}
 	}
 
 	for index := range(LENGTHDIC) {
