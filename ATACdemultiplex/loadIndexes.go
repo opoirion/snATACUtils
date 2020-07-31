@@ -50,11 +50,15 @@ func loadOutputFileIndex() {
 			INDEXTOOUTPUTNAME[index] = make(map[string]string)
 		}
 
-		outFilenameR1 = fmt.Sprintf("%s/%s_R1.fasta%s", OUTPUT_PATH, outtag, ext)
-		outFilenameR2 = fmt.Sprintf("%s/%s_R2.fasta%s", OUTPUT_PATH, outtag, ext)
+		outFilenameR1 = fmt.Sprintf("%s/%s%s_R1.%s%s",
+			OUTPUT_PATH, outtag, OUTPUT_TAG_NAME, OUTPUTFILETYPE, ext)
+		outFilenameR2 = fmt.Sprintf("%s/%s%s_R2.%s%s",
+			OUTPUT_PATH, outtag, OUTPUT_TAG_NAME, OUTPUTFILETYPE, ext)
 
 		INDEXTOOUTPUTNAME[index][indexstr] = fmt.Sprintf(
-				"%s/%s_R1/2.fasta%s", OUTPUT_PATH, outtag, ext)
+			"%s/%s%s_R[12].%s%s",
+			OUTPUT_PATH, outtag,
+			OUTPUT_TAG_NAME, OUTPUTFILETYPE, ext)
 
 		r1r2Writers = [2]io.WriteCloser{}
 

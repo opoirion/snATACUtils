@@ -97,6 +97,8 @@ var SORT_LOGS bool
 var SHIFT_P5 int
 /*USENOINDEX ...*/
 var USENOINDEX bool
+/*OUTPUTFILETYPE file type to be written as output in the output file name */
+var OUTPUTFILETYPE string
 
 /*LENGTHDIC length of the different indexes*/
 var LENGTHDIC = map[string]int {
@@ -224,6 +226,7 @@ This option is valid only when not using I2 index file
 
 	flag.StringVar(&I5RANGE, "i5_ranges", "", "(OPTIONAL) plates used to define the used i5 indexes")
 	flag.StringVar(&P7RANGE, "p7_ranges", "", "(OPTIONAL) plates used to define the used p7 indexes")
+	flag.StringVar(&OUTPUTFILETYPE, "output_type", "fastq", "File type to be written as output in the output file name")
 
 	flag.IntVar(&PLATESIZE, "plate_size", 96, "sized of the plated used for the *_plates option (default 96)")
 
@@ -345,7 +348,7 @@ This option is valid only when not using I2 index file
 	initChan(&LOG_INDEX_READ_CHAN, LOG_INDEX_TYPE)
 	initChan(&LOG_INDEX_CELL_CHAN, LOG_INDEX_TYPE)
 
-	if len(OUTPUT_TAG_NAME) > 0 {
+	if OUTPUT_TAG_NAME != "" {
 		OUTPUT_TAG_NAME = fmt.Sprintf("_%s", OUTPUT_TAG_NAME)
 	}
 
@@ -572,17 +575,17 @@ func launchAnalysisMultipleFile() {
 
 	for repl := 1;repl < REPLNUMBER +1; repl++ {
 
-		outputR1 := fmt.Sprintf("%s%s%s.demultiplexed.R1.repl%d.fastq%s", OUTPUT_PATH,
-			strings.TrimSuffix(filenameR1, fmt.Sprintf(".fastq%s", ext)),
-			OUTPUT_TAG_NAME, repl, ext)
-		outputR2 := fmt.Sprintf("%s%s%s.demultiplexed.R2.repl%d.fastq%s", OUTPUT_PATH,
-			strings.TrimSuffix(filenameR2, fmt.Sprintf(".fastq%s", ext)),
-			OUTPUT_TAG_NAME, repl, ext)
+		outputR1 := fmt.Sprintf("%s%s%s.demultiplexed.R1.repl%d.%s%s", OUTPUT_PATH,
+			strings.TrimSuffix(filenameR1, fmt.Sprintf(".%s%s", OUTPUTFILETYPE, ext)),
+			OUTPUT_TAG_NAME, repl, OUTPUTFILETYPE, ext)
+		outputR2 := fmt.Sprintf("%s%s%s.demultiplexed.R2.repl%d.%s%s", OUTPUT_PATH,
+			strings.TrimSuffix(filenameR2, fmt.Sprintf(".%s%s", OUTPUTFILETYPE, ext)),
+			OUTPUT_TAG_NAME, repl, OUTPUTFILETYPE, ext)
 
-		cmd1 := fmt.Sprintf("cat %sindex_*.demultiplexed.R1.repl%d.fastq%s > %s",
-			OUTPUT_PATH, repl, ext, outputR1)
-		cmd2 := fmt.Sprintf("cat %sindex_*.demultiplexed.R2.repl%d.fastq%s > %s",
-			OUTPUT_PATH, repl, ext, outputR2)
+		cmd1 := fmt.Sprintf("cat %sindex_*.demultiplexed.R1.repl%d.%s%s > %s",
+			OUTPUT_PATH, repl, OUTPUTFILETYPE, ext, outputR1)
+		cmd2 := fmt.Sprintf("cat %sindex_*.demultiplexed.R2.repl%d.%s%s > %s",
+			OUTPUT_PATH, repl, OUTPUTFILETYPE, ext, outputR2)
 
 		fmt.Printf("concatenating repl. %d read 1 files...\n", repl)
 		fmt.Printf("%s\n", cmd1)
@@ -660,13 +663,14 @@ func launchAnalysisOneFile(
 	writerR2Dict := make(map[string]io.WriteCloser)
 
 	for repl := 1 ; repl < REPLNUMBER +1; repl ++ {
-		writerR1DictName[repl] = fmt.Sprintf("%s%s%s%s.demultiplexed.R1.repl%d.fastq%s",
+		writerR1DictName[repl] = fmt.Sprintf("%s%s%s%s.demultiplexed.R1.repl%d.%s%s",
 			OUTPUT_PATH, index,
-			strings.TrimSuffix(filenameR1, fmt.Sprintf(".fastq%s", ext)),
-			OUTPUT_TAG_NAME, repl, ext)
-		writerR2DictName[repl] = fmt.Sprintf("%s%s%s%s.demultiplexed.R2.repl%d.fastq%s", OUTPUT_PATH, index,
-			strings.TrimSuffix(filenameR2, fmt.Sprintf(".fastq%s", ext)),
-			OUTPUT_TAG_NAME, repl, ext)
+			strings.TrimSuffix(filenameR1, fmt.Sprintf(".%s%s", OUTPUTFILETYPE, ext)),
+			OUTPUT_TAG_NAME, repl, OUTPUTFILETYPE, ext)
+		writerR2DictName[repl] = fmt.Sprintf("%s%s%s%s.demultiplexed.R2.repl%d.%s%s",
+			OUTPUT_PATH, index,
+			strings.TrimSuffix(filenameR2, fmt.Sprintf(".%s%s", OUTPUTFILETYPE, ext)),
+			OUTPUT_TAG_NAME, repl, OUTPUTFILETYPE, ext)
 		writerR1Dict[writerR1DictName[repl]] = utils.ReturnWriter(writerR1DictName[repl])
 		writerR2Dict[writerR2DictName[repl]] = utils.ReturnWriter(writerR2DictName[repl])
 

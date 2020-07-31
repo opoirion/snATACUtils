@@ -91,15 +91,15 @@ func FormatingR1R2FastqUsingI1Only(filenameR1 string, filenameR2 string, filenam
 	_, outFilenameR2 := pathutils.Split(filenameR2)
 
 	ext := path.Ext(filenameR1)
-	outFilenameR1 = fmt.Sprintf("%s%s%s.demultiplexed.R1.repl1.fastq%s",
+	outFilenameR1 = fmt.Sprintf("%s%s%s.demultiplexed.R1.repl1.%s%s",
 		OUTPUT_PATH,
-		strings.TrimSuffix(outFilenameR1, fmt.Sprintf(".fastq%s", ext)),
-		OUTPUT_TAG_NAME, ext)
+		strings.TrimSuffix(outFilenameR1, fmt.Sprintf(".%s%s", OUTPUTFILETYPE, ext)),
+		OUTPUT_TAG_NAME, OUTPUTFILETYPE, ext)
 
-	outFilenameR2 = fmt.Sprintf("%s%s%s.demultiplexed.R2.repl1.fastq%s",
+	outFilenameR2 = fmt.Sprintf("%s%s%s.demultiplexed.R2.repl1.%s%s",
 		OUTPUT_PATH,
-		strings.TrimSuffix(outFilenameR2, fmt.Sprintf(".fastq%s", ext)),
-		OUTPUT_TAG_NAME, ext)
+		strings.TrimSuffix(outFilenameR2, fmt.Sprintf(".%s%s", OUTPUTFILETYPE, ext)),
+		OUTPUT_TAG_NAME, OUTPUTFILETYPE, ext)
 
 	writerR1 := utils.ReturnWriter(outFilenameR1)
 	writerR2 := utils.ReturnWriter(outFilenameR2)
@@ -197,10 +197,20 @@ mainloop:
 
 	if useOutputIndexes {
 		go writeReportFrom10x("output_files")
+
+		if LOGSDICTMAP["output_files"]["output_files"]["Default"] == 0 {
+			fmt.Printf("Removing empty default output files: %s, %s\n",
+				outFilenameR1, outFilenameR2)
+
+			err := os.Remove(outFilenameR1)
+			utils.Check(err)
+
+			err = os.Remove(outFilenameR2)
+			utils.Check(err)
+		}
 	}
 
 	CHANWAITING.Wait()
-
 }
 
 func fillBuffer(scanner * bufio.Scanner, buffer * [BUFFERSIZE]string, waiting * sync.WaitGroup, countPos int) {
