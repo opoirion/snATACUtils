@@ -17,6 +17,7 @@ import (
 	originalbzip2  "compress/bzip2"
 	"github.com/biogo/hts/bgzf"
 	"github.com/biogo/hts/bam"
+	"github.com/biogo/hts/sam"
 )
 
 
@@ -289,6 +290,23 @@ func ReturnReaderForBamfile(fname string, threadnb int) (*bam.Reader, *os.File) 
 	Check(err)
 
 	return bamReader, fileOpen
+}
+
+/*ReturnReaderForSamfile ... */
+func ReturnReaderForSamfile(fname Filename) (*sam.Reader, *os.File) {
+	var fileOpen *os.File
+	var samReader *sam.Reader
+	var err error
+
+	fileOpen, err = os.Open(fname.String())
+	Check(err)
+	_, err = bgzf.HasEOF(fileOpen)
+	Check(err)
+
+	samReader, err = sam.NewReader(fileOpen)
+	Check(err)
+
+	return samReader, fileOpen
 }
 
 /*ReturnReaderForBzipfilePureGo ... */

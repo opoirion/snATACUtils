@@ -125,6 +125,8 @@ var TAG string
 /*BAMTAG string*/
 var BAMTAG string
 
+/*USEBAMNAME array of int representing position of field in the BAM file*/
+var USEBAMNAME utils.ArrayFlags
 
 func main() {
 
@@ -151,7 +153,7 @@ USAGE: BAMutils -split -bed <bedfile> (-out <string> -cellsID <string>)
 USAGE: BAMutils -downsample <float> -bed <bedfile> (-out <string> -cellsID <string>)
 
 -bamtobed: Transform a 10x BAM file to a bed file with each read in a new line and using a BAM field to identify cell IDs
-USAGE: BAMutils -bamtobed -bam <filename> -out <bedfile> (-optionnal -cellsID <filename> -threads <int> -tag <string> -bam_tag <string>)
+USAGE: BAMutils -bamtobed -bam <filename> -out <bedfile> (-optionnal -cellsID <filename> -threads <int> -tag <string> -bam_tag <string> -use_bam_field)
 
 `)
 		 flag.PrintDefaults()
@@ -177,6 +179,8 @@ USAGE: BAMutils -bamtobed -bam <filename> -out <bedfile> (-optionnal -cellsID <f
 		`divide the bam file according to barcode file list using a parallel version`)
 	flag.BoolVar(&BAMTOBED, "bamtobed", false,
 		`Transform a 10x BAM file to a bed file with each read in a new line and using the "CB:Z" field as barcode`)
+	flag.Var(&USEBAMNAME, "use_bam_field",
+		`When transforming a BAM to a bed file, use the field position separated with ":" as cell barcode`)
 	flag.BoolVar(&SORTFILE, "sort", false, "sort output file of cell index")
 	flag.BoolVar(&ADDRG, "add_rg", false, "add cell ID as RG group to bam file")
 	flag.BoolVar(&SPLIT, "split", false, `split file per chromosomes`)
@@ -302,6 +306,19 @@ func bamTobed() {
 
 	writer := utils.ReturnWriter(FILENAMEOUT)
 	defer utils.CloseFile(writer)
+	usebamname := len(USEBAMNAME) != 0
+	var split []string
+	var barcodeIDpos []int
+	var pos, posI int
+	var posS string
+
+	barcodeIDarray := make([]string, len(USEBAMNAME))
+
+	for _, posS = range USEBAMNAME {
+		posI, err = strconv.Atoi(posS)
+		utils.Check(err)
+		barcodeIDpos = append(barcodeIDpos, posI)
+	}
 
 	loop:
 	for {
@@ -314,17 +331,28 @@ func bamTobed() {
 		default:
 			fmt.Printf("ERROR: %s\n",err)
 			break loop
-
 		}
+
+		if usebamname {
+			split = strings.Split(samRecord.Name, ":")
+
+			for pos, posI = range barcodeIDpos {
+				barcodeIDarray[pos] = split[posI]
+			}
+
+			barcodeID = strings.Join(barcodeIDarray, ":")
+
+		} else {
 
 		aux = samRecord.AuxFields.Get(tag)
+			if aux == nil {
+				continue loop
+			}
 
-		if aux == nil {
-			continue loop
+			val = aux.Value()
+			barcodeID = val.(string)
+
 		}
-
-		val = aux.Value()
-		barcodeID = val.(string)
 
 		if useRefBarcodes {
 			if !CELLIDDICT[barcodeID] {
@@ -333,6 +361,10 @@ func bamTobed() {
 		}
 
 		ref = samRecord.Ref
+
+		if samRecord.Start() < 0 {
+			continue
+		}
 
 		buffer.WriteString(ref.Name())
 		buffer.WriteRune('\t')
@@ -916,47 +948,6 @@ func divideMultipleBamFileOneThread(threadID int, waiting *sync.WaitGroup){
 			}
 		}
 	}
-}
-
-
-func returnlineBuffer (chunk int, fnameset map[string]bool) (
-	lineBuffer map[string][]string, lineBufferSize map[string]int) {
-
-		var filename string
-		lineBuffer = make(map[string][]string, chunk)
-		lineBufferSize = make(map[string]int)
-
-		for filename = range fnameset {
-			lineBuffer[filename] = make([]string, chunk)
-		}
-
-		return lineBuffer, lineBufferSize
-}
-
-func writeBuffer (filename string, lineBuffer []string, lineBufferSize int, waiting *sync.WaitGroup, guard chan struct{}) {
-	defer waiting.Done()
-	var buffer bytes.Buffer
-	var line string
-	var err error
-	var count int
-
-	for _, line = range lineBuffer {
-		if line == "" {
-			continue
-		}
-
-		buffer.WriteString(line)
-		buffer.WriteRune('\n')
-		count++
-
-		if count >= lineBufferSize {
-			break
-		}
-	}
-
-	_, err = BEDWRITERDICT[filename].Write(buffer.Bytes())
-	utils.Check(err)
-	<-guard
 }
 
 
