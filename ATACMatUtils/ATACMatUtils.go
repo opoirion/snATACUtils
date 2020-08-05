@@ -256,7 +256,7 @@ if used, the program will output the list of ordered symbol corresponding to the
 	flag.BoolVar(&COO, "coo", false,
 		`Use COO format as output (DEPRECIATED: use -format coo instead)`)
 	flag.StringVar(&MATRIXFORMATSTR, "format", "coo",
-		`Output matrix format `)
+		`Output matrix format (coo|taiji|dense|denseTransposee) `)
 	flag.BoolVar(&ALL, "all", false,
 		`Count the reads in peaks for the entire input bed file`)
 
