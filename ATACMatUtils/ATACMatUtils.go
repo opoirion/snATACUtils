@@ -215,7 +215,7 @@ func main() {
 #################### MODULE TO CREATE (cell x genomic region) SPARSE MATRIX ########################
 """Boolean / interger Peak matrix """
 transform one (-bed) or multiple bed files into a sparse matrix
-USAGE: ATACMatTools -bed  <bedFile> -ygi <bedFile> -xgi <file> (-threads <int> -out <fname> -use_count -taiji -bed <bedFile2> -use_symbol -format <string>)
+USAGE: ATACMatTools -bed  <bedFile> -ygi <bedFile> -xgi <file> (-threads <int> -out <fname> -use_count -taiji -bed <bedFile2> -use_symbol -format <string> -ygi_out <file>)
 
 """Create a cell x bin matrix: -bin """
 transform one (-bed) or multiple (use multiple -bed options) bed file into a bin (using float) sparse matrix. If ygi provided, reads intersecting these bin are ignored
@@ -248,7 +248,7 @@ if used, the program will output the list of ordered symbol corresponding to the
 	flag.BoolVar(&YGISYMBOL, "use_symbol", false, "Optional use of the 4th column of -ygi as symbol")
 	flag.Var(&CELLSIDFNAME, "xgi", "name of the file containing the ordered list of cell IDs (one ID per line)")
 	flag.StringVar(&SEP, "delimiter", "\t", "delimiter used to write the output file (default \t)")
-	flag.StringVar(&YGIOUT, "ygi_out", "", "Write the output bin bed file in this specific file")
+	flag.StringVar(&YGIOUT, "ygi_out", "", "Write the bin coordinate index or the symbol index in this specific file")
 	flag.BoolVar(&TAIJI, "taiji", false,
 		`Convert COO matrix file to sparse matrix format required for taiji-utils. See https://github.com/Taiji-pipeline/Taiji-utils/ (DEPRECIATED: use -format taiji instead)`)
 	flag.BoolVar(&USECOUNT, "use_count", false,
@@ -261,7 +261,7 @@ if used, the program will output the list of ordered symbol corresponding to the
 		`Count the reads in peaks for the entire input bed file`)
 
 	flag.BoolVar(&NORM, "norm", false, "Normalize raw count by dividing using the total number of reads per cell (equivalent to -norm_type simple)")
-	flag.StringVar(&NORMTYPESTR, "norm_type", "", "Normalisation type to use: simple|rpm|log10(rpm)|fpkm. Simple divides the feature values by the total number of read count per cell (equivalent to norm)")
+	flag.StringVar(&NORMTYPESTR, "norm_type", "", "Normalisation type to use: simple|rpm|logrpm|fpkm|logfpkm. \"Simple\" divides the feature values by the total number of read count per cell (equivalent to norm)")
 
 	flag.BoolVar(&CREATEBINMATRIX, "bin", false,
 		`transform one (-bed) or multiple (use multiple -beds option) into a bin (using float) sparse matrix in COO format.`)

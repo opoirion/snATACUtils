@@ -319,10 +319,21 @@ func loadRefBedFileWithSymbol(
 			peakPosTriplet[2] = peakPos[2 + 3 * peakNb]
 
 			for i, pos = range symbol.SymbolPos {
+				if len(split) < pos {
+					panic(fmt.Sprintf(
+						"Index out of range for loadRefBedFileWithSymbol func line: %s file: %s",
+						split, peaksymbolfile.String()))
+				}
+
 				symbolSlice[i] = split[pos]
 			}
 
 			for i, pos = range peakPosTriplet {
+				if len(split) < pos {
+					panic(fmt.Sprintf(
+						"Index out of range (2) for loadRefBedFileWithSymbol func line: %s file: %s",
+						split, peaksymbolfile.String()))
+				}
 				peaksplit[i] = split[pos]
 			}
 
