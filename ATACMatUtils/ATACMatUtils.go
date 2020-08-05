@@ -215,19 +215,19 @@ func main() {
 #################### MODULE TO CREATE (cell x genomic region) SPARSE MATRIX ########################
 """Boolean / interger Peak matrix """
 transform one (-bed) or multiple bed files into a sparse matrix
-USAGE: ATACMatTools -bed  <bedFile> -ygi <bedFile> -xgi <file> (-threads <int> -out <fname> -use_count -taiji -bed <bedFile2> -use_symbol -format <string> -ygi_out <file>)
+USAGE: ATACMatUtils -bed  <bedFile> -ygi <bedFile> -xgi <file> (-threads <int> -out <fname> -use_count -taiji -bed <bedFile2> -use_symbol -format <string> -ygi_out <file>)
 
 """Create a cell x bin matrix: -bin """
 transform one (-bed) or multiple (use multiple -bed options) bed file into a bin (using float) sparse matrix. If ygi provided, reads intersecting these bin are ignored
 
-USAGE: ATACMatTools -bin -bed  <bedFile> (optional -ygi <bedFile> -xgi <fname> -bin_size <int> -ygi_out <string> -norm -taiji -format <string>)
+USAGE: ATACMatUtils -bin -bed  <bedFile> (optional -ygi <bedFile> -xgi <fname> -bin_size <int> -ygi_out <string> -norm -taiji -format <string>)
 
 """Count the number of reads in peaks for each cell: -count """
-USAGE: ATACMatTools -count  -xgi <fname> -ygi <bedfile> -bed <bedFile> (optionnal: -out <fname> -norm -all)
+USAGE: ATACMatUtils -count  -xgi <fname> -ygi <bedfile> -bed <bedFile> (optionnal: -out <fname> -norm -all)
 
 """Merge multiple matrices results into one output file: -merge """
 It can be used to convert taiji to coo or coo to taiji formats.
-USAGE: ATACMatTools -merge -xgi <fname> -in <matrixFile1> -in <matrixFile2> ... (optional -bin -use_count -out <fname> -format <string>)
+USAGE: ATACMatUtils -merge -xgi <fname> -in <matrixFile1> -in <matrixFile2> ... (optional -bin -use_count -out <fname> -format <string>)
 
 USAGE for the -use_symbol option:
 Optional use of the 4th column of -ygi as symbol.
