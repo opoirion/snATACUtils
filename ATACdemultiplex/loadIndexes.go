@@ -45,9 +45,21 @@ func loadOutputFileIndex() {
 
 		index, indexstr, outtag = split[0], split[1], split[2]
 
+		if _, isInside = LENGTHDIC[index];!isInside {
+			panic(fmt.Sprintf(
+				"Error index: %s should be amongst %v", index, LENGTHDIC))
+		}
+
 		if _, isInside = INDEXTOOUTPUT[index];!isInside {
 			INDEXTOOUTPUT[index] = make(map[string]R1R2Writers)
 			INDEXTOOUTPUTNAME[index] = make(map[string]string)
+		}
+
+		if _, isInside = INDEXTOOUTPUT[index][indexstr];isInside {
+			panic(
+				fmt.Sprintf("Warning TAG: %s already exists for index: %s (targets: %s)\n",
+				indexstr, index, INDEXTOOUTPUTNAME[index][indexstr]))
+			continue
 		}
 
 		outFilenameR1 = fmt.Sprintf("%s/%s%s_R1.%s%s",
