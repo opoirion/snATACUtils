@@ -45,6 +45,10 @@ func loadOutputFileIndex() {
 
 		index, indexstr, outtag = split[0], split[1], split[2]
 
+		index = strings.Trim(index, " \t\n\r")
+		indexstr = strings.Trim(indexstr, " \t\n\r")
+		outtag = strings.Trim(outtag, " \t\n\r")
+
 		if _, isInside = LENGTHDIC[index];!isInside {
 			panic(fmt.Sprintf(
 				"Error index: %s should be amongst %v", index, LENGTHDIC))
