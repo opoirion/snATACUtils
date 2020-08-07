@@ -173,6 +173,8 @@ mainloop:
 		}
 	}
 
+	waiting.Wait()
+
 	tDiff := time.Since(tStart)
 	fmt.Printf("Formatting R1 R2 fastq files done in time: %f s \n", tDiff.Seconds())
 	fmt.Printf("file: %s created!\n file: %s created!\n", outFilenameR1, outFilenameR2)
@@ -211,6 +213,7 @@ mainloop:
 	}
 
 	CHANWAITING.Wait()
+
 }
 
 func fillBuffer(scanner * bufio.Scanner, buffer * [BUFFERSIZE]string, waiting * sync.WaitGroup, countPos int) {
