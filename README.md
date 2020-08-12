@@ -63,7 +63,8 @@ USAGE: ATACCellTSS -bed <filename> -ygi/tss <filename> -xgi <filename>
 if -cluster is provided, TSS is computed per cluster and -xgi argument is ignored. THe cluster file should contain cluster and cell ID with the following structure for each line: clusterID<TAB>cellID
 ```
 
-## ATACMatUtils: Suite of functions dedicated to analyze intersection with genomic regions from a peak file (in bed format) to create a sparse matrix (cell x genomic regions)
+## ATACMatUtils: Easily construct matrix for scATAC-Seq datase
+Suite of functions dedicated to analyze intersection with genomic regions from a peak file (in bed format) to create a sparse matrix (cell x genomic regions)
 
 This tool provide easy and fast interface to create sparse matrices using a single-cell 3-columns bed file (<chr><start><stop><cellID>). It needs a list of cell IDs (`-xgi`) as input can optionaly accept a list of peaks as feature list (`-xygi`). Otherwise, it can create a sparse matrix using genomic bins. The program can use different output formats:  COOrdinate format (COO), taiji format, a specific sparse format, or dense format.
 
@@ -137,16 +138,23 @@ chr3    47800000        47805000        ANNOTATION_2
 ...
 ```
 
+Let's try it out with the following command:
+
 ```bash
-ATACMatUtils -bed example.bed.gz -xgi example_cellID.xgi -out example.coo.bin.gz -ygi_out example.coo.ygi -ygi example_peaks_annotated.ygi -threads 2 -use_symbol
+ATACMatUtils -bed example.bed.gz -xgi example_cellID.xgi -out example.coo.peak_annotated.gz -ygi_out example.coo.ygi -ygi example_peaks_annotated.ygi -threads 2 -use_symbol
 ```
 
+The outputs are a COO sparse matrix `example.coo.peak_annotated.gz` and a feature index: `example_peaks_annotated.ygi`.
 
 * Finally, `ATACMatUtils` can be used to count the number of reads in peak per cell for a given input bed file:
 
 ```bash
 ATACMatUtils -count -bed example.bed.gz -xgi example_cellID.xgi -ygi example.coo.bin.ygi -out example.bed.reads_in_peaks
 ```
+
+* Convert the matrix to R object
+
+Please refer to the script  `./scripts/COO_to_R_sparse_matrix.R`
 
 ## BAMutils: Suite of functions dedicated to process BAM or BED files
 
