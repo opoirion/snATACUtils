@@ -275,6 +275,41 @@ USAGE: BAMutils -bamtobed -bam <filename> -out <bedfile> (-optionnal -cellsID <f
 	fmt.Printf("done in time: %f s \n", tDiff.Seconds())
 }
 
+func formatBamFieldToUse() (barcodeIDpos []int) {
+	var posI int
+	var err error
+	var posS, usebamname, sep string
+	var split []string
+
+	for _, usebamname = range USEBAMNAME {
+
+		switch {
+		case strings.Count(usebamname, " ") > 0:
+			sep = " "
+		case strings.Count(usebamname, "-") > 0:
+			sep = "-"
+		default:
+			sep = ","
+		}
+
+		split = strings.Split(usebamname, sep)
+
+		for _, posS = range split {
+			posI, err = strconv.Atoi(posS)
+
+			if err != nil {
+				panic(fmt.Sprintf(
+					"Error with -use_bam_field option: %s List of ints required",
+					USEBAMNAME))
+			}
+
+			barcodeIDpos = append(barcodeIDpos, posI)
+		}
+	}
+
+	return barcodeIDpos
+}
+
 func bamTobed() {
 	var useRefBarcodes bool
 	var err error
@@ -306,19 +341,13 @@ func bamTobed() {
 
 	writer := utils.ReturnWriter(FILENAMEOUT)
 	defer utils.CloseFile(writer)
-	usebamname := len(USEBAMNAME) != 0
+
 	var split []string
-	var barcodeIDpos []int
 	var pos, posI int
-	var posS string
 
-	barcodeIDarray := make([]string, len(USEBAMNAME))
-
-	for _, posS = range USEBAMNAME {
-		posI, err = strconv.Atoi(posS)
-		utils.Check(err)
-		barcodeIDpos = append(barcodeIDpos, posI)
-	}
+	barcodeIDpos := formatBamFieldToUse()
+	barcodeIDarray := make([]string, len(barcodeIDpos))
+	usebamname := len(USEBAMNAME) != 0
 
 	loop:
 	for {

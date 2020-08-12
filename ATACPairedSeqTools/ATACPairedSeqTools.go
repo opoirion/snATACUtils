@@ -141,9 +141,6 @@ func samToFastq() {
 		}
 
 		buffer.WriteRune('@')
-		buffer.WriteString(split[0])
-		buffer.WriteString(split2[9])
-		buffer.WriteRune(':')
 		buffer.WriteString(strings.Join(split[1:splitl-2], ":"))
 		buffer.WriteRune(':')
 		buffer.WriteString(split[0])
