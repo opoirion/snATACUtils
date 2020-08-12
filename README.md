@@ -71,19 +71,19 @@ This tool provide easy and fast interface to create sparse matrices using a sing
 #################### MODULE TO CREATE (cell x genomic region) SPARSE MATRIX ########################
 """Boolean / interger Peak matrix """
 transform one (-bed) or multiple bed files into a sparse matrix
-USAGE: ATACMatTools -coo -bed  <bedFile> -ygi <bedFile> -xgi <fname> (-threads <int> -out <fname> -use_count -taiji -bed <fileName2>)
+USAGE: ATACMatUtils -coo -bed  <bedFile> -ygi <bedFile> -xgi <fname> (-threads <int> -out <fname> -use_count -taiji -bed <fileName2>)
 
 """Create a cell x bin matrix: -bin """
 transform one (-bed) or multiple (use multiple -bed options) bed file into a bin (using float) sparse matrix. If ygi provided, reads intersecting these bin are ignored
 
-USAGE: ATACMatTools -bin -bed  <bedFile> (optional -ygi <bedFile> -xgi <fname> -bin_size <int> -ygi_out <string> -norm -taiji -coo)
+USAGE: ATACMatUtils -bin -bed  <bedFile> (optional -ygi <bedFile> -xgi <fname> -bin_size <int> -ygi_out <string> -norm -taiji -coo)
 
 """Count the number of reads in peaks for each cell: -count """
-USAGE: ATACMatTools -count  -xgi <fname> -ygi <bedfile> -bed <bedFile> (optional: -out <fname> -norm)
+USAGE: ATACMatUtils -count  -xgi <fname> -ygi <bedfile> -bed <bedFile> (optional: -out <fname> -norm)
 
 """Merge multiple matrices results into one output file: -merge """
 It can be used to convert taiji to coo or coo to taiji formats.
-USAGE: ATACMatTools -coo/taiji -merge -xgi <fname> -in <matrixFile1> -in <matrixFile2> ... (optional -bin -use_count -out <fname>)
+USAGE: ATACMatUtils -coo/taiji -merge -xgi <fname> -in <matrixFile1> -in <matrixFile2> ... (optional -bin -use_count -out <fname>)
 ```
 
 ### Matrix construction Example
@@ -111,17 +111,38 @@ zcat example.coo.bin.gz|head                                                    
 0       5177    1
 ```
 
-Since no loci region was provided in output (`-ygi`) and the bin option was used (`-bin`) the program output the index of genomic bin with at least one overlapping read/fragment in `example.coo.bin.ygi`. Thus, the first line corresponds to a value of 1 for the bin number 5162 from `example.coo.bin.ygi` and the first cell of `example_cellID.xgi`.
+* Since no loci region was provided in output (`-ygi`) and the bin option was used (`-bin`) the program output the index of genomic bin with at least one overlapping read/fragment in `example.coo.bin.ygi`. Thus, the first line corresponds to a value of 1 for the bin number 5162 from `example.coo.bin.ygi` and the first cell of `example_cellID.xgi`.
 
-Alternatively, a loci file can be passed as feature index:
+* Alternatively, a loci file can be passed as feature index:
 
 ```bash
 ATACMatUtils -bed example.bed.gz -xgi example_cellID.xgi -out example.coo.bin.gz -ygi_out example.coo.ygi -ygi example_peaks.ygi -threads 2
 ```
 
-Different normalisation can be used using the `-norm` option. otherwise, by default, a bool matrix (only 1) will be outputed. The matrix creation is multithreaded using the `-threads` option For the creation of very large matrices (e.g. for than 400K loci and cells) which doesn't fit the RAM, the `-split` option allow to incremently construct the matrix using only a fraction of the cells at each iteration.
+* Different normalisation can be used using the `-norm_type` option. otherwise, by default, a bool matrix (only 1) will be outputed. The matrix creation is multithreaded using the `-threads` option For the creation of very large matrices (e.g. for than 400K loci and cells) which doesn't fit the RAM, the `-split` option allow to incremently construct the matrix using only a fraction of the cells at each iteration.
 
-Finally, `ATACMatUtils` can be used to count the number of reads in peak per cell for a given input bed file:
+* The peak file can contain peak annotation as a 4th column. (such as gene name). It is possible to use this annotation column as features for the matrix with the `-use_sumbol` option (Multiple peaks can share a same annotation). In this case, a feature index file is created (See `-ygi_out` option)
+
+For example, see the file `example_peaks_annotated.ygi`:
+
+```bash
+head example_peaks_annotated.ygi
+
+chr17   17875000        17880000        ANNOTATION_1
+chr2    85025000        85030000        ANNOTATION_1
+chr6    116775000       116780000       ANNOTATION_1
+chr7    140515000       140520000       ANNOTATION_1
+chr19   35540000        35545000        ANNOTATION_2
+chr3    47800000        47805000        ANNOTATION_2
+...
+```
+
+```bash
+ATACMatUtils -bed example.bed.gz -xgi example_cellID.xgi -out example.coo.bin.gz -ygi_out example.coo.ygi -ygi example_peaks_annotated.ygi -threads 2 -use_symbol
+```
+
+
+* Finally, `ATACMatUtils` can be used to count the number of reads in peak per cell for a given input bed file:
 
 ```bash
 ATACMatUtils -count -bed example.bed.gz -xgi example_cellID.xgi -ygi example.coo.bin.ygi -out example.bed.reads_in_peaks
