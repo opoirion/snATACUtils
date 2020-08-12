@@ -391,7 +391,11 @@ func bamTobed() {
 
 		ref = samRecord.Ref
 
-		if samRecord.Start() < 0 {
+		if samRecord.Start() <= 0 {
+			continue
+		}
+
+		if ref.Name() == "*" {
 			continue
 		}
 
