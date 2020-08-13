@@ -16,7 +16,6 @@ import(
 	"bytes"
 	// "github.com/dsnet/compress/bzip2"
 	utils "gitlab.com/Grouumf/ATACdemultiplex/ATACdemultiplexUtils"
-	"github.com/pkg/profile"
 )
 
 /*FILENAME ...*/
@@ -107,10 +106,6 @@ var MAXSCANTOKENSIZE int
 var THREADNB int
 
 func main() {
-	defer profile.Start(
-		profile.CPUProfile,
-		profile.ProfilePath("/home/oliver/data/")).Stop()
-
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, `
 #################### Suite of functions dedicated to pre/post process files related to snATAC pipeline ########################
