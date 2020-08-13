@@ -3,76 +3,107 @@
 package main
 
 import(
-	"fmt";
-	"flag";
-	"bufio";
-	"os";
-	"log";
-	"time";
-	"strings";
-	"path";
-	"sync";
-	"strconv";
+	"fmt"
+	"flag"
+	"bufio"
+	"os"
+	"log"
+	"time"
+	"strings"
+	"path"
+	"sync"
+	"strconv"
 	"bytes"
 	// "github.com/dsnet/compress/bzip2"
 	utils "gitlab.com/Grouumf/ATACdemultiplex/ATACdemultiplexUtils"
 )
 
-
 /*FILENAME ...*/
 var FILENAME utils.Filename
+
 /*MAX ...*/
 var MAX int
+
 /*PRINTLASTLINE ...*/
 var PRINTLASTLINE bool
+
 /*PRINTLASTLINES ...*/
 var PRINTLASTLINES int
+
 /*GOTOLINE ...*/
 var GOTOLINE int
-/*SEARCHLINE ...*/
-var SEARCHLINE string
+
+/*PATTERN ...*/
+var PATTERN string
+
 /*CREATEREFFASTQ ...*/
 var CREATEREFFASTQ bool
+
 /*CREATEREFBEDFILE ...*/
 var CREATEREFBEDFILE bool
+
 /*REFBARCODELIST ...*/
 var REFBARCODELIST string
+
 /*SEP ...*/
 var SEP string
+
 /*SORTLOGS ...*/
 var SORTLOGS bool
+
 /*IGNORESORTINGCATEGORY ...*/
 var IGNORESORTINGCATEGORY bool
+
 /*IGNOREERROR ...*/
 var IGNOREERROR bool
+
 /*OUTFILE ...*/
 var OUTFILE string
+
 /*OUTTAG ...*/
 var OUTTAG string
+
 /*MERGE ...*/
 var MERGE bool
+
 /*WRITECOMPL ...*/
 var WRITECOMPL bool
+
 /*SCAN ...*/
 var SCAN bool
+
 /*COMPDICT ...*/
 var COMPDICT = map[byte]byte {'A': 'T', 'T': 'A', 'G': 'C', 'C': 'G'}
+
 /*COMPLSTRATEGY ...*/
 var COMPLSTRATEGY string
+
 /*CREATEBARCODEDICT ...*/
 var CREATEBARCODEDICT bool
+
 /*FILENAMES ...*/
 var FILENAMES utils.ArrayFlags
+
 /*TAG ...*/
 var TAG string
+
 /*CICEROPROCESSING ...*/
 var CICEROPROCESSING bool
+
 /*CLEAN clean files with unwanted lines*/
 var CLEAN bool
+
+/*COUNT count patterns in file*/
+var COUNT bool
+
 /*CLEANPATTERN pattern used to clean files with unwanted lines*/
 var CLEANPATTERN string
+
 /*MAXSCANTOKENSIZE int*/
 var MAXSCANTOKENSIZE int
+
+/*THREADNB int*/
+var THREADNB int
 
 func main() {
 
@@ -96,13 +127,16 @@ USAGE: ATACtools -sortfile -filename <fname> (-delimiter <string> -ignoreerror -
 USAGE: ATACtools -write_compl <fastq_file> (-compl_strategy <"split_10_compl_second"/"split_10_compl_first"> -tag <string>)
 
 -scan: Scan a file and determine the number of line
-USAGE ATACtools -scan -filename <string> (-printlastline -printlastlines <int> -search_in_line <string> -gotoline <int>)
+USAGE ATACtools -scan -filename <string> (-printlastline -printlastlines <int> -pattern <string> -gotoline <int>)
 
 -create_barcode_dict: Create a barcode key / value count file
 USAGE: ATACtools -create_barcode_dict -filename <fname> (-sortfile -delimiter <string>)
 
 -clean: clean file from unwanted lines
 USAGE: ATACtools -clean -filename <fname> -output filename -clean_pattern "\n"
+
+-count: Count string in file (useful for large file)
+USAGE: ATACtools -count -filename (-pattern <string> -threads <int>)
 `)
 		 flag.PrintDefaults()
 	}
@@ -124,11 +158,12 @@ USAGE: ATACtools -clean -filename <fname> -output filename -clean_pattern "\n"
 	flag.IntVar(&PRINTLASTLINES, "printlastlines", 0, "print last n lines")
 	flag.BoolVar(&IGNOREERROR, "ignoreerror", false, "ignore error and continue")
 	flag.BoolVar(&IGNORESORTINGCATEGORY, "ignore_sorting_category", false, "ignore file cateogry (identified by #) when sorting")
-	flag.StringVar(&SEARCHLINE, "search_in_line", "", "search specific motifs in line")
+	flag.StringVar(&PATTERN, "pattern", "", "search specific string in file")
 	flag.StringVar(&OUTFILE, "output", "", "file name of the output")
 	flag.StringVar(&OUTTAG, "output_tag", "reference", "particule to annotate the output file name")
 	flag.BoolVar(&WRITECOMPL, "write_compl", false, `write the barcode complement of a fastq files`)
 	flag.BoolVar(&SCAN, "scan", false, `scan a file and determine the number of line`)
+	flag.BoolVar(&COUNT, "count", false, `Count patterns in file`)
 	flag.StringVar(&SEP, "delimiter", "\t", "delimiter used to split and sort the log file (default \t)")
 	flag.StringVar(&TAG, "tag", "", "tag used when creating a reference fastq file to tag all the reads (default \"\")")
 	flag.StringVar(&COMPLSTRATEGY, "compl_strategy", "split_10_compl_second", `Strategy to use when writing the complement of a fastq file (default split_10_compl_second: split after 10 bases and complementary only second)`)
@@ -136,6 +171,7 @@ USAGE: ATACtools -clean -filename <fname> -output filename -clean_pattern "\n"
 	flag.BoolVar(&CLEAN, "clean", false, `clean files with unwanted lines`)
 	flag.StringVar(&CLEANPATTERN, "clean_pattern", "\n", "pattern used to clean files with unwanted lines")
 	flag.IntVar(&MAXSCANTOKENSIZE, "max_scan_size", 0, "MaxScanTokenSize variable that defines the length of a line that a buffer can read (set if differnt than 0)")
+	flag.IntVar(&THREADNB, "threads", 8, "threads concurrency for specific usage")
 	flag.Parse()
 
 
@@ -184,6 +220,8 @@ USAGE: ATACtools -clean -filename <fname> -output filename -clean_pattern "\n"
 		nbLines = countLine(FILENAME)
 	case CLEAN:
 		cleanFile(FILENAME)
+	case COUNT:
+		countInFile(FILENAME)
 	default:
 		log.Fatal("Error at least one processing option (scan/bed_to_cicero/create_ref_fastq/create_ref_bed/merge/create_barcode_list) should be used!")
 	}
@@ -198,6 +236,78 @@ USAGE: ATACtools -clean -filename <fname> -output filename -clean_pattern "\n"
 
 }
 
+func countInFile(filename utils.Filename) {
+	_, file := filename.ReturnReader(0)
+	defer utils.CloseFile(file)
+
+	buffersize := 1000000
+	buffers := make([][]byte, THREADNB)
+	availableBuffers := make(chan int, THREADNB)
+	var reader utils.Reader
+
+	count := 0
+
+	if PATTERN == "" {
+		PATTERN = "\n"
+	}
+
+	pattern := []byte(PATTERN)
+	mutex := sync.Mutex{}
+	waiting := sync.WaitGroup{}
+	var err error
+	var index, nbbytes int
+
+	for i := 0; i < THREADNB;i++ {
+		availableBuffers <- i
+		buffers[i] = make([]byte, buffersize)
+	}
+
+	reader = utils.ReturnFileReader(filename.String())
+
+	for {
+		index = <- availableBuffers
+		nbbytes, err = reader.Read(buffers[index])
+
+		if err != nil {
+			break
+		}
+
+		if nbbytes < buffersize {
+			buffers[index] = buffers[index][:nbbytes]
+		}
+
+		waiting.Add(1)
+		countAndUpdate(
+			pattern,
+			&buffers[index],
+			index,
+			&count,
+			&mutex,
+			&waiting,
+			availableBuffers)
+	}
+
+	waiting.Wait()
+
+	fmt.Printf("Scanning file: %s done\n (status: %s) \n",
+		filename.String(), err )
+	fmt.Printf("Count of pattern (%q): %d \n", PATTERN, count )
+}
+
+func countAndUpdate(pattern []byte,
+	buffers * []byte,
+	index int,
+	count * int,
+	mutex * sync.Mutex,
+	waiting * sync.WaitGroup,
+	availableBuffers chan int) {
+	defer waiting.Done()
+	mutex.Lock()
+	defer mutex.Unlock()
+
+	(*count) += bytes.Count((*buffers), pattern)
+	availableBuffers <- index
+}
 
 func cleanFile(filename utils.Filename) {
 	var line string
@@ -782,10 +892,10 @@ func processScanner(scanner * bufio.Scanner) (nbLines int) {
 			break
 		}
 
-		if SEARCHLINE != "" {
+		if PATTERN != "" {
 			line := scanner.Text()
-			if strings.Contains(line, SEARCHLINE) {
-				fmt.Printf("line nb: %d\t %s found in %s\n", nbLines, SEARCHLINE, line)
+			if strings.Contains(line, PATTERN) {
+				fmt.Printf("line nb: %d\t %s found in %s\n", nbLines, PATTERN, line)
 			}
 		}
 	}

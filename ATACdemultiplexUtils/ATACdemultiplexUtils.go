@@ -77,6 +77,11 @@ type closer interface {
 	Close() error
 }
 
+/* Reader reader interface */
+type Reader interface {
+	Read([]byte) (i int, err error)
+}
+
 /*BUFFERSIZE ... */
 const BUFFERSIZE = 1000000
 
@@ -254,6 +259,38 @@ func ReturnReader(fname string, startingLine int) (*bufio.Scanner, *os.File) {
 
 }
 
+/*ReturnFileReader ... */
+func ReturnFileReader(fname string) (reader Reader) {
+	ext := path.Ext(fname)
+	var fileOpen * os.File
+	var err error
+	var readerOs *bufio.Reader
+	var readerGzip * gzip.Reader
+	var readerBzip io.Reader
+
+	fileOpen, err = os.OpenFile(fname, 0, 0)
+	Check(err)
+
+	switch ext {
+	case ".bz2":
+		readerOs := bufio.NewReader(fileOpen)
+		readerBzip = originalbzip2.NewReader(readerOs)
+		reader = Reader(readerBzip)
+
+	case ".gz":
+		readerOs = bufio.NewReader(fileOpen)
+		readerGzip, err = gzip.NewReader(readerOs)
+		Check(err)
+		reader = Reader(readerGzip)
+
+	default:
+		reader = Reader(fileOpen)
+	}
+
+	return reader
+
+}
+
 /*ReturnReaderForGzipfile ... */
 func ReturnReaderForGzipfile(fname string, startingLine int) (*bufio.Scanner, *os.File) {
 	var readerBzip * gzip.Reader
@@ -265,6 +302,7 @@ func ReturnReaderForGzipfile(fname string, startingLine int) (*bufio.Scanner, *o
 
 	readerOs := bufio.NewReader(fileOpen)
 	readerBzip, err = gzip.NewReader(readerOs)
+
 	Check(err)
 	bzipScanner := bufio.NewScanner(readerBzip)
 
