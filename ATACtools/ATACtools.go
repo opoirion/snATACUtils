@@ -16,6 +16,7 @@ import(
 	"bytes"
 	// "github.com/dsnet/compress/bzip2"
 	utils "gitlab.com/Grouumf/ATACdemultiplex/ATACdemultiplexUtils"
+	"github.com/pkg/profile"
 )
 
 /*FILENAME ...*/
@@ -106,6 +107,9 @@ var MAXSCANTOKENSIZE int
 var THREADNB int
 
 func main() {
+	defer profile.Start(
+		profile.CPUProfile,
+		profile.ProfilePath("/home/oliver/data/")).Stop()
 
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, `
@@ -240,11 +244,12 @@ func countInFile(filename utils.Filename) {
 	_, file := filename.ReturnReader(0)
 	defer utils.CloseFile(file)
 
-	buffersize := 1000000
+	buffersize := 10000000
 	buffers := make([][]byte, THREADNB)
 	availableBuffers := make(chan int, THREADNB)
 	var reader utils.Reader
 
+	countMap := make([]int, THREADNB)
 	count := 0
 
 	if PATTERN == "" {
@@ -252,8 +257,8 @@ func countInFile(filename utils.Filename) {
 	}
 
 	pattern := []byte(PATTERN)
-	mutex := sync.Mutex{}
 	waiting := sync.WaitGroup{}
+
 	var err error
 	var index, nbbytes int
 
@@ -263,6 +268,7 @@ func countInFile(filename utils.Filename) {
 	}
 
 	reader = utils.ReturnFileReader(filename.String())
+	var remakeBuffer int
 
 	for {
 		index = <- availableBuffers
@@ -274,21 +280,28 @@ func countInFile(filename utils.Filename) {
 
 		if nbbytes < buffersize {
 			buffers[index] = buffers[index][:nbbytes]
+			remakeBuffer = buffersize
+		} else {
+			remakeBuffer = 0
 		}
 
 		waiting.Add(1)
-		countAndUpdate(
+
+		go countAndUpdate(
 			pattern,
 			&buffers[index],
 			index,
-			&count,
-			&mutex,
+			&countMap,
+			remakeBuffer,
 			&waiting,
 			availableBuffers)
 	}
 
 	waiting.Wait()
 
+	for _, c := range countMap {
+		count += c
+	}
 	fmt.Printf("Scanning file: %s done\n (status: %s) \n",
 		filename.String(), err )
 	fmt.Printf("Count of pattern (%q): %d \n", PATTERN, count )
@@ -297,15 +310,19 @@ func countInFile(filename utils.Filename) {
 func countAndUpdate(pattern []byte,
 	buffers * []byte,
 	index int,
-	count * int,
-	mutex * sync.Mutex,
+	countMap * []int,
+	remakeBuffer int,
 	waiting * sync.WaitGroup,
 	availableBuffers chan int) {
 	defer waiting.Done()
-	mutex.Lock()
-	defer mutex.Unlock()
+	countLocal := bytes.Count((*buffers), pattern)
 
-	(*count) += bytes.Count((*buffers), pattern)
+	(*countMap)[index] += countLocal
+
+	if remakeBuffer > 0 {
+		(*buffers) = make([]byte, remakeBuffer)
+	}
+
 	availableBuffers <- index
 }
 
