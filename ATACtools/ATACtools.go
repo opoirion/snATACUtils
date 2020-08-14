@@ -263,7 +263,8 @@ func countInFile(filename utils.Filename) {
 	}
 
 	reader = utils.ReturnFileReader(filename.String())
-	var remakeBuffer int
+	var remakeBuffer, lastIndexes int
+	var endofline []byte
 
 	for {
 		index = <- availableBuffers
@@ -278,6 +279,15 @@ func countInFile(filename utils.Filename) {
 			remakeBuffer = buffersize
 		} else {
 			remakeBuffer = 0
+		}
+
+		buffers[index] = append(endofline, buffers[index]...)
+
+		lastIndexes = bytes.LastIndexByte(buffers[index], '\n')
+
+		if lastIndexes > -1 && lastIndexes < buffersize {
+			endofline = buffers[index][lastIndexes+1:]
+			buffers[index] = buffers[index][:lastIndexes+1]
 		}
 
 		waiting.Add(1)
