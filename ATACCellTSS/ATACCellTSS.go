@@ -551,12 +551,13 @@ func normaliseCountMatrixOneThread(cellIDList []string, waiting *sync.WaitGroup)
 	defer waiting.Done()
 
 	tssDict := make(map[string]float64)
-	halfflank := SMOOTHINGWINDOW / 2
+	halfflank := int(SMOOTHINGWINDOW / 2)
 	tssPos := TSSREGION - FLANKSIZE
+	flankNormFactor := float64(2 * FLANKSIZE)
 
 	for _, cellName = range cellIDList {
 		cellID = CELLDICT[cellName]
-		flankNorm = float64(FLANKCOVERAGE[cellID] + 1) / 200
+		flankNorm = float64(FLANKCOVERAGE[cellID] + 1) / flankNormFactor
 		maxTss = 0
 
 		for i = tssPos - TSSFLANKSEARCH; i < tssPos + TSSFLANKSEARCH; i++ {
