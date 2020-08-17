@@ -422,14 +422,22 @@ func writeOutputFastq(begining, end int, writerR1, writerR2 *io.WriteCloser, wai
 			success = true
 
 			bufferR1.WriteRune('@')
-			bufferR1.WriteString(BUFFERI1[i+1])
-			bufferR1.WriteRune(':')
+
+			if WRITEBARCODE {
+				bufferR1.WriteString(BUFFERI1[i+1])
+				bufferR1.WriteRune(':')
+			}
+
 			bufferR1.WriteString(BUFFERR1[i][1:])
 			bufferR1.WriteRune('\n')
 
 			bufferR2.WriteRune('@')
-			bufferR2.WriteString(BUFFERI1[i+1])
-			bufferR2.WriteRune(':')
+
+			if WRITEBARCODE {
+				bufferR2.WriteString(BUFFERI1[i+1])
+				bufferR2.WriteRune(':')
+			}
+
 			bufferR2.WriteString(BUFFERR2[i][1:])
 			bufferR2.WriteRune('\n')
 

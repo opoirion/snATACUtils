@@ -64,6 +64,10 @@ var P7PLATES string
 var I5RANGE string
 /*I2RANGE ...*/
 var P7RANGE string
+
+/*WRITEBARCODE write barcode to fastq*/
+var WRITEBARCODE bool
+
 /*INDEXESRANGE ...*/
 var INDEXESRANGE map[string]map[int]bool
 
@@ -229,6 +233,8 @@ This option is valid only when not using I2 index file
 	flag.StringVar(&OUTPUTFILETYPE, "output_type", "fastq", "File type to be written as output in the output file name")
 
 	flag.IntVar(&PLATESIZE, "plate_size", 96, "sized of the plated used for the *_plates option (default 96)")
+
+	flag.BoolVar(&WRITEBARCODE, "write_barcode", true, "Write barcode to demultiplexed reads (default True)")
 
 	flag.IntVar(&COMPRESSION_MODE, "compressionMode", 6, `compressionMode for native bzip2 lib
  (1 faster -> 9 smaller) <default: 6>`)
