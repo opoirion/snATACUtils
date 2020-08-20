@@ -104,8 +104,17 @@ var YGIDIM int
 /*XGIDIM dim of xgi when reading a COO file */
 var XGIDIM int
 
+/*NBENTRIES Number of matrix entries */
+var NBENTRIES int
+
 /*YGISYMBOL use 4th columns  as ygi */
 var YGISYMBOL bool
+
+/*TRANSPOSE write transpose */
+var TRANSPOSE bool
+
+/*ISCELLRANGERFORMAT is cell ranger format */
+var ISCELLRANGERFORMAT bool
 
 /*YGITOSYMBOL link ygi featurePos to symbol feature pos */
 var YGITOSYMBOL [][]uint
@@ -146,6 +155,10 @@ const (
 	simple normType = "simple"
 	none normType = ""
 	coo matrixFormat = "coo"
+	mtx matrixFormat = "mtx"
+	cellRanger matrixFormat = "cellRanger"
+	cooTranspose matrixFormat = "cooTranspose"
+	mtxTranspose matrixFormat = "mtxTranspose"
 	taiji matrixFormat = "taiji"
 	dense matrixFormat = "dense"
 	denseTranspose matrixFormat = "denseTranspose"
@@ -163,12 +176,34 @@ func (t matrixFormat) isValid() matrixFormat {
 
 	switch t {
 	case dense, taiji, coo:
+	case cellRanger:
+		TRANSPOSE = true
+		ISCELLRANGERFORMAT = true
+
+		if SPLIT > 0 {
+			panic(fmt.Sprintf(
+				"-format cellRanger cannot be used with -split option. Please use coo first then convert to mtx using ATACMatUtils -merge -in <coo file> -format cellRanger -out <matrix file>"))
+		}
+
+		return mtx
+	case cooTranspose:
+		TRANSPOSE = true
+		return coo
+	case mtxTranspose:
+		TRANSPOSE = true
+		return mtx
+	case mtx:
+		if SPLIT > 0 {
+			panic(fmt.Sprintf(
+				"-format mtx cannot be used with -split option. Please use coo first then convert to mtx using ATACMatUtils -merge -in <coo file> -format mtx -out <matrix file>"))
+		}
 	case denseTranspose:
+		TRANSPOSE = true
 		if SPLIT > 0 {
 			panic(fmt.Sprintf("-format denseTranspose cannot be used with -split option"))
 		}
 	default:
-		panic("Valid matrix format (-format) are taiji|coo|dense|denseTranspose")
+		panic("Valid matrix format (-format) are taiji|coo|dense|denseTranspose|mtx")
 	}
 
 	return t
@@ -256,7 +291,7 @@ if used, the program will output the list of ordered symbol corresponding to the
 	flag.BoolVar(&COO, "coo", false,
 		`Use COO format as output (DEPRECIATED: use -format coo instead)`)
 	flag.StringVar(&MATRIXFORMATSTR, "format", "coo",
-		`Output matrix format (coo|taiji|dense|denseTransposee) `)
+		`Output matrix format (coo|taiji|dense|denseTransposee|mtx) `)
 	flag.BoolVar(&ALL, "all", false,
 		`Count the reads in peaks for the entire input bed file`)
 
@@ -293,6 +328,8 @@ if used, the program will output the list of ordered symbol corresponding to the
 		tag = fmt.Sprintf("%staiji-mat", tag)
 	case dense, denseTranspose:
 		tag = fmt.Sprintf("%sdense", tag)
+	case mtx:
+		tag = fmt.Sprintf("%smtx", tag)
 	}
 
 	switch {
@@ -334,8 +371,53 @@ if used, the program will output the list of ordered symbol corresponding to the
 
 	tDiff := time.Since(tStart)
 	fmt.Printf("done in time: %f s \n", tDiff.Seconds())
+
+	if ISCELLRANGERFORMAT {
+		formatXgiFileToCellRanger()
+		formatYgiFileToCellRanger()
+	}
 }
 
+
+func formatXgiFileToCellRanger() {
+	ext := path.Ext(CELLSIDFNAME.String())
+
+	fnameout := fmt.Sprintf("%s.cellranger.barcodes.tsv",
+		CELLSIDFNAME[:len(CELLSIDFNAME) - len(ext)])
+
+	writer := utils.ReturnWriter(fnameout)
+	buffer := bytes.Buffer{}
+
+	buffer.WriteString("\"x\"\n")
+
+	for pos, barcode := range CELLIDDICTCOMP {
+		buffer.WriteString(fmt.Sprintf("\"%d\"\t\"%s\"\n", pos, barcode))
+	}
+
+	writer.Write(buffer.Bytes())
+	fmt.Printf("Cell Ranger barcode file written: %s\n", fnameout)
+}
+
+func formatYgiFileToCellRanger() {
+	ext := path.Ext(CELLSIDFNAME.String())
+
+	fnameout := fmt.Sprintf("%s.cellranger.features.tsv",
+		CELLSIDFNAME[:len(CELLSIDFNAME) - len(ext)])
+
+	writer := utils.ReturnWriter(fnameout)
+	buffer := bytes.Buffer{}
+
+	buffer.WriteString("\"x\"\n")
+
+	featureDict := getFeatureIndexToNameDict()
+
+	for pos, feature := range featureDict {
+		buffer.WriteString(fmt.Sprintf("\"%d\"\t\"%s\"\n", pos, feature))
+	}
+
+	writer.Write(buffer.Bytes())
+	fmt.Printf("Cell Ranger feature file written: %s\n", fnameout)
+}
 
 func loadSymbolFileWriteOutputSymbol() int {
 	if !YGISYMBOL {
@@ -475,21 +557,31 @@ func getFeatureIndexToNameDict() (featureDict map[uint]string) {
 	var featName string
 	var upos uint
 	var pos int
-
+	var bin binPos
+	var index int
 
 	featureDict = make(map[uint]string)
 
-	if useSymbol {
+	switch {
+	case useSymbol:
 		for pos, featName = range SYMBOLLIST {
 			featName = strings.ReplaceAll(featName, SEP, "_")
 			featureDict[uint(pos)] = featName
 		}
 
-	} else {
+	case CREATEBINMATRIX:
+		for bin, upos = range BININDEX {
+			index = int(bin.index) * BINSIZE
+			featureDict[upos] = fmt.Sprintf("%s:%d-%d",
+				bin.chr, index, index + BINSIZE)
+		}
+
+	default:
 		for featName, upos = range utils.PEAKIDDICT {
 			featName = strings.ReplaceAll(featName, SEP, "_")
 			featureDict[upos] = featName
 		}
+
 	}
 
 	return featureDict
@@ -577,7 +669,10 @@ func launchIntSparseMatrix(filenameout string, writeHeader bool) {
 	case taiji:
 		writeIntMatrixToTaijiFile(filenameout, writeHeader)
 	case coo:
-		writeIntMatrixToCOOFile(filenameout)
+		writeIntMatrixToCOOFile(filenameout, false)
+	case mtx:
+		NBENTRIES += getNumberOfIntMatrixEntries(INTSPARSEMATRIX)
+		writeIntMatrixToCOOFile(filenameout, true)
 	case dense:
 		writeIntMatrixToDenseFile(filenameout, true)
 	case denseTranspose:
@@ -660,7 +755,23 @@ func initMutexDict() {
 }
 
 
-func writeIntMatrixToCOOFile(outfile string) {
+func getNumberOfIntMatrixEntries(matrix []map[uint]int) (nbEntries int){
+	for i := range matrix {
+		nbEntries += len(matrix[i])
+	}
+
+	return nbEntries
+}
+
+func getNumberOfFloatMatrixEntries(matrix []map[uint]float64) (nbEntries int){
+	for i := range matrix {
+		nbEntries += len(matrix[i])
+	}
+
+	return nbEntries
+}
+
+func writeIntMatrixToCOOFile(outfile string, writeMtxHeader bool) {
 	fmt.Printf("writing to output file...\n")
 	loadYgiSize()
 
@@ -671,18 +782,37 @@ func writeIntMatrixToCOOFile(outfile string) {
 	var normedValue float64
 
 	writer := utils.ReturnWriter(outfile)
-
 	defer utils.CloseFile(writer)
+
+	if writeMtxHeader {
+		buffer.WriteString("%%MatrixMarket matrix coordinate real general\n%\n")
+		first := XGIDIM
+		second := YGIDIM
+
+		if TRANSPOSE {
+			first, second = second, first
+		}
+
+		buffer.WriteString(fmt.Sprintf("%d\t%d\t%d\n", first, second, NBENTRIES))
+	}
 
 	bufSize := 0
 
 	for cellPos = range INTSPARSEMATRIX {
 		for featPos = range INTSPARSEMATRIX[cellPos] {
 
-			buffer.WriteString(strconv.Itoa(cellPos))
-			buffer.WriteString(SEP)
-			buffer.WriteString(strconv.Itoa(int(featPos)))
-			buffer.WriteString(SEP)
+			if TRANSPOSE {
+				buffer.WriteString(strconv.Itoa(int(featPos)))
+				buffer.WriteString(SEP)
+				buffer.WriteString(strconv.Itoa(cellPos))
+				buffer.WriteString(SEP)
+			} else {
+
+				buffer.WriteString(strconv.Itoa(cellPos))
+				buffer.WriteString(SEP)
+				buffer.WriteString(strconv.Itoa(int(featPos)))
+				buffer.WriteString(SEP)
+			}
 
 			if NORM {
 				normedValue = normValue(
@@ -926,7 +1056,7 @@ func writeToDenseTransposeeOnThread(
 	guard <- threadID
 }
 
-func writeFloatMatrixToCOOFile(outfile string) {
+func writeFloatMatrixToCOOFile(outfile string, writeMtxHeader bool) {
 	fmt.Printf("writing to output file...\n")
 
 	var buffer bytes.Buffer
@@ -939,15 +1069,35 @@ func writeFloatMatrixToCOOFile(outfile string) {
 
 	defer utils.CloseFile(writer)
 
+	if writeMtxHeader {
+		buffer.WriteString("%%MatrixMarket matrix coordinate real general\n%\n")
+		first := XGIDIM
+		second := YGIDIM
+
+		if TRANSPOSE {
+			first, second = second, first
+		}
+
+		buffer.WriteString(fmt.Sprintf("%d\t%d\t%d\n", first, second, NBENTRIES))
+	}
+
 	bufSize := 0
 
 	for cellPos = range FLOATSPARSEMATRIX {
 		for featPos = range FLOATSPARSEMATRIX[cellPos] {
 
-			buffer.WriteString(strconv.Itoa(cellPos))
-			buffer.WriteString(SEP)
-			buffer.WriteString(strconv.Itoa(int(featPos)))
-			buffer.WriteString(SEP)
+			if TRANSPOSE {
+				buffer.WriteString(strconv.Itoa(int(featPos)))
+				buffer.WriteString(SEP)
+				buffer.WriteString(strconv.Itoa(cellPos))
+				buffer.WriteString(SEP)
+			} else {
+
+				buffer.WriteString(strconv.Itoa(cellPos))
+				buffer.WriteString(SEP)
+				buffer.WriteString(strconv.Itoa(int(featPos)))
+				buffer.WriteString(SEP)
+			}
 
 			normedValue = FLOATSPARSEMATRIX[cellPos][featPos]
 			buffer.WriteString(strconv.FormatFloat(normedValue, 'f', 7, 64))
@@ -1079,6 +1229,11 @@ func mergeMatFiles(filenames []string) {
 		} else {
 			mergeIntMatFile(filename, mtype)
 		}
+
+		if MATRIXFORMAT == mtx {
+			NBENTRIES += getNumberOfIntMatrixEntries(INTSPARSEMATRIX)
+			NBENTRIES += getNumberOfFloatMatrixEntries(FLOATSPARSEMATRIX)
+		}
 	}
 
 	switch MATRIXFORMAT {
@@ -1090,9 +1245,15 @@ func mergeMatFiles(filenames []string) {
 		}
 	case coo:
 		if CREATEBINMATRIX {
-			writeFloatMatrixToCOOFile(FILENAMEOUT)
+			writeFloatMatrixToCOOFile(FILENAMEOUT, false)
 		} else {
-			writeIntMatrixToCOOFile(FILENAMEOUT)
+			writeIntMatrixToCOOFile(FILENAMEOUT, false)
+		}
+	case mtx:
+		if CREATEBINMATRIX {
+			writeFloatMatrixToCOOFile(FILENAMEOUT, true)
+		} else {
+			writeIntMatrixToCOOFile(FILENAMEOUT, true)
 		}
 	case dense:
 		writeIntMatrixToDenseFile(FILENAMEOUT, true)

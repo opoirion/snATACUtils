@@ -47,10 +47,18 @@ func createBinSparseMatrix() {
 		scanBedFileForBinMat()
 	}
 
-	if TAIJI {
+
+	switch MATRIXFORMAT {
+	case mtx:
+		writeIntMatrixToCOOFile(FILENAMEOUT, true)
+	case coo:
+		writeIntMatrixToCOOFile(FILENAMEOUT, false)
+	case taiji:
 		writeIntMatrixToTaijiFile(FILENAMEOUT, true)
-	} else {
-		writeIntMatrixToCOOFile(FILENAMEOUT)
+	case dense:
+		writeIntMatrixToDenseFile(FILENAMEOUT, true)
+	case denseTranspose:
+		writeIntMatrixToDenseTransposeFile(FILENAMEOUT)
 	}
 }
 
