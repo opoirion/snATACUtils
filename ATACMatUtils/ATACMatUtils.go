@@ -143,6 +143,9 @@ const BUFFERSIZE = 1000000
 /*ALL bool indicating if all cells should be merged for count option */
 var ALL bool
 
+/*TRIMPEAKSTR trim peak string */
+var TRIMPEAKSTR bool
+
 type normType string
 
 type matrixFormat string
@@ -203,7 +206,7 @@ func (t matrixFormat) isValid() matrixFormat {
 			panic(fmt.Sprintf("-format denseTranspose cannot be used with -split option"))
 		}
 	default:
-		panic("Valid matrix format (-format) are taiji|coo|dense|denseTranspose|mtx")
+		panic("Valid matrix format (-format) are taiji|coo|dense|denseTranspose|mtx|cooTranspose|mtxTranspose|cellRanger")
 	}
 
 	return t
@@ -269,6 +272,18 @@ Optional use of the 4th column of -ygi as symbol.
 This option is usefull to reduce the signal of multiple loci (i.e. multiple vectors) corresponding to the same function into one single vector per distinct symbol.
 if used, the program will output the list of ordered symbol corresponding to the new ygi index.
 
+USAGE for the -format option:
+Multiple output format can be used:
+
+*  "coo" : Simple sparse 3-columns format: Row, Column, Value
+*  "mtx" : Similar to COO but with header and number of row, features and cells
+*  "taiji": Homemade format for sparse matrix, see  taiji-utils. See https://github.com/Taiji-pipeline/Taiji-utils/
+*  "cooTranspose": Similar to COO but transposee (features are first column)
+*  "mtxTranspose": Similar to mtx but transposee (features are first column)
+*  "dense": Dense format with first column barcode and first row genes
+*  "denseTranspose": Similar to dense but transposee
+*  "cellRanger": Similar to mtxTranspose. Additional formatted files for features.tsv and barcodes.tsv are created
+
 `)
 		 flag.PrintDefaults()
 	}
@@ -279,6 +294,7 @@ if used, the program will output the list of ordered symbol corresponding to the
 	flag.StringVar(&FILENAMEOUT, "out", "", "name of the output file")
 	flag.Var(&BEDFILENAME, "bed", "name of the bed file")
 	flag.Var(&INFILES, "in", "name of the input file(s)")
+	flag.BoolVar(&TRIMPEAKSTR, "trim_peak_str", false,  "Trim \"chr\" for peaks ")
 	flag.Var(&PEAKFILE, "ygi", "name of the bed file containing the region of interest( i.e. PEAK )")
 	flag.BoolVar(&YGISYMBOL, "use_symbol", false, "Optional use of the 4th column of -ygi as symbol")
 	flag.Var(&CELLSIDFNAME, "xgi", "name of the file containing the ordered list of cell IDs (one ID per line)")
@@ -559,11 +575,13 @@ func getFeatureIndexToNameDict() (featureArray []string) {
 	var pos int
 	var bin binPos
 	var index int
+	var max uint
 
 	featureDict := make(map[uint]string)
 
 	switch {
 	case useSymbol:
+		max = uint(len(SYMBOLLIST))
 		for pos, featName = range SYMBOLLIST {
 			featName = strings.ReplaceAll(featName, SEP, "_")
 			featureDict[uint(pos)] = featName
@@ -571,6 +589,10 @@ func getFeatureIndexToNameDict() (featureArray []string) {
 
 	case CREATEBINMATRIX:
 		for bin, upos = range BININDEX {
+			if upos > max {
+				max = upos
+			}
+
 			index = int(bin.index) * BINSIZE
 			featureDict[upos] = fmt.Sprintf("%s:%d-%d",
 				bin.chr, index, index + BINSIZE)
@@ -578,13 +600,17 @@ func getFeatureIndexToNameDict() (featureArray []string) {
 
 	default:
 		for featName, upos = range utils.PEAKIDDICT {
+			if upos > max {
+				max = upos
+			}
+
 			featName = strings.ReplaceAll(featName, SEP, "_")
 			featureDict[upos] = featName
 		}
 
 	}
 
-	featureArray = make([]string, len(featureDict))
+	featureArray = make([]string, max + 1)
 
 	for upos, featName = range featureDict {
 		featureArray[upos] = featName
@@ -600,7 +626,7 @@ func computeReadsInPeaksForCell(){
 		loadCellIDDict(CELLSIDFNAME)
 	}
 
-	YGIDIM = utils.LoadPeaks(PEAKFILE)
+	YGIDIM = utils.LoadPeaks(PEAKFILE, TRIMPEAKSTR)
 	utils.CreatePeakIntervalTree()
 
 	CELLIDREADINPEAK = make(map[string]int)
@@ -650,7 +676,7 @@ func createIntSparseMatrix(){
 	loadCellIDDict(CELLSIDFNAME)
 
 	XGIDIM = len(CELLIDDICT)
-	YGIDIM = utils.LoadPeaks(PEAKFILE)
+	YGIDIM = utils.LoadPeaks(PEAKFILE, TRIMPEAKSTR)
 	YGIDIM = loadSymbolFileWriteOutputSymbol()
 
 	initIntSparseMatrix()
@@ -694,7 +720,7 @@ func createIntSparseMatrixSplit(){
 	fmt.Printf("load indexes...\n")
 	loadCellIDDict(CELLSIDFNAME)
 	XGIDIM = len(CELLIDDICT)
-	YGIDIM = utils.LoadPeaks(PEAKFILE)
+	YGIDIM = utils.LoadPeaks(PEAKFILE, TRIMPEAKSTR)
 	YGIDIM = loadSymbolFileWriteOutputSymbol()
 
 	chunk := XGIDIM / SPLIT

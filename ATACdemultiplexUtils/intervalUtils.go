@@ -503,7 +503,7 @@ func CreatePeakIntervalTreeObjectFromFile(bedfile Filename, sep string, peakPos 
 func LoadPeaksDict(fname Filename) (peakiddict map[string]uint)  {
 	peakiddict = make(map[string]uint)
 
-	loadPeaks(fname, peakiddict, "\t", []int{0, 1, 2})
+	loadPeaks(fname, peakiddict, "\t", []int{0, 1, 2}, false)
 
 	return peakiddict
 }
@@ -514,27 +514,27 @@ func LoadPeaksDictCustom(fname Filename, sep string, peakPos []int) (
 	peakiddict map[string]uint)  {
 	peakiddict = make(map[string]uint)
 
-	loadPeaks(fname, peakiddict, sep, peakPos)
+	loadPeaks(fname, peakiddict, sep, peakPos, false)
 
 	return peakiddict
 }
 
 /*LoadPeaks load peak file globally*/
-func LoadPeaks(fname Filename) int {
+func LoadPeaks(fname Filename, trim bool) int {
 	PEAKIDDICT = make(map[string]uint)
 
-	return loadPeaks(fname, PEAKIDDICT, "\t", []int{0, 1, 2})
+	return loadPeaks(fname, PEAKIDDICT, "\t", []int{0, 1, 2}, trim)
 }
 
 /*LoadPeaksCustom load peak file globally*/
 func LoadPeaksCustom(fname Filename, sep string, peakPos []int) int {
 	PEAKIDDICT = make(map[string]uint)
 
-	return loadPeaks(fname, PEAKIDDICT, sep, peakPos)
+	return loadPeaks(fname, PEAKIDDICT, sep, peakPos, false)
 }
 
 /*loadPeaks load peak file globally*/
-func loadPeaks(fname Filename, peakiddict map[string]uint, sep string, peakPos []int) int {
+func loadPeaks(fname Filename, peakiddict map[string]uint, sep string, peakPos []int, trim bool) int {
 	var scanner *bufio.Scanner
 	var file *os.File
 	var line string
@@ -549,6 +549,10 @@ func loadPeaks(fname Filename, peakiddict map[string]uint, sep string, peakPos [
 
 	for scanner.Scan() {
 		line = scanner.Text()
+
+		if trim {
+			line = strings.TrimPrefix(line, "chr")
+		}
 
 
 		if line[0] == '#' {
@@ -608,7 +612,9 @@ func LoadPeaksAndTrim(fname Filename) int {
 	count = 0
 
 	for scanner.Scan() {
-		line = strings.TrimPrefix(scanner.Text(), "chr")
+		line = scanner.Text()
+		line = strings.TrimPrefix(line, "chr")
+
 		split = strings.Split(line, "\t")
 
 		if len(split) < 3 {

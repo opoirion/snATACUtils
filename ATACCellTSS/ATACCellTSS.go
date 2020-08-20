@@ -20,6 +20,8 @@ import(
 )
 
 
+//////////////// INSTANCES ////////////////////////////////////
+
 /*BASECOVERAGE map[cell][tss relative pos]count */
 var BASECOVERAGE [][]int
 
@@ -34,6 +36,36 @@ var CELLCLUSTERDICT map[string]int
 
 /*CELLDICT map[cell]int */
 var CELLDICT map[string]int
+
+/*BUFFERSIZE buffer size for multithreading */
+const BUFFERSIZE = 100000
+
+/*MUTEX global mutex*/
+var MUTEX sync.Mutex
+
+/*BUFFERARRAY buffer array storing lines of bed files*/
+var BUFFERARRAY[][BUFFERSIZE]string
+
+/*FLANKCOVERAGEMAT mat of array for flank cov when creating matrix
+genomic region -> clID (int) -> flank coverage vector
+*/
+var FLANKCOVERAGEMAT map[uintptr][]int
+
+/*BASECOVERAGEMAT mat of array for base cov when creating matrix
+genomic region -> clID (int) -> base coverage vector
+ */
+var BASECOVERAGEMAT map[uintptr][][]int
+
+/*BUFFERLENGTH effective size of buffer int*/
+var BUFFERLENGTH int
+
+////////////////////////////////////////////////////////////////
+
+
+//////////////////// INPUT VARIABLES ////////////////////////////////////////
+
+/*MATRIXBINSIZE bin size of the matrix */
+var MATRIXBINSIZE uint
 
 /*BEDFILENAME bed file name (input) */
 var BEDFILENAME utils.Filename
@@ -68,15 +100,6 @@ var TSSFLANKSEARCH int
 /*THREADNB number of threads for reading the bam file */
 var THREADNB int
 
-/*BUFFERSIZE buffer size for multithreading */
-const BUFFERSIZE = 100000
-
-/*BUFFERARRAY buffer array storing lines of bed files*/
-var BUFFERARRAY[][BUFFERSIZE]string
-
-/*MUTEX global mutex*/
-var MUTEX sync.Mutex
-
 /*USEMIDDLE bool*/
 var USEMIDDLE bool
 
@@ -86,13 +109,33 @@ var ALL bool
 /*STDOUT write to stdout*/
 var STDOUT bool
 
+/*CREATEMAT create TSS enrichment matrix for plotting (using plotHeatmap from deepTools) */
+var CREATEMAT bool
+////////////////////////////////////////////////////////////////////
+
 
 func main() {
 	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, `USAGE: ATACCellTSS -bed <filename> -ygi/tss <filename> -xgi <filename>
-                    (optional -out <string> -flank <int> -smoothing <int> -boundary <int> -cluster <filename> -flank_size -threads <int> -xgi <filename>).
+		fmt.Fprintf(os.Stderr, `
+USAGE: ATACCellTSS
+                       -bed <filename>
+                       -ygi/tss <filename>
+                       -xgi <filename>
+##### optional ####
+                       -out <string>
+                       -flank <int>
+                       -smoothing <int>
+                       -boundary <int>
+                       -cluster <filename>
+                       -flank_size
+                       -threads <int>
+                       -xgi <filename>
+                       -create_TSS_matrix
+                       -bin_size <int>
 
 if -cluster is provided, TSS is computed per cluster and -xgi argument is ignored. THe cluster file should contain cluster and cell ID with the following structure for each line: clusterID<TAB>cellID\n
+
+if -create_TSS_matrix is provided, the program will output in addition a matrix file containing a TSS enrichment matrix file for each group (if -cluster is provided) or a global matrix (if -all is provided)
 
 `)
 		 flag.PrintDefaults()
@@ -109,10 +152,16 @@ if -cluster is provided, TSS is computed per cluster and -xgi argument is ignore
 	flag.IntVar(&SMOOTHINGWINDOW, "smoothing", 50, "Smoothing window size")
 	flag.IntVar(&TSSFLANKSEARCH, "tss_flank", 50, "search hightest TSS values to define TSS score using this flank size arround TSS")
 	flag.IntVar(&THREADNB, "threads", 1, "threads concurrency")
+	flag.UintVar(&MATRIXBINSIZE, "bin_size", 10, "Bin size to average scores when constructing TSS matrix")
 	flag.BoolVar(&USEMIDDLE, "use_middle", false, "Use the middle of the peak to determine the TSS ")
 	flag.BoolVar(&STDOUT, "stdout", false, `write to stdout`)
+	flag.BoolVar(&CREATEMAT, "create_TSS_matrix", false, `create TSS enrichment matrix for plotting (using plotHeatmap from deepTools)`)
 	flag.BoolVar(&ALL, "all", false, "Compute the general TSS ")
 	flag.Parse()
+
+	if MATRIXBINSIZE == 0 {
+		panic("Error -bin_size should be higher than 0")
+	}
 
 	switch {
 	case BEDFILENAME == "":
@@ -122,6 +171,10 @@ if -cluster is provided, TSS is computed per cluster and -xgi argument is ignore
 
 	case FILENAMEOUT == "":
 		FILENAMEOUT = findFileNameOut()
+	}
+
+	if CREATEMAT && !ALL && CLUSTERFNAME == "" {
+		fmt.Printf("Error with -create_TSS_matrix option. Either -all or -cluster shpuld be provided\n")
 	}
 
 	MUTEX = sync.Mutex{}
@@ -154,10 +207,10 @@ if -cluster is provided, TSS is computed per cluster and -xgi argument is ignore
 		makeClusterFileForAll()
 	}
 
-	initDicts()
-
 	utils.CreatePeakIntervalTree()
 	utils.InitIntervalDictsThreading(THREADNB)
+
+	initDicts()
 
 	scanBedFile()
 	normaliseCountMatrix()
@@ -290,13 +343,35 @@ func loadTSS(tssFile utils.Filename) {
 	}
 }
 
+func initCoverageMats(intervalID uintptr) {
+
+	if _, isInside := FLANKCOVERAGEMAT[intervalID];isInside {
+		return
+	}
+
+	var index int
+
+	FLANKCOVERAGEMAT[intervalID] = make([]int, len(CELLDICT))
+	BASECOVERAGEMAT[intervalID] = make([][]int, len(CELLDICT))
+
+	for _, index = range CELLDICT {
+		BASECOVERAGEMAT[intervalID][index] = make([]int, 2 * TSSREGION)
+	}
+
+}
 
 func initDicts() {
-	var length, index int
+	var index int
 
 	FLANKCOVERAGE = make([]int, len(CELLDICT))
 	BASECOVERAGE = make([][]int, len(CELLDICT))
 	CELLTSS = make(map[string]float64)
+
+	if CREATEMAT {
+		FLANKCOVERAGEMAT = make(map[uintptr][]int, len(CELLDICT))
+		BASECOVERAGEMAT = make(map[uintptr][][]int, len(CELLDICT))
+
+	}
 
 	TSSREGION = assertPeakRegionHaveSameLengths()
 
@@ -304,7 +379,7 @@ func initDicts() {
 	// 	TSSREGION = assertPeakRegionHaveSameLengths()
 	// }
 
-	length = 2 * TSSREGION - 2 * FLANKSIZE
+	BUFFERLENGTH = 2 * TSSREGION - 2 * FLANKSIZE
 
 	if 2 * FLANKSIZE >= TSSREGION {
 		log.Fatal(fmt.Sprintf("Error 2 * %d (flank size) greater than %d (TSS region) \n",
@@ -317,12 +392,11 @@ func initDicts() {
 	}
 
 	fmt.Printf("TSS region length: %d actual screening window size for TSS score: %d\n",
-		TSSREGION, length)
+		TSSREGION, BUFFERLENGTH)
 
 	for _, index = range CELLDICT {
-		BASECOVERAGE[index] = make([]int, length)
+		BASECOVERAGE[index] = make([]int, BUFFERLENGTH)
 	}
-
 }
 
 
@@ -404,6 +478,7 @@ func processOneBuffer(
 	bufferarray *[BUFFERSIZE]string,
 	thread, limit int,
 	freeThreads chan int, waiting *sync.WaitGroup) {
+
 	var split []string
 	var chro string
 	var start, end, j, index, cellID int
@@ -414,6 +489,10 @@ func processOneBuffer(
 	var itrg interval.IntRange
 	var celldict map[string]int
 	var cellIDis0 bool
+	var intervalID uintptr
+
+	var basecoverage [][]int
+	var flankcoverage []int
 
 	defer waiting.Done()
 
@@ -475,6 +554,29 @@ func processOneBuffer(
 				}
 			}
 
+			if CREATEMAT {
+				intervalID = inter.ID()
+				initCoverageMats(intervalID)
+
+				basecoverage = BASECOVERAGEMAT[intervalID]
+				flankcoverage = FLANKCOVERAGEMAT[intervalID]
+
+				for j = start; j < end;j++ {
+					index = j - (itrg.Start + FLANKSIZE)
+					switch {
+					case index >= 0 && index < indexLimit:
+						basecoverage[cellID][index + FLANKSIZE]++
+					case index < 0 && -FLANKSIZE < index:
+						flankcoverage[cellID]++
+						basecoverage[cellID][index + FLANKSIZE]++
+					case index > indexLimit && index < 2 * TSSREGION - FLANKSIZE:
+						flankcoverage[cellID]++
+						basecoverage[cellID][index + FLANKSIZE]++
+					}
+				}
+
+			}
+
 			MUTEX.Unlock()
 		}
 	}
@@ -508,6 +610,83 @@ func writeCellTSSScore() {
 	buffer.Reset()
 
 	fmt.Printf("File written: %s\n", FILENAMEOUT)
+}
+
+func writeTSSMatrixOneGroup(clusterID int, waiting * sync.WaitGroup) {
+	defer waiting.Done()
+
+	ext := path.Ext(FILENAMEOUT)
+	matrixOutFile := fmt.Sprintf("%s.mat.gz",
+		FILENAMEOUT[:len(FILENAMEOUT) - len(ext)])
+
+	writer := utils.ReturnWriter(matrixOutFile)
+
+	defer utils.CloseFile(writer)
+
+
+
+}
+
+func WriteOneVectorForTSSMatrix(
+	intervalID uintptr,
+	clusterID int,
+	writer * io.WriteCloser,
+	waiting * sync.WaitGroup,
+	guard chan bool) {
+	defer waiting.Done()
+
+	buffer := bytes.Buffer{}
+	peakstrsplit := strings.Split(utils.INTERVALMAPPING[intervalID], "\t")
+
+	buffer.WriteString(strings.Join(peakstrsplit[:3], "\t"))
+	buffer.WriteRune('\t')
+	buffer.WriteString(peakstrsplit[0])
+	buffer.WriteRune(':')
+	buffer.WriteString(peakstrsplit[1])
+	buffer.WriteRune('-')
+	buffer.WriteString(peakstrsplit[2])
+	buffer.WriteRune('\t')
+	buffer.WriteRune('.')
+	buffer.WriteRune('\t')
+	buffer.WriteRune('.')
+	buffer.WriteRune('\t')
+
+
+	sizeVector := BUFFERLENGTH / int(MATRIXBINSIZE)
+
+	vector := make([]string, sizeVector)
+
+	var count uint
+	var value float64
+	index := 0
+
+	var currentValue int
+
+	basecoverage := BASECOVERAGEMAT[intervalID][clusterID]
+	flankNormFactor := float64(2 * FLANKSIZE)
+	flankNorm := float64(FLANKCOVERAGEMAT[intervalID][clusterID] + 1) / flankNormFactor
+
+	for i := 0; i < BUFFERLENGTH; i++ {
+		currentValue += basecoverage[i]
+		count++
+
+		if count >= MATRIXBINSIZE {
+			value = float64(currentValue) / (flankNorm * float64(count))
+			vector[index] = strconv.FormatFloat(value, 'f', 2, 64)
+			index++
+			count = 0
+		}
+	}
+
+	if count > 0 {
+		value = float64(currentValue) / (flankNorm * float64(count))
+		vector[index] = strconv.FormatFloat(value, 'f', 2, 64)
+	}
+
+	buffer.WriteString(strings.Join(vector, "\t"))
+	buffer.WriteRune('\n')
+
+	guard <- true
 }
 
 
