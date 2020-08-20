@@ -391,7 +391,7 @@ func formatXgiFileToCellRanger() {
 	buffer.WriteString("\"x\"\n")
 
 	for pos, barcode := range CELLIDDICTCOMP {
-		buffer.WriteString(fmt.Sprintf("\"%d\"\t\"%s\"\n", pos, barcode))
+		buffer.WriteString(fmt.Sprintf("\"%d\"\t\"%s\"\n", pos+1, barcode))
 	}
 
 	writer.Write(buffer.Bytes())
@@ -412,7 +412,7 @@ func formatYgiFileToCellRanger() {
 	featureDict := getFeatureIndexToNameDict()
 
 	for pos, feature := range featureDict {
-		buffer.WriteString(fmt.Sprintf("\"%d\"\t\"%s\"\n", pos, feature))
+		buffer.WriteString(fmt.Sprintf("\"%d\"\t\"%s\"\n", pos+1, feature))
 	}
 
 	writer.Write(buffer.Bytes())
@@ -552,7 +552,7 @@ func writeSymbol() {
 	fmt.Printf("symbol file index written: %s\n", filename)
 }
 
-func getFeatureIndexToNameDict() (featureDict map[uint]string) {
+func getFeatureIndexToNameDict() (featureArray []string) {
 	useSymbol := len(SYMBOLLIST) > 0
 	var featName string
 	var upos uint
@@ -560,7 +560,7 @@ func getFeatureIndexToNameDict() (featureDict map[uint]string) {
 	var bin binPos
 	var index int
 
-	featureDict = make(map[uint]string)
+	featureDict := make(map[uint]string)
 
 	switch {
 	case useSymbol:
@@ -584,7 +584,13 @@ func getFeatureIndexToNameDict() (featureDict map[uint]string) {
 
 	}
 
-	return featureDict
+	featureArray = make([]string, len(featureDict))
+
+	for upos, featName = range featureDict {
+		featureArray[upos] = featName
+	}
+
+	return featureArray
 }
 
 func computeReadsInPeaksForCell(){
