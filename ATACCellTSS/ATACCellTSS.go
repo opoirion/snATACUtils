@@ -478,8 +478,7 @@ func scanBedFile() {
 }
 
 
-func processOneBuffer(
-	bufferarray *[BUFFERSIZE]string,
+func processOneBuffer(bufferarray *[BUFFERSIZE]string,
 	thread, limit int,
 	freeThreads chan int, waiting *sync.WaitGroup) {
 
@@ -673,8 +672,7 @@ func writeTSSMatrixOneGroup(clusterName string, waitingRef * sync.WaitGroup, gua
 	guardRef <- true
 }
 
-func writeOneVectorForTSSMatrix(
-	intervalID uintptr,
+func writeOneVectorForTSSMatrix(intervalID uintptr,
 	clusterID int,
 	writer * io.WriteCloser,
 	waiting * sync.WaitGroup,
@@ -789,7 +787,7 @@ func normaliseCountMatrixOneThread(cellIDList []string, waiting *sync.WaitGroup)
 
 	for _, cellName = range cellIDList {
 		cellID = CELLDICT[cellName]
-		flankNorm = float64(FLANKCOVERAGE[cellID] + 1) / flankNormFactor
+		flankNorm = 1 + float64(FLANKCOVERAGE[cellID]) / flankNormFactor
 		maxTss = 0
 
 		for i = tssPos - TSSFLANKSEARCH; i < tssPos + TSSFLANKSEARCH; i++ {
