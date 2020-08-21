@@ -215,6 +215,10 @@ if -create_TSS_matrix is provided, the program will output in addition a matrix 
 	scanBedFile()
 	normaliseCountMatrix()
 	writeCellTSSScore()
+
+	if CREATEMAT {
+		writeTSSMatrix()
+	}
 }
 
 
@@ -612,22 +616,64 @@ func writeCellTSSScore() {
 	fmt.Printf("File written: %s\n", FILENAMEOUT)
 }
 
-func writeTSSMatrixOneGroup(clusterID int, waiting * sync.WaitGroup) {
-	defer waiting.Done()
+func writeTSSMatrix() {
+	waitingRef := sync.WaitGroup{}
 
-	ext := path.Ext(FILENAMEOUT)
-	matrixOutFile := fmt.Sprintf("%s.mat.gz",
-		FILENAMEOUT[:len(FILENAMEOUT) - len(ext)])
+	guardRef := make(chan bool, THREADNB)
 
-	writer := utils.ReturnWriter(matrixOutFile)
+	for i := 0;i < THREADNB;i++ {
+		guardRef <- true
+	}
 
-	defer utils.CloseFile(writer)
+	for clusterID := range CELLDICT {
+		<- guardRef
+		waitingRef.Add(1)
+		go writeTSSMatrixOneGroup(clusterID, &waitingRef, guardRef)
+	}
 
-
-
+	waitingRef.Wait()
 }
 
-func WriteOneVectorForTSSMatrix(
+func writeTSSMatrixOneGroup(clusterName string, waitingRef * sync.WaitGroup, guardRef chan bool) {
+	defer waitingRef.Done()
+
+	waiting := sync.WaitGroup{}
+	var intervalID uintptr
+
+	clusterID := CELLDICT[clusterName]
+	ext := path.Ext(FILENAMEOUT)
+	matrixOutFile := fmt.Sprintf("%s.cl_%d.deepTools.mat.gz",
+		FILENAMEOUT[:len(FILENAMEOUT) - len(ext)], clusterID)
+
+	writer := utils.ReturnWriter(matrixOutFile)
+	defer utils.CloseFile(writer)
+
+	sizeVector := (2 * TSSREGION) / int(MATRIXBINSIZE)
+
+	header := fmt.Sprintf(`@{"verbose":false,"scale":1,"skip zeros":false,"nan after end":false,"sort using":"mean","unscaled 5 prime":[0],"body":[0],"sample_labels":["%s"],"downstream":[%d],"unscaled 3 prime":[0],"group_labels":["genes"],"bin size":[%d],"upstream":[%d],"group_boundaries":[0,%d],"sample_boundaries":[0,%d],"max threshold":null,"ref point":["center"],"min threshold":null,"sort regions":"keep","proc number":1,"bin avg type":"mean","missing data as zero":false}`, clusterName, TSSREGION, MATRIXBINSIZE, TSSREGION, len(BASECOVERAGEMAT), sizeVector)
+
+	writer.Write([]byte(header))
+	writer.Write([]byte("\n"))
+
+	guard := make(chan bool, THREADNB)
+
+	for i := 0;i < THREADNB;i++ {
+		guard <- true
+	}
+
+	for intervalID = range BASECOVERAGEMAT {
+		<- guard
+		waiting.Add(1)
+		// go writeOneVectorForTSSMatrix(intervalID, clusterID, &writer, &waiting, guard)
+		writeOneVectorForTSSMatrix(intervalID, clusterID, &writer, &waiting, guard)
+	}
+
+	waiting.Wait()
+	fmt.Printf("Matrix file written: %s\n", matrixOutFile)
+	guardRef <- true
+}
+
+func writeOneVectorForTSSMatrix(
 	intervalID uintptr,
 	clusterID int,
 	writer * io.WriteCloser,
@@ -638,8 +684,9 @@ func WriteOneVectorForTSSMatrix(
 	buffer := bytes.Buffer{}
 	peakstrsplit := strings.Split(utils.INTERVALMAPPING[intervalID], "\t")
 
+	buffer.WriteString("chr")
 	buffer.WriteString(strings.Join(peakstrsplit[:3], "\t"))
-	buffer.WriteRune('\t')
+	buffer.WriteString("\tchr")
 	buffer.WriteString(peakstrsplit[0])
 	buffer.WriteRune(':')
 	buffer.WriteString(peakstrsplit[1])
@@ -652,7 +699,7 @@ func WriteOneVectorForTSSMatrix(
 	buffer.WriteRune('\t')
 
 
-	sizeVector := BUFFERLENGTH / int(MATRIXBINSIZE)
+	sizeVector := (2 * TSSREGION) / int(MATRIXBINSIZE)
 
 	vector := make([]string, sizeVector)
 
@@ -664,9 +711,9 @@ func WriteOneVectorForTSSMatrix(
 
 	basecoverage := BASECOVERAGEMAT[intervalID][clusterID]
 	flankNormFactor := float64(2 * FLANKSIZE)
-	flankNorm := float64(FLANKCOVERAGEMAT[intervalID][clusterID] + 1) / flankNormFactor
+	flankNorm := 1 + float64(FLANKCOVERAGEMAT[intervalID][clusterID]) / flankNormFactor
 
-	for i := 0; i < BUFFERLENGTH; i++ {
+	for i := 0; i < 2 * TSSREGION; i++ {
 		currentValue += basecoverage[i]
 		count++
 
@@ -675,6 +722,7 @@ func WriteOneVectorForTSSMatrix(
 			vector[index] = strconv.FormatFloat(value, 'f', 2, 64)
 			index++
 			count = 0
+			currentValue = 0
 		}
 	}
 
@@ -685,6 +733,11 @@ func WriteOneVectorForTSSMatrix(
 
 	buffer.WriteString(strings.Join(vector, "\t"))
 	buffer.WriteRune('\n')
+
+	MUTEX.Lock()
+	_, err := (*writer).Write(buffer.Bytes())
+	utils.Check(err)
+	MUTEX.Unlock()
 
 	guard <- true
 }
