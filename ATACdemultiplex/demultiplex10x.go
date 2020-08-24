@@ -366,6 +366,10 @@ func writeOutputFastq(begining, end int, writerR1, writerR2 *io.WriteCloser, wai
 	isI7 := lengthI7 > 0
 	var usedIndex string
 
+	if USENOINDEX {
+		usedIndex = "p7"
+	}
+
 	for i := begining; i < end;i++ {
 		switch{
 		case count == 4:
