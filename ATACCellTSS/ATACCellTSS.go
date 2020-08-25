@@ -566,6 +566,7 @@ func processOneBuffer(bufferarray *[BUFFERSIZE]string,
 
 				for j = start; j < end;j++ {
 					index = j - (itrg.Start + FLANKSIZE)
+
 					switch {
 					case index >= 0 && index < indexLimit:
 						basecoverage[cellID][index + FLANKSIZE]++
@@ -641,8 +642,8 @@ func writeTSSMatrixOneGroup(clusterName string, waitingRef * sync.WaitGroup, gua
 
 	clusterID := CELLDICT[clusterName]
 	ext := path.Ext(FILENAMEOUT)
-	matrixOutFile := fmt.Sprintf("%s.cl_%d.deepTools.mat.gz",
-		FILENAMEOUT[:len(FILENAMEOUT) - len(ext)], clusterID)
+	matrixOutFile := fmt.Sprintf("%s.group_%s.deepTools.mat.gz",
+		FILENAMEOUT[:len(FILENAMEOUT) - len(ext)], clusterName)
 
 	writer := utils.ReturnWriter(matrixOutFile)
 	defer utils.CloseFile(writer)
