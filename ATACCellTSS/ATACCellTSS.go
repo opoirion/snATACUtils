@@ -17,6 +17,7 @@ import(
 	"time"
 	"bytes"
 	"path"
+	"math"
 )
 
 
@@ -607,6 +608,11 @@ func writeCellTSSScore() {
 		buffer.WriteRune('\t')
 		buffer.WriteString(strconv.FormatFloat(tss, 'f', 10, 64))
 		buffer.WriteRune('\n')
+
+		if ALL {
+			fmt.Printf("\n#### Global (group %s) TSS enrichment score:  %f ####\n",
+				cellID, tss)
+		}
 	}
 
 	_, err = writer.Write(buffer.Bytes())
@@ -710,7 +716,7 @@ func writeOneVectorForTSSMatrix(intervalID uintptr,
 
 	basecoverage := BASECOVERAGEMAT[intervalID][clusterID]
 	flankNormFactor := float64(2 * FLANKSIZE)
-	flankNorm := 1 + float64(FLANKCOVERAGEMAT[intervalID][clusterID]) / flankNormFactor
+	flankNorm := math.Max(1, float64(FLANKCOVERAGEMAT[intervalID][clusterID]) / flankNormFactor)
 
 	for i := 0; i < 2 * TSSREGION; i++ {
 		currentValue += basecoverage[i]
@@ -765,8 +771,11 @@ func normaliseCountMatrix() {
 		}
 	}
 
-	waiting.Add(1)
-	go normaliseCountMatrixOneThread(cellList, &waiting)
+	if len(cellList) > 0 {
+		waiting.Add(1)
+		go normaliseCountMatrixOneThread(cellList, &waiting)
+	}
+
 	waiting.Wait()
 
 	tDiff := time.Since(tStart)
@@ -786,9 +795,17 @@ func normaliseCountMatrixOneThread(cellIDList []string, waiting *sync.WaitGroup)
 	tssPos := TSSREGION - FLANKSIZE
 	flankNormFactor := float64(2 * FLANKSIZE)
 
+	if ALL {
+		fmt.Printf("* Flank coverage: %d\n* flank size: %d\n* flank Norm factor: %f\n",
+			FLANKCOVERAGE[cellID],
+			int(flankNormFactor),
+			float64(FLANKCOVERAGE[cellID]) / flankNormFactor)
+
+	}
+
 	for _, cellName = range cellIDList {
 		cellID = CELLDICT[cellName]
-		flankNorm = 1 + float64(FLANKCOVERAGE[cellID]) / flankNormFactor
+		flankNorm = math.Max(1.0,  float64(FLANKCOVERAGE[cellID]) / flankNormFactor)
 		maxTss = 0
 
 		for i = tssPos - TSSFLANKSEARCH; i < tssPos + TSSFLANKSEARCH; i++ {
@@ -806,6 +823,10 @@ func normaliseCountMatrixOneThread(cellIDList []string, waiting *sync.WaitGroup)
 		}
 
 		tssDict[cellName] = maxTss / (flankNorm)
+	}
+
+	if ALL {
+		fmt.Printf("* Max TSS smoothed coverage: %f\n", maxTss)
 	}
 
 	MUTEX.Lock()
