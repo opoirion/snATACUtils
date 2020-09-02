@@ -1208,17 +1208,19 @@ func collectAndProcessMultipleBedGraphDict(filenameout string) {
 			continue
 		}
 
+		guard <- struct{}{}
+		chroID := chroHashDict[chro]
+		bedFname := fmt.Sprintf("%s.chr%s.bedgraph", filenameout, chro)
+		fileList = append(fileList, bedFname)
+		waitingSort.Add(1)
+
+
 		if chroStr, isInside := REFCHRSTR[chro];isInside {
 			chro = chroStr
 		} else {
 			chro = fmt.Sprintf("chr%s", chro)
 		}
 
-		guard <- struct{}{}
-		chroID := chroHashDict[chro]
-		bedFname := fmt.Sprintf("%s.chr%s.bedgraph", filenameout, chro)
-		fileList = append(fileList, bedFname)
-		waitingSort.Add(1)
 		go writeIndividualChrBedGraph(
 			bedFname, chroID, chro, scale, REFCHR[chro], &waitingSort)
 		<-guard
