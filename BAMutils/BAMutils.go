@@ -1214,6 +1214,7 @@ func collectAndProcessMultipleBedGraphDict(filenameout string) {
 		fileList = append(fileList, bedFname)
 		waitingSort.Add(1)
 
+		chro = strings.TrimPrefix(chro, "chr")
 
 		if chroStr, isInside := REFCHRSTR[chro];isInside {
 			chro = chroStr
