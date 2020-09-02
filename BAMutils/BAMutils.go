@@ -110,6 +110,9 @@ var SPLIT bool
 /*REFCHR reference chromosomes for bedgpraph */
 var REFCHR map[string]int
 
+/*REFCHRSTR reference chromosome names to trimmed name */
+var REFCHRSTR map[string]string
+
 /*REFCHRFNAME reference chromosomes for bedgpraph */
 var REFCHRFNAME utils.Filename
 
@@ -441,6 +444,7 @@ func loadRefChrMap() {
 	}
 
 	REFCHR = make(map[string]int)
+	REFCHRSTR = make(map[string]string)
 
 	reader, file := REFCHRFNAME.ReturnReader(0)
 	defer utils.CloseFile(file)
@@ -451,6 +455,8 @@ func loadRefChrMap() {
 		lineSplit = strings.Split(line, "\t")
 
 		chr = strings.TrimPrefix(lineSplit[0], "chr")
+
+		REFCHRSTR[chr] = lineSplit[0]
 		REFCHR[chr] = 1
 
 		if len(lineSplit) > 1 {
@@ -1202,6 +1208,12 @@ func collectAndProcessMultipleBedGraphDict(filenameout string) {
 			continue
 		}
 
+		if chroStr, isInside := REFCHRSTR[chro];isInside {
+			chro = chroStr
+		} else {
+			chro = fmt.Sprintf("chr%s", chro)
+		}
+
 		guard <- struct{}{}
 		chroID := chroHashDict[chro]
 		bedFname := fmt.Sprintf("%s.chr%s.bedgraph", filenameout, chro)
@@ -1274,7 +1286,6 @@ func writeIndividualChrBedGraph(bedFname string, chroID int, chro string,
 		pos = binnb * BINSIZE
 
 		if pos != currentPos {
-			buffer.WriteString("chr")
 			buffer.WriteString(chro)
 			buffer.WriteRune('\t')
 			buffer.WriteString(strconv.Itoa(currentPos))
