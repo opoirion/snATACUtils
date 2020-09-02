@@ -449,15 +449,21 @@ func loadRefChrMap() {
 		line = reader.Text()
 		line = strings.ReplaceAll(line, " ", "\t")
 		lineSplit = strings.Split(line, "\t")
-		chr = lineSplit[0][3:]
+
+		chr = strings.TrimPrefix(lineSplit[0], "chr")
 		REFCHR[chr] = 1
 
 		if len(lineSplit) > 1 {
 			chrsize, err = strconv.Atoi(lineSplit[1])
 
-			if err == nil {
-				REFCHR[chr] = chrsize
+			if err != nil {
+				panic(fmt.Sprintf("Error with reference chromosome file (%s) line: %s trying to convert %s to int",
+					REFCHRFNAME,
+					line,
+					lineSplit[1]))
 			}
+
+			REFCHR[chr] = chrsize
 		}
 	}
 }
