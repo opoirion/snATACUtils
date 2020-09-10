@@ -1287,6 +1287,16 @@ func writeIndividualChrBedGraph(bedFname string, chroID int, chro string,
 		pos = binnb * BINSIZE
 
 		if pos != currentPos {
+			if limit > 1 {
+				if   pos > limit {
+					fmt.Printf(
+						"!!!! Warning starting genomic position: %d greater than chr%s limit: %d. Skipping...\n",
+						pos, chro, limit)
+					break
+
+				}
+			}
+
 			buffer.WriteString(chro)
 			buffer.WriteRune('\t')
 			buffer.WriteString(strconv.Itoa(currentPos))
