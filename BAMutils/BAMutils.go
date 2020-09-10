@@ -1203,8 +1203,6 @@ func collectAndProcessMultipleBedGraphDict(filenameout string) {
 
 	filterChro := len(REFCHR) > 0
 
-	fmt.Printf("#### DEBUG %t\n", REFCHR)
-
 	for _, chro := range chroList {
 		if filterChro && REFCHR[chro] == 0 {
 			continue
@@ -1221,6 +1219,8 @@ func collectAndProcessMultipleBedGraphDict(filenameout string) {
 		} else {
 			chro = fmt.Sprintf("chr%s", chro)
 		}
+
+		fmt.Printf("#### DEBUG %s  CHRO %s CHROSTR %s \n", REFCHR[chro], chro, chroStr)
 
 		go writeIndividualChrBedGraph(
 			bedFname, chroID, chro, scale, REFCHR[chro], &waitingSort)
