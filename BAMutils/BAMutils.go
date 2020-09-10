@@ -1214,13 +1214,15 @@ func collectAndProcessMultipleBedGraphDict(filenameout string) {
 		fileList = append(fileList, bedFname)
 		waitingSort.Add(1)
 
+		fmt.Printf("#### DEBUG %s  CHRO %s  \n", REFCHR[chro], chro)
+
 		if chroStr, isInside := REFCHRSTR[chro];isInside {
 			chro = chroStr
 		} else {
 			chro = fmt.Sprintf("chr%s", chro)
 		}
 
-		fmt.Printf("#### DEBUG %s  CHRO %s CHROSTR %s \n", REFCHR[chro], chro, chroStr)
+		fmt.Printf("#### DEBUG %s  CHRO %s  \n", REFCHR[chro], chro)
 
 		go writeIndividualChrBedGraph(
 			bedFname, chroID, chro, scale, REFCHR[chro], &waitingSort)
