@@ -1169,6 +1169,7 @@ func collectAndProcessMultipleBedGraphDict(filenameout string) {
 
 	var waitingSort sync.WaitGroup
 	var scale float64
+	var limit int
 
 	loadRefChrMap()
 
@@ -1208,13 +1209,13 @@ func collectAndProcessMultipleBedGraphDict(filenameout string) {
 			continue
 		}
 
+		limit = REFCHR[chro]
+
 		guard <- struct{}{}
 		chroID := chroHashDict[chro]
 		bedFname := fmt.Sprintf("%s.chr%s.bedgraph", filenameout, chro)
 		fileList = append(fileList, bedFname)
 		waitingSort.Add(1)
-
-		fmt.Printf("#### DEBUG %s  CHRO %s  \n", REFCHR[chro], chro)
 
 		if chroStr, isInside := REFCHRSTR[chro];isInside {
 			chro = chroStr
@@ -1222,10 +1223,8 @@ func collectAndProcessMultipleBedGraphDict(filenameout string) {
 			chro = fmt.Sprintf("chr%s", chro)
 		}
 
-		fmt.Printf("#### DEBUG %s  CHRO %s  \n", REFCHR[chro], chro)
-
 		go writeIndividualChrBedGraph(
-			bedFname, chroID, chro, scale, REFCHR[chro], &waitingSort)
+			bedFname, chroID, chro, scale, limit, &waitingSort)
 		<-guard
 	}
 
@@ -1270,8 +1269,6 @@ func writeIndividualChrBedGraph(bedFname string, chroID int, chro string,
 	fWrite, err := os.Create(bedFname)
 	check(err)
 	defer utils.CloseFile(fWrite)
-
-	fmt.Printf("#### chroID %d chroSTR %s LIMIT %d\n", chroID, chro, limit)
 
 	bedgraphDict := extractIntDictFromChan(BEDTOBEDGRAPHCHAN[chroID])
 	var buffer bytes.Buffer
