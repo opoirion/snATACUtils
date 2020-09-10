@@ -1203,6 +1203,8 @@ func collectAndProcessMultipleBedGraphDict(filenameout string) {
 
 	filterChro := len(REFCHR) > 0
 
+	fmt.Printf("#### DEBUG %t\n", REFCHR)
+
 	for _, chro := range chroList {
 		if filterChro && REFCHR[chro] == 0 {
 			continue
