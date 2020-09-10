@@ -1267,6 +1267,8 @@ func writeIndividualChrBedGraph(bedFname string, chroID int, chro string,
 	check(err)
 	defer utils.CloseFile(fWrite)
 
+	fmt.Printf("#### chroID %d chroSTR %s LIMIT %d\n", chroID, chro, limit)
+
 	bedgraphDict := extractIntDictFromChan(BEDTOBEDGRAPHCHAN[chroID])
 	var buffer bytes.Buffer
 
