@@ -39,7 +39,7 @@ func createBinSparseMatrix() {
 	BININDEX = make(map[binPos]uint)
 
 	if PEAKFILE != "" {
-		YGIDIM = utils.LoadPeaks(PEAKFILE, TRIMPEAKSTR)
+		YGIDIM = utils.LoadPeaks(PEAKFILE, TRIMPEAKSTR, false)
 		utils.CreatePeakIntervalTree()
 		utils.InitIntervalDictsThreading(THREADNB)
 		createBinSparseMatrixOneFileThreading(BEDFILENAME)

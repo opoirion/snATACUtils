@@ -456,7 +456,8 @@ func loadSymbolFileWriteOutputSymbol() int {
 	symbolMapRev := make(map[string][]uint)
 	symbolSet := make(map[string]bool)
 
-	i := 0
+	var index uint
+	var i int
 	for scanner.Scan() {
 		line = scanner.Text()
 		split = strings.Split(line, "\t")
@@ -469,7 +470,16 @@ func loadSymbolFileWriteOutputSymbol() int {
 				line))
 		}
 
+		i++
+
 		symbol = split[3]
+		line = strings.Join(strings.Split(line, "\t")[:3], "\t")
+
+		if TRIMPEAKSTR {
+			line = strings.TrimPrefix(line, "chr")
+		}
+
+		index = utils.PEAKIDDICT[line]
 
 		if !symbolSet[symbol] {
 			symbolSet[symbol] = true
@@ -477,8 +487,7 @@ func loadSymbolFileWriteOutputSymbol() int {
 			symbolMapRev[symbol] = make([]uint, 0)
 		}
 
-		symbolMapRev[symbol] = append(symbolMapRev[symbol], uint(i))
-		i++
+		symbolMapRev[symbol] = append(symbolMapRev[symbol], index)
 	}
 
 	sort.Strings(SYMBOLLIST)
@@ -626,7 +635,7 @@ func computeReadsInPeaksForCell(){
 		loadCellIDDict(CELLSIDFNAME)
 	}
 
-	YGIDIM = utils.LoadPeaks(PEAKFILE, TRIMPEAKSTR)
+	YGIDIM = utils.LoadPeaks(PEAKFILE, TRIMPEAKSTR, !YGISYMBOL)
 	utils.CreatePeakIntervalTree()
 
 	CELLIDREADINPEAK = make(map[string]int)
@@ -676,7 +685,7 @@ func createIntSparseMatrix(){
 	loadCellIDDict(CELLSIDFNAME)
 
 	XGIDIM = len(CELLIDDICT)
-	YGIDIM = utils.LoadPeaks(PEAKFILE, TRIMPEAKSTR)
+	YGIDIM = utils.LoadPeaks(PEAKFILE, TRIMPEAKSTR, !YGISYMBOL)
 	YGIDIM = loadSymbolFileWriteOutputSymbol()
 
 	initIntSparseMatrix()
@@ -720,7 +729,7 @@ func createIntSparseMatrixSplit(){
 	fmt.Printf("load indexes...\n")
 	loadCellIDDict(CELLSIDFNAME)
 	XGIDIM = len(CELLIDDICT)
-	YGIDIM = utils.LoadPeaks(PEAKFILE, TRIMPEAKSTR)
+	YGIDIM = utils.LoadPeaks(PEAKFILE, TRIMPEAKSTR, !YGISYMBOL)
 	YGIDIM = loadSymbolFileWriteOutputSymbol()
 
 	chunk := XGIDIM / SPLIT

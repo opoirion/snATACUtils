@@ -288,7 +288,7 @@ func createContingencyTable() {
 	tStart := time.Now()
 
 	utils.LoadSymbolFile(PEAKSYMBOLFILE, PEAKFILE)
-	utils.LoadPeaks(PEAKFILE, false)
+	utils.LoadPeaks(PEAKFILE, false, true)
 	loadCellClusterIDAndInitMaps()
 	utils.CreatePeakIntervalTree()
 	utils.InitIntervalDictsThreading(THREADNB)
@@ -316,7 +316,7 @@ func createContingencyTableUsingSubsets() {
 	}
 
 	utils.LoadSymbolFile(PEAKSYMBOLFILE, PEAKFILE)
-	utils.LoadPeaks(PEAKFILE, false)
+	utils.LoadPeaks(PEAKFILE, false, true)
 
 	chunk = (len(utils.PEAKIDDICT) + SPLIT) / SPLIT
 	lastPeak = chunk
@@ -384,7 +384,7 @@ func launchChi2Analysis() {
 	}
 
 	utils.LoadSymbolFile(PEAKSYMBOLFILE, PEAKFILE)
-	utils.LoadPeaks(PEAKFILE, false)
+	utils.LoadPeaks(PEAKFILE, false, true)
 	loadCellClusterIDAndInitMaps()
 	utils.CreatePeakIntervalTree()
 	utils.InitIntervalDictsThreading(THREADNB)

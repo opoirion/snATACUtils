@@ -492,7 +492,7 @@ func createPeakIntervalTreeObject(peakiddict map[string]uint, peakPos []int, ver
 func CreatePeakIntervalTreeObjectFromFile(bedfile Filename, sep string, peakPos []int) (
 	intervalObject PeakIntervalTreeObject) {
 
-	peakiddict := LoadPeaksDictCustom(bedfile, sep, peakPos)
+	peakiddict := loadPeaksDictCustom(bedfile, sep, peakPos)
 
 	intervalObject = createPeakIntervalTreeObject(peakiddict, peakPos, false)
 	return intervalObject
@@ -503,42 +503,43 @@ func CreatePeakIntervalTreeObjectFromFile(bedfile Filename, sep string, peakPos 
 func LoadPeaksDict(fname Filename) (peakiddict map[string]uint)  {
 	peakiddict = make(map[string]uint)
 
-	loadPeaks(fname, peakiddict, "\t", []int{0, 1, 2}, false)
+	loadPeaks(fname, peakiddict, "\t", []int{0, 1, 2}, false, true)
 
 	return peakiddict
 }
 
 
-/*LoadPeaksDictCustom load peak file return map[string]int*/
-func LoadPeaksDictCustom(fname Filename, sep string, peakPos []int) (
+/*loadPeaksDictCustom load peak file return map[string]int*/
+func loadPeaksDictCustom(fname Filename, sep string, peakPos []int) (
 	peakiddict map[string]uint)  {
 	peakiddict = make(map[string]uint)
 
-	loadPeaks(fname, peakiddict, sep, peakPos, false)
+	loadPeaks(fname, peakiddict, sep, peakPos, false, true)
 
 	return peakiddict
 }
 
 /*LoadPeaks load peak file globally*/
-func LoadPeaks(fname Filename, trim bool) int {
+func LoadPeaks(fname Filename, trim bool, keepLine bool) int {
 	PEAKIDDICT = make(map[string]uint)
 
-	return loadPeaks(fname, PEAKIDDICT, "\t", []int{0, 1, 2}, trim)
+	return loadPeaks(fname, PEAKIDDICT, "\t", []int{0, 1, 2}, trim, keepLine)
 }
 
 /*LoadPeaksCustom load peak file globally*/
 func LoadPeaksCustom(fname Filename, sep string, peakPos []int) int {
 	PEAKIDDICT = make(map[string]uint)
 
-	return loadPeaks(fname, PEAKIDDICT, sep, peakPos, false)
+	return loadPeaks(fname, PEAKIDDICT, sep, peakPos, false, true)
 }
 
 /*loadPeaks load peak file globally*/
-func loadPeaks(fname Filename, peakiddict map[string]uint, sep string, peakPos []int, trim bool) int {
+func loadPeaks(fname Filename, peakiddict map[string]uint, sep string, peakPos []int, trim bool, keepLine bool) int {
 	var scanner *bufio.Scanner
 	var file *os.File
 	var line string
 	var isInside bool
+	var split, split2 []string
 
 	scanner, file = fname.ReturnReader(0)
 
@@ -555,12 +556,22 @@ func loadPeaks(fname Filename, peakiddict map[string]uint, sep string, peakPos [
 			line = strings.TrimPrefix(line, "chr")
 		}
 
-
 		if line[0] == '#' {
 			continue
 		}
 
 		checkIfLineCanBeSplitIntoPeaks(line, sep, peakPos, max, nbPeaks)
+
+		if !keepLine {
+			split = strings.Split(line, sep)
+			split2 = []string{}
+
+			for _, pos := range peakPos {
+				split2 = append(split2, split[pos])
+			}
+
+			line = strings.Join(split2, sep)
+		}
 
 		if _, isInside = peakiddict[line];!isInside {
 			peakiddict[line] = count
@@ -598,7 +609,7 @@ func checkIfLineCanBeSplitIntoPeaks(line, sep string, peakPos []int, peakMax, nb
 
 /*LoadPeaksAndTrim load peak file and return peak peak id trimmed for "chr" -> dict*/
 func LoadPeaksAndTrim(fname Filename) int {
-	return LoadPeaks(fname, true)
+	return LoadPeaks(fname, true, false)
 }
 
 
@@ -612,7 +623,6 @@ func LoadPeaksSubset(fname Filename, firstPeak, lastPeak int) {
 	scanner, file = fname.ReturnReader(0)
 
 	defer CloseFile(file)
-
 
 	var count uint
 
@@ -631,6 +641,8 @@ func LoadPeaksSubset(fname Filename, firstPeak, lastPeak int) {
 		}
 
 		line := scanner.Text()
+		line = strings.Join(strings.Split(line, "\t")[:3], "\t")
+
 		PEAKIDDICT[line] = count
 		count++
 	}
