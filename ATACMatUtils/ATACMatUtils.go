@@ -457,6 +457,7 @@ func loadSymbolFileWriteOutputSymbol() int {
 	symbolSet := make(map[string]bool)
 
 	var index uint
+	var isInside bool
 	var i int
 	for scanner.Scan() {
 		line = scanner.Text()
@@ -479,7 +480,11 @@ func loadSymbolFileWriteOutputSymbol() int {
 			line = strings.TrimPrefix(line, "chr")
 		}
 
-		index = utils.PEAKIDDICT[line]
+		index, isInside = utils.PEAKIDDICT[line]
+
+		if !isInside {
+			panic(fmt.Sprintf("peak ID: %s not in utils.PEAKIDDICT", line))
+		}
 
 		if !symbolSet[symbol] {
 			symbolSet[symbol] = true
@@ -1799,7 +1804,12 @@ func updateIntSparseMatrixOneThread(
 		CELLMUTEXDICT[cellPos].Lock()
 
 		for _, inter = range intervals {
-			featPos = utils.PEAKIDDICT[utils.INTERVALMAPPING[inter.ID()]]
+			featPos, isInside = utils.PEAKIDDICT[utils.INTERVALMAPPING[inter.ID()]]
+
+			if !isInside {
+				panic(fmt.Sprintf("Peak: %s not in utils.PEAKIDDICT",
+					utils.INTERVALMAPPING[inter.ID()]))
+			}
 
 			if useSymbol {
 				posList = YGITOSYMBOL[featPos]
@@ -1875,7 +1885,12 @@ func createIntSparseMatrixOneFile(bedfilename utils.Filename) {
 			utils.IntInterval{Start: start, End: end})
 
 		for _, interval = range intervals {
-			featPos = utils.PEAKIDDICT[utils.INTERVALMAPPING[interval.ID()]]
+			featPos, isInside = utils.PEAKIDDICT[utils.INTERVALMAPPING[interval.ID()]]
+
+			if !isInside {
+				panic(fmt.Sprintf("Peak: %s not in utils.PEAKIDDICT",
+					utils.INTERVALMAPPING[interval.ID()]))
+			}
 
 			switch USECOUNT {
 			case true:
