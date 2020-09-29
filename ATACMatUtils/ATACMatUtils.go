@@ -196,11 +196,7 @@ func (t matrixFormat) isValid() matrixFormat {
 			utils.Check(err)
 		}
 
-		if ext != ".gz" {
-			ext = ""
-		}
-
-		FILENAMEOUT = fmt.Sprintf("%s/matrix.mtx%s", FILENAMEOUT, ext)
+		FILENAMEOUT = fmt.Sprintf("%s/matrix.mtx.gz", FILENAMEOUT)
 
 		return mtx
 	case cooTranspose:
