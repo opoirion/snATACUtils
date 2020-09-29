@@ -188,6 +188,20 @@ func (t matrixFormat) isValid() matrixFormat {
 				"-format cellRanger cannot be used with -split option. Please use coo first then convert to mtx using ATACMatUtils -merge -in <coo file> -format cellRanger -out <matrix file>"))
 		}
 
+		ext := path.Ext(FILENAMEOUT)
+		FILENAMEOUT = FILENAMEOUT[:len(FILENAMEOUT) - len(ext)]
+
+		if !utils.CheckIfFolderExists(FILENAMEOUT) {
+			err := os.Mkdir(FILENAMEOUT, 0755)
+			utils.Check(err)
+		}
+
+		if ext != ".gz" {
+			ext = ""
+		}
+
+		FILENAMEOUT = fmt.Sprintf("%s/matrix.mtx%s", FILENAMEOUT, ext)
+
 		return mtx
 	case cooTranspose:
 		TRANSPOSE = true
@@ -331,8 +345,6 @@ Multiple output format can be used:
 
 	NORMTYPE.isValid()
 
-	MATRIXFORMAT = matrixFormat(MATRIXFORMATSTR).isValid()
-
 	if CREATEBINMATRIX {
 		tag = "bin."
 	}
@@ -347,6 +359,8 @@ Multiple output format can be used:
 	case mtx:
 		tag = fmt.Sprintf("%smtx", tag)
 	}
+
+	MATRIXFORMAT = matrixFormat(MATRIXFORMATSTR).isValid()
 
 	switch {
 	case FILENAMEOUT == "" && len(INFILES) > 0:
@@ -396,10 +410,8 @@ Multiple output format can be used:
 
 
 func formatXgiFileToCellRanger() {
-	ext := path.Ext(CELLSIDFNAME.String())
-
-	fnameout := fmt.Sprintf("%s.cellranger.barcodes.tsv",
-		CELLSIDFNAME[:len(CELLSIDFNAME) - len(ext)])
+	base, _ := path.Split(FILENAMEOUT)
+	fnameout := fmt.Sprintf("%s/barcodes.tsv", base)
 
 	writer := utils.ReturnWriter(fnameout)
 	buffer := bytes.Buffer{}
@@ -415,10 +427,8 @@ func formatXgiFileToCellRanger() {
 }
 
 func formatYgiFileToCellRanger() {
-	ext := path.Ext(CELLSIDFNAME.String())
-
-	fnameout := fmt.Sprintf("%s.cellranger.features.tsv",
-		CELLSIDFNAME[:len(CELLSIDFNAME) - len(ext)])
+	base, _ := path.Split(FILENAMEOUT)
+	fnameout := fmt.Sprintf("%s/features.tsv", base)
 
 	writer := utils.ReturnWriter(fnameout)
 	buffer := bytes.Buffer{}

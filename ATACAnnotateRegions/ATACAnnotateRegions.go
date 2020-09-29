@@ -59,6 +59,9 @@ var REFPOS string
 /*BEDPOS position of reference region in the -bed file */
 var BEDPOS string
 
+/*BEDPOSINT  bed pos int*/
+var BEDPOSINT []int
+
 /*SYMBOLPOS generic string or position of the coulmns used for annotations in the -ref file */
 var SYMBOLPOS string
 
@@ -306,13 +309,13 @@ func scanBedFileAndAddAnnotation(refPosList []int) {
 		uniqueBed = make(map[string]bool)
 	}
 
-	bedPos := returnPosIntSlice(BEDPOS)
-	nbPeaksPerLine := utils.CheckIfPeakPosIsMutltipleOf3(bedPos)
+	BEDPOSINT = returnPosIntSlice(BEDPOS)
+	nbPeaksPerLine := utils.CheckIfPeakPosIsMutltipleOf3(BEDPOSINT)
 	nbPeaksPerRef := utils.CheckIfPeakPosIsMutltipleOf3(refPosList)
 
 	if UNIQREF {
 		peakIntervalTreeObject = utils.CreatePeakIntervalTreeObjectFromFile(
-			BEDFILENAME, "\t", bedPos)
+			BEDFILENAME, "\t", BEDPOSINT)
 	}
 
 	for scanner.Scan() {
@@ -328,7 +331,7 @@ func scanBedFileAndAddAnnotation(refPosList []int) {
 				refPos[0] = refPosList[0 + 3 * nbPeakRef]
 				refPos[1] = refPosList[1 + 3 * nbPeakRef]
 				refPos[2] = refPosList[2 + 3 * nbPeakRef]
-				peak.StringToPeakWithPosAndStart(line, bedPos, nbPeak * 3)
+				peak.StringToPeakWithPosAndStart(line, BEDPOSINT, nbPeak * 3)
 
 				if inttree, isInside = utils.CHRINTERVALDICT[peak.Chr()];!isInside {
 					if !IGNOREUNANNOATED || WRITEDIFF {
@@ -369,7 +372,7 @@ func scanBedFileAndAddAnnotation(refPosList []int) {
 								line,
 								oneIntervalID,
 								intrange.Start,
-								intrange.End,
+								intrange.End, nbPeak,
 								refPos)
 						} else {
 							continue
@@ -379,7 +382,7 @@ func scanBedFileAndAddAnnotation(refPosList []int) {
 							line,
 							oneIntervalID,
 							intrange.Start,
-							intrange.End,
+							intrange.End, nbPeak,
 							refPos)
 					}
 
@@ -507,7 +510,7 @@ func uniquePeakToSymbolToBuffer(buffer * bytes.Buffer, writer * io.WriteCloser) 
 	}
 }
 
-func returnPeakStrAndSymbol(line string, id uintptr, start, end int, refPos [3]int) (
+func returnPeakStrAndSymbol(line string, id uintptr, start, end, nbPeak int, refPos [3]int) (
 	peakstr string, symbols []string) {
 
 	var peak utils.Peak
@@ -525,7 +528,7 @@ func returnPeakStrAndSymbol(line string, id uintptr, start, end int, refPos [3]i
 	case WRITEREF:
 		peakstr = peak.PeakToString()
 	default:
-		peak.StringToPeak(line)
+		peak.StringToPeakWithPosAndStart(line, BEDPOSINT, nbPeak * 3)
 		peakstr = peak.PeakToString()
 	}
 
