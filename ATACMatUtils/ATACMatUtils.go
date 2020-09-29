@@ -411,7 +411,7 @@ Multiple output format can be used:
 
 func formatXgiFileToCellRanger() {
 	base, _ := path.Split(FILENAMEOUT)
-	fnameout := fmt.Sprintf("%s/barcodes.tsv", base)
+	fnameout := fmt.Sprintf("%s/barcodes.tsv.gz", base)
 
 	writer := utils.ReturnWriter(fnameout)
 	buffer := bytes.Buffer{}
@@ -428,7 +428,7 @@ func formatXgiFileToCellRanger() {
 
 func formatYgiFileToCellRanger() {
 	base, _ := path.Split(FILENAMEOUT)
-	fnameout := fmt.Sprintf("%s/features.tsv", base)
+	fnameout := fmt.Sprintf("%s/features.tsv.gz", base)
 
 	writer := utils.ReturnWriter(fnameout)
 	buffer := bytes.Buffer{}
@@ -816,7 +816,7 @@ func getNumberOfIntMatrixEntries(matrix []map[uint]int) (nbEntries int){
 		nbEntries += len(matrix[i])
 	}
 
-	return nbEntries
+	return nbEntries - 1
 }
 
 func getNumberOfFloatMatrixEntries(matrix []map[uint]float64) (nbEntries int){
@@ -849,24 +849,35 @@ func writeIntMatrixToCOOFile(outfile string, writeMtxHeader bool) {
 			first, second = second, first
 		}
 
-		buffer.WriteString(fmt.Sprintf("%d\t%d\t%d\n", first, second, NBENTRIES))
+		buffer.WriteString(fmt.Sprintf("%d%s%d%s%d\n", first, SEP, second, SEP, NBENTRIES))
 	}
 
 	bufSize := 0
 
+	var cellPos2 int
+	var featPos2 uint
+
 	for cellPos = range INTSPARSEMATRIX {
 		for featPos = range INTSPARSEMATRIX[cellPos] {
 
+			cellPos2 = cellPos
+			featPos2 = featPos
+
+			if ISCELLRANGERFORMAT {
+				featPos2++
+				cellPos2++
+			}
+
 			if TRANSPOSE {
-				buffer.WriteString(strconv.Itoa(int(featPos)))
+				buffer.WriteString(strconv.Itoa(int(featPos2)))
 				buffer.WriteString(SEP)
-				buffer.WriteString(strconv.Itoa(cellPos))
+				buffer.WriteString(strconv.Itoa(cellPos2))
 				buffer.WriteString(SEP)
 			} else {
 
-				buffer.WriteString(strconv.Itoa(cellPos))
+				buffer.WriteString(strconv.Itoa(cellPos2))
 				buffer.WriteString(SEP)
-				buffer.WriteString(strconv.Itoa(int(featPos)))
+				buffer.WriteString(strconv.Itoa(int(featPos2)))
 				buffer.WriteString(SEP)
 			}
 
@@ -1134,13 +1145,19 @@ func writeFloatMatrixToCOOFile(outfile string, writeMtxHeader bool) {
 			first, second = second, first
 		}
 
-		buffer.WriteString(fmt.Sprintf("%d\t%d\t%d\n", first, second, NBENTRIES))
+		buffer.WriteString(fmt.Sprintf("%d%s%d%s%d\n", first, SEP, second, SEP, NBENTRIES))
 	}
 
 	bufSize := 0
 
 	for cellPos = range FLOATSPARSEMATRIX {
 		for featPos = range FLOATSPARSEMATRIX[cellPos] {
+			normedValue = FLOATSPARSEMATRIX[cellPos][featPos]
+
+			if ISCELLRANGERFORMAT {
+				featPos++
+				cellPos++
+			}
 
 			if TRANSPOSE {
 				buffer.WriteString(strconv.Itoa(int(featPos)))
@@ -1155,7 +1172,6 @@ func writeFloatMatrixToCOOFile(outfile string, writeMtxHeader bool) {
 				buffer.WriteString(SEP)
 			}
 
-			normedValue = FLOATSPARSEMATRIX[cellPos][featPos]
 			buffer.WriteString(strconv.FormatFloat(normedValue, 'f', 7, 64))
 
 			buffer.WriteRune('\n')
