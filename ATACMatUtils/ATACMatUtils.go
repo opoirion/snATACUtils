@@ -156,7 +156,8 @@ const (
 	rpm normType = "rpm"
 	logrpm normType = "logrpm"
 	simple normType = "simple"
-	none normType = ""
+	empty normType = ""
+	count normType = "count"
 	coo matrixFormat = "coo"
 	mtx matrixFormat = "mtx"
 	cellRanger matrixFormat = "cellRanger"
@@ -224,7 +225,8 @@ func (t matrixFormat) isValid() matrixFormat {
 
 func (t *normType) isValid() {
 	switch *t {
-	case none:
+	case empty, count:
+		(*t) = count
 		return
 	case rpm, simple, logrpm:
 		NORM = true
@@ -410,12 +412,14 @@ func formatXgiFileToCellRanger() {
 	fnameout := fmt.Sprintf("%s/barcodes.tsv.gz", base)
 
 	writer := utils.ReturnWriter(fnameout)
+	defer utils.CloseFile(writer)
+
 	buffer := bytes.Buffer{}
 
-	buffer.WriteString("\"x\"\n")
+	// buffer.WriteString("\"x\"\n")
 
-	for pos, barcode := range CELLIDDICTCOMP {
-		buffer.WriteString(fmt.Sprintf("\"%d\"\t\"%s\"\n", pos+1, barcode))
+	for _, barcode := range CELLIDDICTCOMP {
+		buffer.WriteString(fmt.Sprintf("%s\n", barcode))
 	}
 
 	writer.Write(buffer.Bytes())
@@ -427,14 +431,19 @@ func formatYgiFileToCellRanger() {
 	fnameout := fmt.Sprintf("%s/features.tsv.gz", base)
 
 	writer := utils.ReturnWriter(fnameout)
+	defer utils.CloseFile(writer)
+
 	buffer := bytes.Buffer{}
 
-	buffer.WriteString("\"x\"\n")
+	// buffer.WriteString("\"x\"\n")
 
 	featureDict := getFeatureIndexToNameDict()
 
-	for pos, feature := range featureDict {
-		buffer.WriteString(fmt.Sprintf("\"%d\"\t\"%s\"\n", pos+1, feature))
+
+	fmt.Printf("#### %s\n", NORMTYPE)
+
+	for _, feature := range featureDict {
+		buffer.WriteString(fmt.Sprintf("%s%s%s%s%s\n", feature, SEP, feature, SEP, NORMTYPE))
 	}
 
 	writer.Write(buffer.Bytes())
