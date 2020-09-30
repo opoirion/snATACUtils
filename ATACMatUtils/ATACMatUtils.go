@@ -440,6 +440,9 @@ func formatYgiFileToCellRanger() {
 	featureDict := getFeatureIndexToNameDict()
 
 	for _, feature := range featureDict {
+		if feature == "" {
+			continue
+		}
 		buffer.WriteString(fmt.Sprintf("%s%s%s%s%s\n", feature, SEP, feature, SEP, NORMTYPE))
 	}
 
@@ -845,7 +848,7 @@ func writeIntMatrixToCOOFile(outfile string, writeMtxHeader bool) {
 	if writeMtxHeader {
 		buffer.WriteString("%%MatrixMarket matrix coordinate real general\n%\n")
 		first := XGIDIM
-		second := YGIDIM + 1
+		second := YGIDIM
 
 		if TRANSPOSE {
 			first, second = second, first
@@ -1141,7 +1144,7 @@ func writeFloatMatrixToCOOFile(outfile string, writeMtxHeader bool) {
 	if writeMtxHeader {
 		buffer.WriteString("%%MatrixMarket matrix coordinate real general\n%\n")
 		first := XGIDIM
-		second := YGIDIM + 1
+		second := YGIDIM
 
 		if TRANSPOSE {
 			first, second = second, first
