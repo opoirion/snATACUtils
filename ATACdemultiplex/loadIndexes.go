@@ -123,6 +123,9 @@ func loadIndexes(fnameList []string, dict * map[string]map[string]bool, reportNa
 	usedreadsf := utils.ReturnWriter(usedreadsfname)
 	defer utils.CloseFile(usedreadsf)
 
+	var tagNumber int
+	var err error
+
 	for _, fname := range(fnameList){
 		scanner, file := utils.ReturnReader(fname, 0)
 		defer utils.CloseFile(file)
@@ -163,24 +166,32 @@ func loadIndexes(fnameList []string, dict * map[string]map[string]bool, reportNa
 
 			countdict[tagid]++
 
+			if len(split) >= 3 {
+				tagNumber, err = strconv.Atoi(split[2])
+				utils.Check(err)
+
+			} else {
+				tagNumber = countdict[tagid]
+			}
+
 			if len(INDEXESRANGE[tagid]) > 0 {
-				if INDEXESRANGE[tagid][countdict[tagid]] {
+				if INDEXESRANGE[tagid][tagNumber] {
 					(*dict)[tagid][tagstring] = true
 					usedreadsf.Write(
-						[]byte(fmt.Sprintf("%s\t%s\t%d\n", tagid, tagstring, countdict[tagid])))
+						[]byte(fmt.Sprintf("%s\t%s\t%d\n", tagid, tagstring, tagNumber)))
 				}
 
 			} else {
 				(*dict)[tagid][tagstring] = true
 				usedreadsf.Write(
-					[]byte(fmt.Sprintf("%s\t%s\t%d\n", tagid, tagstring, countdict[tagid])))
+					[]byte(fmt.Sprintf("%s\t%s\t%d\n", tagid, tagstring, tagNumber)))
 			}
 		}
 	}
 
 }
 
-
+/*LoadIndexRange load index range */
 func LoadIndexRange() {
 	INDEXESRANGE = make(map[string]map[int]bool)
 
