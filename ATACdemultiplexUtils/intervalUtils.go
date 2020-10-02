@@ -503,7 +503,7 @@ func CreatePeakIntervalTreeObjectFromFile(bedfile Filename, sep string, peakPos 
 func LoadPeaksDict(fname Filename) (peakiddict map[string]uint)  {
 	peakiddict = make(map[string]uint)
 
-	loadPeaks(fname, peakiddict, "\t", []int{0, 1, 2}, false, true)
+	loadPeaks(fname, peakiddict, "\t", []int{0, 1, 2}, false, true, -1, make(map[uint]string))
 
 	return peakiddict
 }
@@ -514,7 +514,7 @@ func loadPeaksDictCustom(fname Filename, sep string, peakPos []int) (
 	peakiddict map[string]uint)  {
 	peakiddict = make(map[string]uint)
 
-	loadPeaks(fname, peakiddict, sep, peakPos, false, true)
+	loadPeaks(fname, peakiddict, sep, peakPos, false, true, -1, make(map[uint]string))
 
 	return peakiddict
 }
@@ -523,18 +523,26 @@ func loadPeaksDictCustom(fname Filename, sep string, peakPos []int) (
 func LoadPeaks(fname Filename, trim bool, keepLine bool) int {
 	PEAKIDDICT = make(map[string]uint)
 
-	return loadPeaks(fname, PEAKIDDICT, "\t", []int{0, 1, 2}, trim, keepLine)
+	return loadPeaks(fname, PEAKIDDICT, "\t", []int{0, 1, 2}, trim, keepLine, -1, make(map[uint]string))
 }
 
 /*LoadPeaksCustom load peak file globally*/
 func LoadPeaksCustom(fname Filename, sep string, peakPos []int) int {
 	PEAKIDDICT = make(map[string]uint)
 
-	return loadPeaks(fname, PEAKIDDICT, sep, peakPos, false, true)
+	return loadPeaks(fname, PEAKIDDICT, sep, peakPos, false, true, -1, make(map[uint]string) )
 }
 
 /*loadPeaks load peak file globally*/
-func loadPeaks(fname Filename, peakiddict map[string]uint, sep string, peakPos []int, trim bool, keepLine bool) int {
+func loadPeaks(fname Filename,
+	peakiddict map[string]uint,
+	sep string,
+	peakPos []int,
+	trim bool,
+	keepLine bool,
+	directionCol int,
+	directionDict map[uint]string) (totNbPeaks int) {
+
 	var scanner *bufio.Scanner
 	var file *os.File
 	var line string
@@ -562,8 +570,11 @@ func loadPeaks(fname Filename, peakiddict map[string]uint, sep string, peakPos [
 
 		checkIfLineCanBeSplitIntoPeaks(line, sep, peakPos, max, nbPeaks)
 
-		if !keepLine {
+		if !keepLine || directionCol > -1 {
 			split = strings.Split(line, sep)
+		}
+
+		if !keepLine {
 			split2 = []string{}
 
 			for _, pos := range peakPos {
@@ -575,6 +586,17 @@ func loadPeaks(fname Filename, peakiddict map[string]uint, sep string, peakPos [
 
 		if _, isInside = peakiddict[line];!isInside {
 			peakiddict[line] = count
+
+			if directionCol > -1 {
+
+				if len(split) <= directionCol {
+					panic(fmt.Sprintf("Error when loading peak file %s! line split %s is out of range for sequence orientation (col nb %d)!", fname, line, directionCol))
+				}
+
+				directionDict[count] = split[directionCol]
+
+			}
+
 			count++
 		}
 	}
@@ -607,9 +629,21 @@ func checkIfLineCanBeSplitIntoPeaks(line, sep string, peakPos []int, peakMax, nb
 
 }
 
-/*LoadPeaksAndTrim load peak file and return peak peak id trimmed for "chr" -> dict*/
-func LoadPeaksAndTrim(fname Filename) int {
-	return LoadPeaks(fname, true, false)
+/*LoadPeaksAndTrimAndReturnOrienation load peak fil,
+ return peak peak id trimmed for "chr" -> dict and
+ return Orientation dict (i.e. the sense of the peak) */
+func LoadPeaksAndTrimandReturnOrientation(fname Filename, orientationColID int) (nbPeaks int, orientationDict map[uint]string) {
+	PEAKIDDICT = make(map[string]uint)
+	orientationDict = make(map[uint]string)
+
+	nbPeaks =  loadPeaks(fname,
+		PEAKIDDICT,
+		"\t",
+		[]int{0, 1, 2}, true, false,
+		orientationColID,
+		orientationDict)
+
+	return nbPeaks, orientationDict
 }
 
 

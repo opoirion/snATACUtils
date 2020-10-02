@@ -60,6 +60,8 @@ var BASECOVERAGEMAT map[uintptr][][]int
 /*BUFFERLENGTH effective size of buffer int*/
 var BUFFERLENGTH int
 
+/*ORIENTATIONDICT mapping peaks to orientation (e.g. +/1) */
+var ORIENTATIONDICT map[uint]string
 ////////////////////////////////////////////////////////////////
 
 
@@ -92,6 +94,9 @@ var FLANKSIZE int
 /*TSSREGION int both at the end and begining of TSS region*/
 var TSSREGION int
 
+/*SHIFTREAD shift read in the 3'->5' orientation*/
+var SHIFTREAD int
+
 /*SMOOTHINGWINDOW int smoothing window size*/
 var SMOOTHINGWINDOW int
 
@@ -103,6 +108,12 @@ var THREADNB int
 
 /*USEMIDDLE bool*/
 var USEMIDDLE bool
+
+/*COLSEQID int*/
+var COLSEQID int
+
+/*REFCOLSEQID int*/
+var REFCOLSEQID int
 
 /*ALL bool*/
 var ALL bool
@@ -130,6 +141,8 @@ USAGE: ATACCellTSS
                        -cluster <filename>
                        -flank_size
                        -threads <int>
+                       -col_seqID <int>
+                       -col_refID <int>
                        -xgi <filename>
                        -create_TSS_matrix
                        -bin_size <int>
@@ -149,10 +162,13 @@ if -create_TSS_matrix is provided, the program will output in addition a matrix 
 	flag.Var(&CLUSTERFNAME, "cluster", "name of the file containing the cluster<->cellID (<TAB> separated). If cluster is provided, then -xgi is ignored")
 	flag.StringVar(&FILENAMEOUT, "out", "", "name of the output file")
 	flag.IntVar(&FLANKSIZE, "flank", 100, "flank size at the end and begining of the TSS regions")
+	flag.IntVar(&COLSEQID, "col_seqID", -1, "If > 0, use this column as additional sequence ID (e.g. orientation +/-)")
+	flag.IntVar(&REFCOLSEQID, "col_refID", -1, "If > 0, use this column as additional sequence ID (e.g. orientation +/-) for reference features")
 	flag.IntVar(&TSSREGION, "boundary", 2000, "TSS boundary size at the end and begining of the TSS (used only when -tss is provided)")
 	flag.IntVar(&SMOOTHINGWINDOW, "smoothing", 50, "Smoothing window size")
 	flag.IntVar(&TSSFLANKSEARCH, "tss_flank", 50, "search hightest TSS values to define TSS score using this flank size arround TSS")
 	flag.IntVar(&THREADNB, "threads", 1, "threads concurrency")
+	flag.IntVar(&SHIFTREAD, "shift_reads", 0, "shift bed reads by adding X bp. If a \"-\" orientation is given, this number is substracted ")
 	flag.UintVar(&MATRIXBINSIZE, "bin_size", 10, "Bin size to average scores when constructing TSS matrix")
 	flag.BoolVar(&USEMIDDLE, "use_middle", false, "Use the middle of the peak to determine the TSS ")
 	flag.BoolVar(&STDOUT, "stdout", false, `write to stdout`)
@@ -184,8 +200,8 @@ if -create_TSS_matrix is provided, the program will output in addition a matrix 
 		if USEMIDDLE {
 			loadTSS(PEAKFILE)
 		} else {
-			utils.LoadPeaksAndTrim(PEAKFILE)
-
+			_, ORIENTATIONDICT = utils.LoadPeaksAndTrimandReturnOrientation(
+				PEAKFILE, REFCOLSEQID)
 		}
 
 	} else {
@@ -498,6 +514,10 @@ func processOneBuffer(bufferarray *[BUFFERSIZE]string,
 	var basecoverage [][]int
 	var flankcoverage []int
 
+	var readOrientation, refOrientation string
+	useOrientation := COLSEQID > -1
+	doShiftting := SHIFTREAD != 0
+
 	defer waiting.Done()
 
 	// Check if TSS is computed per cell or per cluster
@@ -538,10 +558,38 @@ func processOneBuffer(bufferarray *[BUFFERSIZE]string,
 			continue
 		}
 
+		if useOrientation {
+			if len(split) <= COLSEQID {
+				panic(fmt.Sprintf("Error: read split %s is out of range for orientation ID (col %d)", split, readOrientation))
+			}
+
+			readOrientation = split[COLSEQID]
+		}
+
+		if doShiftting {
+			switch {
+			case useOrientation && readOrientation == "-":
+				start, end = start - SHIFTREAD, end - SHIFTREAD
+			default:
+				start, end = start + SHIFTREAD, end + SHIFTREAD
+			}
+		}
+
 		intervals = utils.CHRINTERVALDICTTHREAD[thread][chro].Get(
 			utils.IntInterval{Start: start, End: end})
 
 		for _, inter = range intervals {
+			if useOrientation {
+				if refOrientation, isInside = ORIENTATIONDICT[uint(inter.ID())];!isInside {
+					panic(fmt.Sprintf("#### ref PEAK %s (id: %d) does not have orientation!",
+						utils.INTERVALMAPPING[inter.ID()], inter.ID()))
+				}
+
+				if refOrientation != readOrientation {
+					continue
+				}
+			}
+
 			itrg = inter.Range()
 
 			MUTEX.Lock()
