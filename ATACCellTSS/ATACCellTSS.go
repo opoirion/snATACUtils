@@ -198,14 +198,14 @@ if -create_TSS_matrix is provided, the program will output in addition a matrix 
 
 	if PEAKFILE != "" {
 		if USEMIDDLE {
-			loadTSS(PEAKFILE)
+			ORIENTATIONDICT = loadTSS(PEAKFILE, REFCOLSEQID)
 		} else {
 			_, ORIENTATIONDICT = utils.LoadPeaksAndTrimandReturnOrientation(
 				PEAKFILE, REFCOLSEQID)
 		}
 
 	} else {
-		loadTSS(TSSFILE)
+		ORIENTATIONDICT = loadTSS(TSSFILE, REFCOLSEQID)
 	}
 
 	switch {
@@ -313,7 +313,7 @@ func makeClusterFileForAll() {
 }
 
 
-func loadTSS(tssFile utils.Filename) {
+func loadTSS(tssFile utils.Filename, orientationColID int) (orientationDict map[uint]string) {
 
 	scanner, file := tssFile.ReturnReader(0)
 	defer utils.CloseFile(file)
@@ -325,6 +325,8 @@ func loadTSS(tssFile utils.Filename) {
 	var split []string
 	var err error
 	var chro string
+
+	orientationDict = make(map[uint]string)
 
 	utils.PEAKIDDICT = make(map[string]uint)
 	count = 0
@@ -347,6 +349,15 @@ func loadTSS(tssFile utils.Filename) {
 			start = (start + end) / 2
 		}
 
+		if orientationColID > -1 {
+
+			if len(split) <= orientationColID {
+				panic(fmt.Sprintf("LoadTSS Erorr: when loading peak file %s! line split %s is out of range for sequence orientation (col nb %d)!", file, scanner.Text(), orientationColID))
+			}
+
+			orientationDict[count] = split[orientationColID]
+		}
+
 		buffer.WriteString(strconv.Itoa(start - TSSREGION))
 		buffer.WriteRune('\t')
 		buffer.WriteString(strconv.Itoa(start + TSSREGION))
@@ -362,6 +373,8 @@ func loadTSS(tssFile utils.Filename) {
 		buffer.Reset()
 		count++
 	}
+
+	return orientationDict
 }
 
 func initCoverageMats(intervalID uintptr) {
