@@ -328,6 +328,8 @@ func bamTobed() {
 
 	tag := sam.NewTag(BAMTAG)
 
+	fmt.Printf("Converting BAM file: %s to BED (fragments) file\n", BAMFILENAME)
+
 	if FILENAMEOUT == "" {
 		ext := path.Ext(BAMFILENAME)
 		FILENAMEOUT = fmt.Sprintf("%s.bed.gz", BAMFILENAME[:len(BAMFILENAME) - len(ext)])
@@ -410,6 +412,14 @@ func bamTobed() {
 		buffer.WriteRune('\t')
 		buffer.WriteString(barcodeID)
 		buffer.WriteString(TAG)
+		buffer.WriteRune('\t')
+
+		if samRecord.Strand() > 0 {
+			buffer.WriteRune('+')
+		} else {
+			buffer.WriteRune('-')
+		}
+
 		buffer.WriteRune('\n')
 
 		count++
