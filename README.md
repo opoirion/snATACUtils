@@ -57,10 +57,37 @@ Tools to insert snATAC-Seq barcodes from multiple files inside read IDs to creat
 ## ATACCellTSS: Computing cell / cluster TSS
 
 ```bash
-USAGE: ATACCellTSS -bed <filename> -ygi/tss <filename> -xgi <filename>
-                    (optional -out <string> -flank <int> -smoothing <int> -boundary <int> -cluster <filename> -flank_size).
+USAGE: ATACCellTSS
+                       -bed <filename>
+                       -ygi/tss <filename>
+                       -xgi <filename>
+##### optional ####
+                       -out <string>
+                       -flank <int>
+                       -smoothing <int>
+                       -boundary <int>
+                       -cluster <filename>
+                       -flank_size
+                       -threads <int>
+                       -col_seqID <int>
+                       -col_refID <int>
+                       -xgi <filename>
+                       -create_TSS_matrix
+                       -bin_size <int>
 
-if -cluster is provided, TSS is computed per cluster and -xgi argument is ignored. THe cluster file should contain cluster and cell ID with the following structure for each line: clusterID<TAB>cellID
+if -cluster is provided, TSS is computed per cluster and -xgi argument is ignored. THe cluster file should contain cluster and cell ID with the following structure for each line: clusterID<TAB>cellID\n
+```
+
+If the option `-create_TSS_matrix` is used, a promoter x bin matrix is created (centered arounf the TSS). This matrix can be used as input of the `plotHeatmap` executable from the [DeepTools](https://deeptools.readthedocs.io/en/develop/).
+
+An example is:
+
+```
+# Computing overall TSS for the full dataset
+ATACCellTSS -bed example.bed.gz -all -ygi example_peaks_annotated.ygi -threads 8 -create_TSS_matrix
+
+# Second, we create a PNG image using plotHeatmap tool from DeepTools
+plotHeatmap -m example.bed.group_all.deepTools.mat.gz -o example.bed.group_all.deepTools.mat.png
 ```
 
 ## ATACMatUtils: Easily construct matrix for scATAC-Seq datase

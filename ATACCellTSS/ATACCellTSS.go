@@ -123,6 +123,10 @@ var STDOUT bool
 
 /*CREATEMAT create TSS enrichment matrix for plotting (using plotHeatmap from deepTools) */
 var CREATEMAT bool
+
+/*MATRIXSTANDARDNORM  use standardized norm when creating the matrix*/
+var MATRIXSTANDARDNORM bool
+
 ////////////////////////////////////////////////////////////////////
 
 
@@ -145,11 +149,15 @@ USAGE: ATACCellTSS
                        -col_refID <int>
                        -xgi <filename>
                        -create_TSS_matrix
+                       -all
+                       -matrix_standard_norm
                        -bin_size <int>
 
 if -cluster is provided, TSS is computed per cluster and -xgi argument is ignored. THe cluster file should contain cluster and cell ID with the following structure for each line: clusterID<TAB>cellID\n
 
-if -create_TSS_matrix is provided, the program will output in addition a matrix file containing a TSS enrichment matrix file for each group (if -cluster is provided) or a global matrix (if -all is provided)
+if -all is provided, the TSS is computed gobally, for all the reads.
+
+if -create_TSS_matrix is provided, the program will output in addition a matrix file containing a TSS enrichment matrix file for each group (if -cluster is provided) or a global matrix (if -all is provided). For each reference regions, the
 
 `)
 		 flag.PrintDefaults()
@@ -172,6 +180,7 @@ if -create_TSS_matrix is provided, the program will output in addition a matrix 
 	flag.UintVar(&MATRIXBINSIZE, "bin_size", 10, "Bin size to average scores when constructing TSS matrix")
 	flag.BoolVar(&USEMIDDLE, "use_middle", false, "Use the middle of the peak to determine the TSS ")
 	flag.BoolVar(&STDOUT, "stdout", false, `write to stdout`)
+	flag.BoolVar(&MATRIXSTANDARDNORM, "matrix_standard_norm", false, `When creating the matrix, use the same average flank norm for all reference regions rather than using the flank norm of each region`)
 	flag.BoolVar(&CREATEMAT, "create_TSS_matrix", false, `create TSS enrichment matrix for plotting (using plotHeatmap from deepTools)`)
 	flag.BoolVar(&ALL, "all", false, "Compute the general TSS ")
 	flag.Parse()
@@ -671,7 +680,7 @@ func writeCellTSSScore() {
 		buffer.WriteRune('\n')
 
 		if ALL {
-			fmt.Printf("\n#### Global (group %s) TSS enrichment score:  %f ####\n",
+			fmt.Printf("\n#### Global (group %s) TSS enrichment score (Max TSS smoothed / flank norm):  %f ####\n",
 				cellID, tss)
 		}
 	}
@@ -731,8 +740,7 @@ func writeTSSMatrixOneGroup(clusterName string, waitingRef * sync.WaitGroup, gua
 	for intervalID = range BASECOVERAGEMAT {
 		<- guard
 		waiting.Add(1)
-		// go writeOneVectorForTSSMatrix(intervalID, clusterID, &writer, &waiting, guard)
-		writeOneVectorForTSSMatrix(intervalID, clusterID, &writer, &waiting, guard)
+		go writeOneVectorForTSSMatrix(intervalID, clusterID, &writer, &waiting, guard)
 	}
 
 	waiting.Wait()
@@ -764,7 +772,6 @@ func writeOneVectorForTSSMatrix(intervalID uintptr,
 	buffer.WriteRune('.')
 	buffer.WriteRune('\t')
 
-
 	sizeVector := (2 * TSSREGION) / int(MATRIXBINSIZE)
 
 	vector := make([]string, sizeVector)
@@ -774,10 +781,18 @@ func writeOneVectorForTSSMatrix(intervalID uintptr,
 	index := 0
 
 	var currentValue int
+	var flankNorm float64
 
 	basecoverage := BASECOVERAGEMAT[intervalID][clusterID]
 	flankNormFactor := float64(2 * FLANKSIZE)
-	flankNorm := math.Max(1, float64(FLANKCOVERAGEMAT[intervalID][clusterID]) / flankNormFactor)
+
+	if MATRIXSTANDARDNORM {
+		flankNorm = math.Max(1.0,  float64(FLANKCOVERAGE[clusterID]) / flankNormFactor)
+	} else {
+		flankNorm = math.Max(1, float64(FLANKCOVERAGEMAT[intervalID][clusterID]) / flankNormFactor)
+	}
+
+	flankNorm /= float64(len(FLANKCOVERAGEMAT))
 
 	for i := 0; i < 2 * TSSREGION; i++ {
 		currentValue += basecoverage[i]
@@ -857,10 +872,13 @@ func normaliseCountMatrixOneThread(cellIDList []string, waiting *sync.WaitGroup)
 	flankNormFactor := float64(2 * FLANKSIZE)
 
 	if ALL {
-		fmt.Printf("* Flank coverage: %d\n* flank size: %d\n* flank Norm factor: %f\n",
+		fmt.Printf("* Flank coverage: %d\n* flank size: %d\n* flank Norm factor: %f\n* Max coverage outside flank: %d\n* Max coverage around center (+- %d pb): %d\n",
 			FLANKCOVERAGE[cellID],
 			int(flankNormFactor),
-			float64(FLANKCOVERAGE[cellID]) / flankNormFactor)
+			float64(FLANKCOVERAGE[cellID]) / flankNormFactor,
+			utils.MaxIntList(BASECOVERAGE[cellID][TSSFLANKSEARCH: TSSREGION - TSSFLANKSEARCH]),
+			TSSFLANKSEARCH,
+			utils.MaxIntList(BASECOVERAGE[cellID][tssPos - TSSFLANKSEARCH: tssPos + TSSFLANKSEARCH]))
 
 	}
 
