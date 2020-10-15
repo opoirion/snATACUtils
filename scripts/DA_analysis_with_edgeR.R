@@ -20,6 +20,7 @@ parser$add_argument("-uf", "--useFDR", required=FALSE, help="use FDR correction"
 parser$add_argument("-l", "--level", required=FALSE, help="level of significance", default = 0.05)
 parser$add_argument("-he", "--heatm", required=FALSE, help="create HEATMAP (false|batch|group)", default = FALSE)
 parser$add_argument("-ac", "--additional_cofactors", required=FALSE, help="Additional cofactors files. The header specifies datasetID and the different cofactors written as new columns", default = NULL)
+parser$add_argument("-lfc", "--log_fold_change", required=FALSE, help="log fold change CUTOFF", default = 0.0)
 
 
 #### example of cofactor file ####
@@ -39,18 +40,19 @@ parser$add_argument("-ac", "--additional_cofactors", required=FALSE, help="Addit
 
 
 ################## DEBUG #######################################################################################
-## xgi = "/home/oliver/data/eye/tmp.repl1_Eye_merged_v1.xgi"
-## ygi = "/home/oliver/data/eye/tmp.repl1_Eye_merged_v1.all.ygi"
-## mfile = "/home/oliver/data/eye/tmp.repl1_Eye_merged_v1.all.coo"
-## batch_file = "/home/oliver/data/eye/cluster_results.donorID.tsv"
-## case_control_file = "/home/oliver/data/eye/cluster_results.case_control.tsv"
-## xgi_subset = "/home/oliver/data/eye/xgi_clusters/Cones.xgi"
+## xgi = "/home/opoirion/data/lung_analysis/V2/edgeR_LUNG_justin/barcodes.tsv"
+## ygi = "/home/opoirion/data/lung_analysis/V2/edgeR_LUNG_justin/features.tsv"
+## mfile = "/home/opoirion/data/lung_analysis/V2/edgeR_LUNG_justin/counts_table.coo.gz"
+## batch_file = "/home/opoirion/data/lung_analysis/V2/edgeR_LUNG_justin/group.tsv"
+## case_control_file = "/home/opoirion/data/lung_analysis/V2/edgeR_LUNG_justin/timepoints/3_year_vs_30_year/airway_smooth_muscle.xgi"
+## xgi_subset = "/home/opoirion/data/lung_analysis/V2/edgeR_LUNG_justin/timepoints/3_year_vs_30_year/airway_smooth_muscle.xgi"
 ## ygi_subset = NULL
 ## outFile = "/home/oliver/data/eye/DA_results_v2/DA.Cones"
 ## useFDR = FALSE
 ## level = "1e-5"
 ## doHEAT = TRUE
 ## heatType = "both"
+## logFCCutoff = 0.0
 ################################################################################################################
 
 args <- parser$parse_args()
@@ -68,14 +70,21 @@ useFDR = args$useFDR
 level = as.numeric(args$level)
 heatType = args$heatm
 additional_cofactors = args$additional_cofactors
+logFCCutoff = as.numeric(args$log_fold_change)
 
+
+print(paste("#### LOG FC: ", logFCCutoff))
 
 if (useFDR == "TRUE" || useFDR == "true" || useFDR == "True") {
     useFDR = TRUE
 }
 
-if (heatType != FALSE || heatType != NULL || heatType != "false" || heatType != "FALSE" || heatType != "False") {
+print(paste("#### HEATTYPE: ", heatType))
+
+if (heatType != FALSE && !is.null(heatType) && heatType != "false" && heatType != "FALSE" && heatType != "False") {
     doHEAT = TRUE
+} else {
+    doHEAT = FALSE
 }
 
 if (substr(outFile, 1,1) != "/") {
@@ -230,9 +239,11 @@ dgelist = dgelist[index, ]
 
 if (is.null(cofactors.table)) {
     design = model.matrix(~group)
+    factor = colnames(design)[dim(design)[2]]
 } else {
     cofactors$group = group
     design = model.matrix(~ ., cofactors)
+    factor = "group"
 
 }
 
@@ -244,7 +255,7 @@ dgeDisp = estimateDisp(dgelist, design)
 
 #likelihood ratio test
 fittedDge = glmFit(dgeDisp, design)
-fittedDge = glmLRT(fittedDge)
+fittedDge = glmLRT(fittedDge, coef=factor)
 
 # Subsetting features after norm
 if (!is.null(ygi_subset_norm)) {
@@ -283,17 +294,17 @@ write.table(outputTable,
 
 if (isTRUE(useFDR)) {
     caseBed = rownames(outputTable)[
-        which(outputTable$logFC<0 & outputTable$FDR<level)
+        which(outputTable$logFC < logFCCutoff & outputTable$FDR<level)
     ]
     controlBed = rownames(outputTable)[
-        which(outputTable$logFC>0 & outputTable$FDR<level)
+        which(outputTable$logFC > logFCCutoff & outputTable$FDR<level)
     ]
 } else {
     caseBed = rownames(outputTable)[
-        which(outputTable$logFC<0 & outputTable$PValue<level)
+        which(outputTable$logFC < logFCCutoff & outputTable$PValue<level)
     ]
     controlBed = rownames(outputTable)[
-        which(outputTable$logFC>0 & outputTable$PValue<level)
+        which(outputTable$logFC > logFCCutoff & outputTable$PValue<level)
     ]
 
 }
