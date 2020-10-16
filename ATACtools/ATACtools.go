@@ -218,9 +218,22 @@ USAGE: ATACtools -count -filename (-pattern <string> -threads <int>)
 	case SCAN:
 		nbLines = countLine(FILENAME)
 	case CLEAN:
-		cleanFile(FILENAME)
+		if FILENAME != "" {
+			cleanFile(FILENAME)
+		}
+
+		for _, filename := range FILENAMES {
+			cleanFile(utils.Filename(filename))
+		}
 	case COUNT:
-		countInFile(FILENAME)
+		if FILENAME != "" {
+			countInFile(FILENAME)
+		}
+
+		for _, filename := range FILENAMES {
+			countInFile(utils.Filename(filename))
+		}
+
 	default:
 		log.Fatal("Error at least one processing option (scan/bed_to_cicero/create_ref_fastq/create_ref_bed/merge/create_barcode_list) should be used!")
 	}
