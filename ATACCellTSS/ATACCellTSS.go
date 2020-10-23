@@ -792,8 +792,6 @@ func writeOneVectorForTSSMatrix(intervalID uintptr,
 		flankNorm = math.Max(1, float64(FLANKCOVERAGEMAT[intervalID][clusterID]) / flankNormFactor)
 	}
 
-	flankNorm /= float64(len(FLANKCOVERAGEMAT))
-
 	for i := 0; i < 2 * TSSREGION; i++ {
 		currentValue += basecoverage[i]
 		count++
