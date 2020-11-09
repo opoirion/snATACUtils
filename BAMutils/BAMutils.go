@@ -339,6 +339,7 @@ func convertBed() {
 			buffer.WriteRune('\t')
 			buffer.WriteString(strings.Join(split[4:], "\t"))
 		}
+		buffer.WriteRune('\n')
 
 		count++
 
