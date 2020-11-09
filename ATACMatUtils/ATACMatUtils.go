@@ -158,6 +158,8 @@ const (
 	simple normType = "simple"
 	empty normType = ""
 	count normType = "count"
+
+	// Matrix format
 	coo matrixFormat = "coo"
 	mtx matrixFormat = "mtx"
 	cellRanger matrixFormat = "cellRanger"
@@ -324,7 +326,7 @@ Multiple output format can be used:
 		`Count the reads in peaks for the entire input bed file`)
 
 	flag.BoolVar(&NORM, "norm", false, "Normalize raw count by dividing using the total number of reads per cell (equivalent to -norm_type simple)")
-	flag.StringVar(&NORMTYPESTR, "norm_type", "", "Normalisation type to use: simple|rpm|logrpm|fpkm|logfpkm. \"Simple\" divides the feature values by the total number of read count per cell (equivalent to norm)")
+	flag.StringVar(&NORMTYPESTR, "norm_type", "", "Normalisation type to use: simple|rpm|logrpm|fpkm|logfpkm|count. \"Simple\" divides the feature values by the total number of read count per cell (equivalent to norm).\"count\" reports the number of reads")
 
 	flag.BoolVar(&CREATEBINMATRIX, "bin", false,
 		`transform one (-bed) or multiple (use multiple -beds option) into a bin (using float) sparse matrix in COO format.`)
