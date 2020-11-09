@@ -168,7 +168,9 @@ func loadIndexes(fnameList []string, dict * map[string]map[string]bool, reportNa
 
 			if len(split) >= 3 {
 				tagNumber, err = strconv.Atoi(split[2])
-				utils.Check(err)
+				if err != nil {
+					tagNumber = countdict[tagid]
+				}
 
 			} else {
 				tagNumber = countdict[tagid]

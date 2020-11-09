@@ -57,10 +57,37 @@ Tools to insert snATAC-Seq barcodes from multiple files inside read IDs to creat
 ## ATACCellTSS: Computing cell / cluster TSS
 
 ```bash
-USAGE: ATACCellTSS -bed <filename> -ygi/tss <filename> -xgi <filename>
-                    (optional -out <string> -flank <int> -smoothing <int> -boundary <int> -cluster <filename> -flank_size).
+USAGE: ATACCellTSS
+                       -bed <filename>
+                       -ygi/tss <filename>
+                       -xgi <filename>
+##### optional ####
+                       -out <string>
+                       -flank <int>
+                       -smoothing <int>
+                       -boundary <int>
+                       -cluster <filename>
+                       -flank_size
+                       -threads <int>
+                       -col_seqID <int>
+                       -col_refID <int>
+                       -xgi <filename>
+                       -create_TSS_matrix
+                       -bin_size <int>\
 
-if -cluster is provided, TSS is computed per cluster and -xgi argument is ignored. THe cluster file should contain cluster and cell ID with the following structure for each line: clusterID<TAB>cellID
+if -cluster is provided, TSS is computed per cluster and -xgi argument is ignored. THe cluster file should contain cluster and cell ID with the following structure for each line: clusterID<TAB>cellID\n
+```
+
+If the option `-create_TSS_matrix` is used, a promoter x bin matrix is created (centered arounf the TSS). This matrix can be used as input of the `plotHeatmap` executable from the [DeepTools](https://deeptools.readthedocs.io/en/develop/).
+
+An example is:
+
+```
+# Computing overall TSS for the full dataset
+ATACCellTSS -bed example.bed.gz -all -ygi example_peaks_annotated.ygi -threads 8 -create_TSS_matrix
+
+# Second, we create a PNG image using plotHeatmap tool from DeepTools
+plotHeatmap -m example.bed.group_all.deepTools.mat.gz -o example.bed.group_all.deepTools.mat.png
 ```
 
 ## ATACMatUtils: Easily construct matrix for scATAC-Seq datase
@@ -228,11 +255,15 @@ USAGE: ATACTopFeatures -pvalue_correction -ptable <fname> (optional -out <string
 USAGE: ATACSimUtils -simulate -nb <int> -mean <float> std <float> -bed <bedfile> (-threads <int> -out <string> -tag <string>)
 ```
 
-## ATACtools: Suite of functions dedicated to pre/post process generic files related to snATAC pipeline
+## ATACtools: Pre/post processing snATAC files
+
+This tool provides a suite of functions dedicated to pre/post process files related to snATAC pipeline.
+
+Notably, it can be used to remove (`ATACtools -clean`) and count ( `ATACtools -count` ) patterns from large compressed gzipped files using multi-threads.
+ `ATACtools -count` is for example order of magnitude faster compared to `zcat file.gz|grep "pattern"`.
+
 
 ```bash
-#################### Suite of functions dedicated to pre/post process files related to snATAC pipeline ########################
-
 -bed_to_cicero: format a bed to cicero input (ex: chr1\t1215523\t1216200\tcellID -> chr1_1215523_121620,tcellID,1)
 USAGE: ATACtools -bed_to_cicero -filename <bedfile> (-filenames <bedfile2> -filenames <bedfile3> ...  -ignoreerror)
 
@@ -249,17 +280,65 @@ USAGE: ATACtools -sortfile -filename <fname> (-delimiter <string> -ignoreerror -
 USAGE: ATACtools -write_compl <fastq_file> (-compl_strategy <"split_10_compl_second"/"split_10_compl_first"> -tag <string>)
 
 -scan: Scan a file and determine the number of line
-USAGE ATACtools -scan -filename <string> (-printlastline -printlastlines <int> -search_in_line <string> -gotoline <int>)
+USAGE ATACtools -scan -filename <string> (-printlastline -printlastlines <int> -pattern <string> -gotoline <int>)
 
 -create_barcode_dict: Create a barcode key / value count file
 USAGE: ATACtools -create_barcode_dict -filename <fname> (-sortfile -delimiter <string>)
 
 -clean: clean file from unwanted lines
 USAGE: ATACtools -clean -filename <fname> -output filename -clean_pattern "\n"
+
+-count: Count string in file (useful for large file)
+USAGE: ATACtools -count -filename (-pattern <string> -threads <int>)
 ```
 
 
 ## ATACAnnotateregions: Module to annotate genomic regions from bed file using a reference bed file containing annotation
+
+This utility is designed to identify and annotate BED regions intersecting a reference annotation BED file (3 columns with genomic coordinate and 1 additional column with annotation). It presents some similarities with bedtools but provides a better customisation for analysing snATAC-Seq fragments file (e.g. annotating bedpe files).
+
+An example of a suitable annotation file can be found in the `examples` folder:
+
+```bash
+head example_peaks_annotated.ygi
+
+chr17   17875000        17880000        ANNOTATION_1
+chr2    85025000        85030000        ANNOTATION_1
+chr6    116775000       116780000       ANNOTATION_1
+chr7    140515000       140520000       ANNOTATION_1
+chr19   35540000        35545000        ANNOTATION_2
+chr3    47800000        47805000        ANNOTATION_2
+...
+```
+
+
+The input files should b either a typical 3-columns bed file:
+
+```bash
+# Example of BED file related to single-cell ATAC-Seq. The last column designates the cell barcode
+hr17   14066243        14066440        AACGAGAGCTAAACCCGAGATA
+chr19   42120584        42120781        AACGAGAGCTAAACCCGAGATA
+chr19   42120603        42120799        AACGAGAGCTAAACCCGAGATA
+chr6    36835546        36835742        AACGAGAGCTAAACCCGAGATA
+chr17   14066259        14066455        AACGAGAGCTAAACCCGAGATA
+chr16   79321071        79321267        AACGAGAGCTAAACCCGAGATA
+chr19   45396965        45397161        AACGAGAGCTAAACCCGAGATA
+```
+
+Alternatively, it is possible to annotate a bedpe file (such as output of Cicero analysis) such as:
+
+```bash
+chr21	42878008	42880765	chr21	42936753	42937284	0.24985182594
+chr21	42878008	42880765	chr21	42933986	42934622	0.319565507266
+chr21	42878008	42880765	chr21	43481381	43484293	0.102830605850897
+chr21	42878008	42880765	chr21	43030334	43031111	0.380065624773
+chr21	42878008	42880765	chr21	43098375	43099739	0.376719895458
+
+```
+
+Bedpe files can be either used as reference files (using one of the columns as annotations) or as input to be annotated.
+ATACAnnotateRegions has multiple options to customise the search/annotations (see USAGE).
+
 
 ```bash
 
@@ -267,18 +346,63 @@ USAGE: ATACtools -clean -filename <fname> -output filename -clean_pattern "\n"
 This software presents some similarities with bedtools usage however it provides better customisations for bed file annotation when comparing two bed files with interesecting regions
 
 """Annotate bed file using a reference bed file containing the annotations"""
-USAGE: ATACAnnotateRegions -bed <file> -ref <file> (optional -out <string> -unique -unique_ref -intersect -write_ref -edit -ref_sep "[3]int" -ref_symbol "[]int|str" -diff -stdout -annotate_line)
+USAGE: ATACAnnotateRegions -bed <file> -ref <file> (optional -out <string> -unique -unique_ref -intersect -write_ref -edit -ref_sep "[3]int" -ref_symbol "[]int|str" -diff -stdout -annotate_line -score_pos)
 
 for -ref_sep and -ref_symbol options, the input should be a string of numbers separated by whitespace and delimited with ". -ref_sep needs exactly three positions: 1) for the chromosomes column, 2) for the begining and 3) for the end of the region
 
-Example: ATACAnnotateRegions -bed regionToAnnotate.bed -ref referenceAnnotation.tsv -ref_sep "0 1 2" -ref_symbol "4 5"
+Example: ATACAnnotateRegions -bed regionToAnnotate.bed -ref referenceAnnotation.tsv -ref_sep 0,1,2 -ref_symbol "4 5"
 
 -ref_sep and -symbol_pos can be blank with " or comma separated: i.e."0 1 2" or 0,1,2. Also symbol_pos an be a generic string to annotate all ref regions
 
+-score_pos is an alternative mechanism to retain unique peaks (no dupplicate) from the bed file by using an additional column of the bed file as score (needs to be float). if multiple entries exist for a given peak in the bed file, only the one with the highest score will be kept.
+
 Here the three first columns of referenceAnnotation.tsv will be used to identify chromosome (column 0), start (column 1), and end (column 2) of each region, and regionToAnnotate.bed will be annotatd using columns 4 and 5 from referenceAnnotation.tsv
+  -annotate_line
+    	annotate the full line rather than the defined peak region
+  -bed value
+    	name of the bed file no annotate
+  -bed_pos string
+    	separator to the bed region(s) in genomic coordinates for the bed file. Default: (0,1,2 for bed and 0,1,2,3,4,5 for bedpe files
+  -diff
+    	write bed region if no intersection is found
+  -edit
+    	edit input bed file instead of creating a new file
+  -ignore
+    	ignore unnatotated peak
+  -intersect
+    	write intersection only
+  -out string
+    	name the output file(s)
+  -ref value
+    	name of the reference bed file containing the annotations
+  -ref_pos string
+    	separator to the bed region in ref for the ref file. Default: (0,1,2 for bed and 0,1,2,3,4,5 for bedpe files
+  -ref_sep string
+    	separator to define the bed region for the ref file (default "\t")
+  -score_pos int
+    	(Require int) If used, refers to the column position containing score (float) to keep only the top unique link  (default -1)
+  -stdout
+    	write to stdout
+  -symbol_pos string
+    	separator to the bed region in ref for the ref file (default "3")
+  -unique
+    	write only unique output peaks
+  -unique_ref
+    	write only unique reference using the closest peak
+  -unique_symbols string
+    	write only unique symbols per peak (default "true")
+  -write_ref
+    	write bed region from reference file
 
 ```
 
 ## ATACeQTLUtils: Module to deal with eQTL from bed files and snATAC-Seq
 
 In construction. See `ATACeQTLUtils -h`
+
+## Contact and Credentials
+* Developer and maintainer: Olivier Poirion (PhD)
+* contact: opoirion@ucsd.edu or o.poirion@gmail.com
+
+## Citations
+Please cite our [preprint](https://www.biorxiv.org/content/10.1101/2020.04.12.037580v1)
