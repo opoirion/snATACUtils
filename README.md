@@ -230,21 +230,32 @@ USAGE: BAMutils -bamtobed -bam <filename> -out <bedfile> (-optionnal -cellsID <f
 
 ## ATACTopFeatures: Module to inter significant cluster peaks using a peak list, a bed file and cell ID <-> cluster ID file
 
+Module to quickly obtain cluster significant peaks with optional gene annotation for promoter peaks. This module compute a contingency table for each peaks and for each cluster using the of cells having the peak accessible within and without the cluster. The contingency tables are then transformed into p-values using either fisher or chi2 test from scipy. Finally, a Benjamini-Hochberg correction is applied with a level of alpha. 4-columns annotation bed file (chr, start, stop, symbol) can be optionally provided to intersect the significant peaks with the genomic regions.
+
+### Example
+
+```bash
+cd ./example/data_bed
+
+# write even not significant features
+ATACTopFeatures -workflow \
+    -bed ./example.bed.gz \
+    -cluster ./example_cellID.cluster \
+    -peak ./example_peaks.ygi \
+    -alpha 0.05 \
+    -out fisher_test \
+    -write_all \
+    -threads 8
+```
+
+This example creates a new folder `fisher_test`. To annotate the peaks, an annotation file should be parsed with the `-symbol` option. Three output files will be created for a) Contingency tables, b) fisher pvalues, c) fisher corrected with Benjamini-Hochberg. If `-symbol` is provided, an additional tables for significant annotated peaks will also be created.
 
 ```bash
 #################### MODULE TO INFER SIGNIFICANT CLUSTER PEAKS ########################
+"""Full annotation workflow. The input files are: A) single-cell bed file, B) peak regions in bed format, C) two-columns barcode/clusterID file in tsv format, and optionally D) a reference 4-columns bed file (<chr><start><end><annotation>) to annotate the peaks
+USAGE: ATACTopFeatures -workflow -bed <fname> -peak <fname> -cluster <fname> -out <folder> (optional -threads <int> -ref <file> -split <int> -alpha <float> -write_all)_
 
-"""full individual chi2 computation for each peak with FDR correction using Benjamini-Hochberg correction. Not recommended because using golang suboptimal chi2 implementation"""
-USAGE: ATACTopFeatures -chi2 -bed <fname> -peak <fname> -cluster <fname> (optional -out <string> -threads <int> -alpha <float> -write_all -split <int>)
-
-"""Create contingency table for each feature and each cluster"""
-USAGE: ATACTopFeatures -create_contingency -bed <fname> -peak <fname> -cluster <fname> (optional -out <string> -threads <int>)
-
-"""correct feature pvalue for multiple tests performed or each cluster"""
-USAGE: ATACTopFeatures -pvalue_correction -ptable <fname> (optional -out <string> -threads <int> -alpha <float> -write_all)
 ```
-
-* Once the contingency table is created, it is preferable to use Python (or R) to infer the p-values. We wrote a python script to handle the contingency table using multithreading and the scipy package here: [https://gitlab.com/Grouumf/ATACdemultiplex/blob/master/scripts/snATAC_feature_selection](https://gitlab.com/Grouumf/ATACdemultiplex/blob/master/scripts/snATAC_feature_selection)
 
 
 ## ATACSimUtils: Suite of functions dedicated to generate Simulated snATAC-Seq data

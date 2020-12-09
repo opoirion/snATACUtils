@@ -135,13 +135,13 @@ func main() {
 		fmt.Fprintf(os.Stderr, `
 #################### MODULE TO INFER SIGNIFICANT CLUSTER PEAKS ########################
 """Full annotation workflow. The input files are: A) single-cell bed file, B) peak regions in bed format, C) two-columns barcode/clusterID file in tsv format, and optionally D) a reference 4-columns bed file (<chr><start><end><annotation>) to annotate the peaks
-USAGE: ATACTopFeatures -workflow -bed <fname> -peak <fname> -cluster <fname> -out <folder> (optional -threads <int> -ref <file> -split <int> -alpha <float> -write_all)_
+USAGE: ATACTopFeatures -workflow -bed <fname> -peak <fname> -cluster <fname> -out <folder> (optional -threads <int> -ref <file> -split <int> -alpha <float> -write_all -symbol <file>)_
 
 """full individual chi2 computation for each peak with FDR correction using Benjamini-Hochberg correction. Not recommended because using golang suboptimal chi2 implementation"""
 USAGE: ATACTopFeatures -chi2 -bed <fname> -peak <fname> -cluster <fname> (optional -out <string> -threads <int> -alpha <float> -write_all -split <int>)
 
 """Create contingency table for each feature and each cluster"""
-USAGE: ATACTopFeatures -create_contingency -bed <fname> -peak <fname> -cluster <fname> (optional -out <string> -threads <int>)
+USAGE: ATACTopFeatures -create_contingency -bed <fname> -peak <fname> -cluster <fname> (optional -out <string> -threads <int> -symbol <file>)
 
 """correct feature pvalue for multiple tests performed or each cluster"""
 USAGE: ATACTopFeatures -pvalue_correction -ptable <fname> (optional -out <string> -threads <int> -alpha <float> -write_all)
