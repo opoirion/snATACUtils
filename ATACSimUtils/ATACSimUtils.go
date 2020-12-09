@@ -6,7 +6,7 @@ package main
 import(
 	"log"
 	"flag"
-	utils "gitlab.com/Grouumf/ATACdemultiplex/ATACdemultiplexUtils"
+	utils "github.com/opoirion/snATACUtils/ATACdemultiplexUtils"
 	"fmt"
 	"github.com/valyala/fastrand"
 	"sync"

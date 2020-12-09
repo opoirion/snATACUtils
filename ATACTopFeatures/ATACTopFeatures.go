@@ -3,7 +3,7 @@ package main
 
 import (
 	"flag"
-	utils "gitlab.com/Grouumf/ATACdemultiplex/ATACdemultiplexUtils"
+	utils "github.com/opoirion/snATACUtils/ATACdemultiplexUtils"
 	"fmt"
 	"log"
 	"strings"

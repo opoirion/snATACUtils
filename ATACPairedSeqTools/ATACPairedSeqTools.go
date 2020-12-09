@@ -4,7 +4,7 @@ package main
 import (
 	"fmt"
 	"flag"
-	utils "gitlab.com/Grouumf/ATACdemultiplex/ATACdemultiplexUtils"
+	utils "github.com/opoirion/snATACUtils/ATACdemultiplexUtils"
 	"os"
 	"path"
 	"bytes"

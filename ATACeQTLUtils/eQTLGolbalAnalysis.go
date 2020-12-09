@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 	"github.com/biogo/store/interval"
-	utils "gitlab.com/Grouumf/ATACdemultiplex/ATACdemultiplexUtils"
+	utils "github.com/opoirion/snATACUtils/ATACdemultiplexUtils"
 	"strconv"
 	"path"
 	"bytes"

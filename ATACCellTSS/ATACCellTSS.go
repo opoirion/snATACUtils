@@ -4,7 +4,7 @@ package main
 
 
 import(
-	utils "gitlab.com/Grouumf/ATACdemultiplex/ATACdemultiplexUtils"
+	utils "github.com/opoirion/snATACUtils/ATACdemultiplexUtils"
 	"flag"
 	"os"
 	"io"

@@ -3,7 +3,7 @@ package main
 import (
 	"os"
 	"bufio"
-	utils "gitlab.com/Grouumf/ATACdemultiplex/ATACdemultiplexUtils"
+	utils "github.com/opoirion/snATACUtils/ATACdemultiplexUtils"
 	"path"
 	"fmt"
 )

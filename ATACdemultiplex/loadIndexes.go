@@ -6,7 +6,7 @@ import (
 	"fmt";
 	"strconv";
 	"io"
-	utils "gitlab.com/Grouumf/ATACdemultiplex/ATACdemultiplexUtils"
+	utils "github.com/opoirion/snATACUtils/ATACdemultiplexUtils"
 	"path"
 
 )

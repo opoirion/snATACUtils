@@ -1,4 +1,4 @@
-module gitlab.com/Grouumf/ATACdemultiplex/ATACdemultiplexUtils
+module github.com/opoirion/snATACUtils/ATACdemultiplexUtils
 
 go 1.15
 

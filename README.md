@@ -34,7 +34,7 @@ chr19   45396965        45397161        AACGAGAGCTAAACCCGAGATA
 * Install the package
 
 ```bash
-	go get -v -u gitlab.com/Grouumf/ATACdemultiplex/...
+	go get -v -u github.com/opoirion/snATACUtils/...
 ```
 
 The ATAC tools executable are located in your `$GOBIN` folder and should be in your global path

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"log"
 	"time"
-	utils "gitlab.com/Grouumf/ATACdemultiplex/ATACdemultiplexUtils"
+	utils "github.com/opoirion/snATACUtils/ATACdemultiplexUtils"
 	"strings"
 	"strconv"
 	"bytes"

@@ -15,7 +15,7 @@ import(
 	"strconv"
 	"bytes"
 	// "github.com/dsnet/compress/bzip2"
-	utils "gitlab.com/Grouumf/ATACdemultiplex/ATACdemultiplexUtils"
+	utils "github.com/opoirion/snATACUtils/ATACdemultiplexUtils"
 )
 
 /*FILENAME ...*/
