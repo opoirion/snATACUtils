@@ -110,6 +110,12 @@ var SPLIT bool
 /*REFCHR reference chromosomes for bedgpraph */
 var REFCHR map[string]int
 
+/*CONVERTMAPPING mapping TSV dict for old barcode -> new barcode */
+var CONVERTMAPPING map[string]string
+
+/*CONVERTFILE mapping TSV file for old barcode -> new barcode (convert)*/
+var CONVERTFILE utils.Filename
+
 /*REFCHRSTR reference chromosome names to trimmed name */
 var REFCHRSTR map[string]string
 
@@ -143,6 +149,9 @@ USAGE: BAMutils -bed_to_bedgraph -bed <fname> (-out <fname> -threads <int> -cell
 -create_cell_index: Create cell index (cell -> read Counts) for a bam or bed file
 USAGE: BAMutils -create_cell_index -bed/bam <name> -out <output name> (-sort)
 
+-convert: Convert barcodes from a BED file using a reference mapping file (.TSV format): OLD barcode -> NEW barcode, for each OLD barcode
+USAGE: BAMutils -convert <file> -bed/bam <name> -out <output name>
+
 -divide: Divide the bam/bed file according to barcode file list
 USAGE: BAMutils -divide -bed/bam <fname> (-cell_index <fname> -threads <int> -cellsID <fname> -out <fname>)
 
@@ -171,6 +180,7 @@ USAGE: BAMutils -bamtobed -bam <filename> -out <bedfile> (-optionnal -cellsID <f
 		`file with reference chromosomes to use for the bedgraph creation.
  This file can also contain the maximum chromosome size, for example (chr16<tab>90668800)`)
 	flag.StringVar(&FILENAMEOUT, "out", "", "name of the output file")
+	flag.Var(&CONVERTFILE, "convert", "Convert barcodes from a BED file using a reference mapping file (.TSV format): <OLD barcode> <TAB> <NEW barcode>, for each OLD barcode")
 	flag.StringVar(&BAMTAG, "bam_tag", "CB", "BAM tag storing single-cell ID")
 	flag.StringVar(&NUCLEIFILE, "cellsID", "", "file with cell IDs")
 	flag.StringVar(&OUTPUTDIR, "output_dir", "", "output directory")
@@ -235,6 +245,9 @@ USAGE: BAMutils -bamtobed -bam <filename> -out <bedfile> (-optionnal -cellsID <f
 	case DIVIDE:
 		fmt.Printf("launching DivideBam...\n")
 		DivideBam()
+	case CONVERTFILE != "":
+		fmt.Printf("Converting barcodes from bed file...\n")
+		convertBed()
 	case CREATECELLINDEX:
 		if FILENAMEOUT == "" {
 			log.Fatal("Error -out must be provided!")
@@ -276,6 +289,92 @@ USAGE: BAMutils -bamtobed -bam <filename> -out <bedfile> (-optionnal -cellsID <f
 
 	tDiff := time.Since(tStart)
 	fmt.Printf("done in time: %f s \n", tDiff.Seconds())
+}
+
+func convertBed() {
+	if FILENAMEOUT == "" {
+		ext := path.Ext(BEDFILENAME)
+		FILENAMEOUT = fmt.Sprintf("%s.converted.bed.gz",
+			BEDFILENAME[:len(BEDFILENAME) - len(ext)])
+	}
+
+	loadBarcodeMappingFile(CONVERTFILE)
+
+	bedReader, file := utils.ReturnReader(BEDFILENAME, 0)
+	bedWriter := utils.ReturnWriter(FILENAMEOUT)
+
+	defer utils.CloseFile(file)
+	defer utils.CloseFile(bedWriter)
+
+	count := 0
+
+	buffer := bytes.Buffer{}
+	var split []string
+	var line, newBarcode string
+	var isInside bool
+
+	tStart := time.Now()
+
+	for bedReader.Scan() {
+		line = bedReader.Text()
+		split = strings.Split(line, "\t")
+
+		if len(split) < 4 {
+			panic(fmt.Sprintf("Error with line: %s from BED file: %s. cannot find a barcode field (4th column)", line, BEDFILENAME))
+		}
+
+		if newBarcode, isInside = CONVERTMAPPING[split[3]];!isInside {
+			panic(fmt.Sprintf("Error with converting line: %s from BED file: %s. cannot find a mapping for barcode:%s", line, BEDFILENAME, line[3]))
+		}
+
+		buffer.WriteString(split[0])
+		buffer.WriteRune('\t')
+		buffer.WriteString(split[1])
+		buffer.WriteRune('\t')
+		buffer.WriteString(split[2])
+		buffer.WriteRune('\t')
+		buffer.WriteString(newBarcode)
+
+		if len(split) > 4 {
+			buffer.WriteRune('\t')
+			buffer.WriteString(strings.Join(split[4:], "\t"))
+		}
+		buffer.WriteRune('\n')
+
+		count++
+
+		if count > 10000 {
+			bedWriter.Write(buffer.Bytes())
+			buffer.Reset()
+			count = 0
+		}
+	}
+
+	bedWriter.Write(buffer.Bytes())
+
+	tDiff := time.Since(tStart)
+	fmt.Printf("Convert BED file done in time: %f s \n", tDiff.Seconds())
+	fmt.Printf("File created: %s\n", FILENAMEOUT)
+}
+
+func loadBarcodeMappingFile(mappingFile utils.Filename) {
+	CONVERTMAPPING = make(map[string]string)
+
+	reader, file := mappingFile.ReturnReader(0)
+
+	defer utils.CloseFile(file)
+	var split []string
+
+	for reader.Scan() {
+		split = strings.Split(reader.Text(), "\t")
+
+		if len(split) < 2 {
+			panic(fmt.Sprintf("Error with barcode mapping file: %s. Line: %s cannot be splitted in more than 2",
+				mappingFile.String(), reader.Text()))
+		}
+
+		CONVERTMAPPING[split[0]] = split[1]
+	}
 }
 
 func formatBamFieldToUse() (barcodeIDpos []int) {
